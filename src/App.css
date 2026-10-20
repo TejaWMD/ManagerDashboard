@@ -1,39 +1,66 @@
 .app-shell {
   min-height: 100vh;
   display: flex;
+  flex-direction: row;
+  background: var(--c-cream);
+  color: var(--c-dark);
+}
+
+.app-body-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
-  background: #f1f5f9;
-  color: #0f172a;
+  min-height: 100vh;
+}
+
+.db-setup-banner,
+.db-error-banner {
+  background: var(--c-amber);
+  border-bottom: 1px solid var(--c-ochre);
+  color: var(--c-dark);
+  padding: 0.7rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.db-setup-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.db-banner-btn {
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--c-brown);
+  background: var(--c-surface);
+  color: var(--c-dark);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.db-banner-btn--primary {
+  background: var(--c-brown);
+  border-color: var(--c-brown);
+  color: var(--c-cream);
 }
 
 .app-main-content {
   flex: 1;
   width: 100%;
-  max-width: 1680px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 1.75rem;
 }
 
-.app-footer {
-  background: #ffffff;
-  border-top: 1px solid #e2e8f0;
-  padding: 1rem 1.75rem;
-  margin-top: auto;
-}
-
-.app-footer-inner {
-  max-width: 1680px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.8rem;
-  color: #64748b;
-  flex-wrap: wrap;
-}
-
-/* Simulated TV Wall Mode toggleable on any screen + Native TV screens */
+/* TV Wall Mode */
 .app-shell--tv-mode {
   font-size: 118%;
 }
@@ -48,7 +75,7 @@
 }
 
 .app-shell--tv-mode .hero-title {
-  font-size: 2.15rem;
+  font-size: 2rem;
 }
 
 @media (min-width: 1800px) {
@@ -56,25 +83,10 @@
     max-width: 2300px;
     padding: 2.5rem 3rem;
   }
-
-  .app-footer-inner {
-    max-width: 2300px;
-    font-size: 0.95rem;
-  }
 }
 
 @media (max-width: 768px) {
   .app-main-content {
     padding: 1rem;
-  }
-
-  .app-footer {
-    padding: 0.85rem 1rem;
-  }
-
-  .app-footer-inner {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.35rem;
   }
 }

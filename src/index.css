@@ -1,3 +1,13 @@
+:root {
+  --c-dark: #251a0a;
+  --c-brown: #844918;
+  --c-ochre: #c18036;
+  --c-orange: #d6742b;
+  --c-cream: #efedce;
+  --c-amber: #f2bc6c;
+  --c-surface: #fdfcf5;
+}
+
 *,
 *::before,
 *::after {
@@ -12,8 +22,8 @@ body {
     Ubuntu, Cantarell, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f1f5f9;
-  color: #0f172a;
+  background-color: var(--c-cream);
+  color: var(--c-dark);
 }
 
 button,
