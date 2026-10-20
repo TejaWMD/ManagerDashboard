@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
+  belongsToAccountManager,
+  belongsToManager,
   Complaint,
-  ComplaintCategory,
-  ComplaintPriority,
-  ComplaintStatus,
+  isComplaintDelayed,
+  isComplaintDone,
   UserAccount,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
@@ -12,488 +13,499 @@ import './ComplaintPage.css';
 interface ComplaintPageProps {
   currentUser: UserAccount;
   complaints: Complaint[];
-  onCreateComplaint: (newComplaint: Omit<Complaint, 'id' | 'ticketNumber' | 'createdAt' | 'updatedAt'>) => void;
+  savingComplaintId: string | null;
+  onCreateComplaint: (payload: {
+    managerId: string;
+    managerEmail: string;
+    managerName: string;
+    complaintText: string;
+  }) => Promise<void>;
   onUpdateComplaint: (
-    id: string,
-    updates: {
-      status: ComplaintStatus;
-      priority: ComplaintPriority;
-      managerRemarks: string;
-    }
-  ) => void;
-  onDeleteComplaint: (id: string) => void;
+    complaintId: string,
+    updates: Partial<
+      Pick<
+        Complaint,
+        | 'complaintText'
+        | 'managerRemark'
+        | 'managerDone'
+        | 'accountManagerRemark'
+        | 'accountManagerDone'
+      >
+    >
+  ) => Promise<void>;
 }
 
 export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   currentUser,
   complaints,
+  savingComplaintId,
   onCreateComplaint,
   onUpdateComplaint,
-  onDeleteComplaint,
 }) => {
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
-  const [accountManagerFilter, setAccountManagerFilter] = useState<string>('ALL');
+  const managers = AUTHORIZED_USERS.filter((u) => u.role === 'manager');
 
-  // New Complaint Modal / Drawer state
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [clientName, setClientName] = useState('');
-  const [subject, setSubject] = useState('');
-  const [category, setCategory] = useState<ComplaintCategory>('Service Quality');
-  const [priority, setPriority] = useState<ComplaintPriority>('Medium');
-  const [description, setDescription] = useState('');
-  const [selectedAmEmail, setSelectedAmEmail] = useState(
-    currentUser.role === 'account_manager'
-      ? currentUser.email
-      : 'wmdklshakti@gmail.com'
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
+  const [selectedManagerId, setSelectedManagerId] = useState<string>(
+    managers[0]?.id || ''
   );
+  const [complaintInput, setComplaintInput] = useState<string>('');
+  const [isSubmittingNew, setIsSubmittingNew] = useState<boolean>(false);
 
-  // Manager / Admin Review Modal state
-  const [editingComplaint, setEditingComplaint] = useState<Complaint | null>(null);
-  const [editStatus, setEditStatus] = useState<ComplaintStatus>('Open');
-  const [editPriority, setEditPriority] = useState<ComplaintPriority>('Medium');
-  const [editRemarks, setEditRemarks] = useState('');
+  const [editingAmRemarkId, setEditingAmRemarkId] = useState<string | null>(null);
+  const [amRemarkDraft, setAmRemarkDraft] = useState<string>('');
 
-  const accountManagers = AUTHORIZED_USERS.filter((u) => u.role === 'account_manager');
+  const [editingComplaintTextId, setEditingComplaintTextId] = useState<string | null>(null);
+  const [complaintTextDraft, setComplaintTextDraft] = useState<string>('');
 
-  // Scope complaints based on role
-  const roleScopedComplaints =
-    currentUser.role === 'account_manager'
-      ? complaints.filter(
-          (c) => c.submittedByEmail.toLowerCase() === currentUser.email.toLowerCase()
-        )
-      : complaints;
+  const [editingMgrRemarkId, setEditingMgrRemarkId] = useState<string | null>(null);
+  const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
-  // Apply search and dropdown filters
-  const filteredComplaints = roleScopedComplaints.filter((c) => {
-    const matchesSearch =
-      c.ticketNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.description.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
-    const matchesPriority = priorityFilter === 'ALL' || c.priority === priorityFilter;
-    const matchesAm =
-      accountManagerFilter === 'ALL' ||
-      c.submittedByEmail.toLowerCase() === accountManagerFilter.toLowerCase();
-
-    return matchesSearch && matchesStatus && matchesPriority && matchesAm;
+  const scopedComplaints = complaints.filter((c) => {
+    if (currentUser.role === 'account_manager') {
+      return belongsToAccountManager(c, currentUser);
+    }
+    if (currentUser.role === 'manager') {
+      return belongsToManager(c, currentUser);
+    }
+    return true;
   });
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientName.trim() || !subject.trim() || !description.trim()) return;
+    if (!selectedManagerId || !complaintInput.trim() || isSubmittingNew) return;
 
-    const ownerEmail =
-      currentUser.role === 'account_manager' ? currentUser.email : selectedAmEmail;
-    const ownerAccount = AUTHORIZED_USERS.find(
-      (u) => u.email.toLowerCase() === ownerEmail.toLowerCase()
-    );
-    const ownerShortName = ownerAccount
-      ? ownerAccount.name.replace(' (Account Manager)', '')
-      : currentUser.name;
+    const targetManager = managers.find((m) => m.id === selectedManagerId);
+    if (!targetManager) return;
 
-    onCreateComplaint({
-      clientName: clientName.trim(),
-      subject: subject.trim(),
-      category,
-      priority,
-      status: 'Open',
-      description: description.trim(),
-      submittedByEmail: ownerEmail,
-      submittedByName: ownerShortName,
-      assignedManagerEmail: 'wmgteja@gmail.com',
-      managerRemarks: 'Awaiting manager review.',
-    });
+    setIsSubmittingNew(true);
+    try {
+      await onCreateComplaint({
+        managerId: targetManager.id,
+        managerEmail: targetManager.email,
+        managerName: targetManager.name,
+        complaintText: complaintInput.trim(),
+      });
 
-    setClientName('');
-    setSubject('');
-    setCategory('Service Quality');
-    setPriority('Medium');
-    setDescription('');
-    setShowCreateForm(false);
+      setComplaintInput('');
+      setShowCreateModal(false);
+    } finally {
+      setIsSubmittingNew(false);
+    }
   };
 
-  const openEditModal = (complaint: Complaint) => {
-    setEditingComplaint(complaint);
-    setEditStatus(complaint.status);
-    setEditPriority(complaint.priority);
-    setEditRemarks(complaint.managerRemarks);
+  const startEditAmRemark = (item: Complaint) => {
+    setEditingAmRemarkId(item.complaintId);
+    setAmRemarkDraft(item.accountManagerRemark);
   };
 
-  const handleSaveReview = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingComplaint) return;
-
-    onUpdateComplaint(editingComplaint.id, {
-      status: editStatus,
-      priority: editPriority,
-      managerRemarks: editRemarks.trim() || 'Reviewed by management.',
+  const saveAmRemark = async (complaintId: string) => {
+    await onUpdateComplaint(complaintId, {
+      accountManagerRemark: amRemarkDraft.trim(),
     });
-    setEditingComplaint(null);
+    setEditingAmRemarkId(null);
+    setAmRemarkDraft('');
+  };
+
+  const startEditComplaintText = (item: Complaint) => {
+    setEditingComplaintTextId(item.complaintId);
+    setComplaintTextDraft(item.complaintText);
+  };
+
+  const saveComplaintText = async (complaintId: string) => {
+    if (!complaintTextDraft.trim()) return;
+    await onUpdateComplaint(complaintId, {
+      complaintText: complaintTextDraft.trim(),
+    });
+    setEditingComplaintTextId(null);
+    setComplaintTextDraft('');
+  };
+
+  const startEditMgrRemark = (item: Complaint) => {
+    setEditingMgrRemarkId(item.complaintId);
+    setMgrRemarkDraft(item.managerRemark);
+  };
+
+  const saveMgrRemark = async (complaintId: string) => {
+    await onUpdateComplaint(complaintId, {
+      managerRemark: mgrRemarkDraft.trim(),
+    });
+    setEditingMgrRemarkId(null);
+    setMgrRemarkDraft('');
+  };
+
+  const handleToggleManagerDone = async (item: Complaint) => {
+    if (currentUser.role !== 'manager') return;
+    await onUpdateComplaint(item.complaintId, {
+      managerDone: !item.managerDone,
+    });
+  };
+
+  const handleToggleAccountManagerDone = async (item: Complaint) => {
+    if (currentUser.role !== 'account_manager') return;
+    await onUpdateComplaint(item.complaintId, {
+      accountManagerDone: !item.accountManagerDone,
+    });
   };
 
   return (
     <div className="complaint-page-container">
-      {/* Header Bar */}
       <div className="complaint-page-header">
-        <div>
-          <span className="complaint-page-eyebrow">
-            {currentUser.roleLabel.toUpperCase()} COMPLAINT PORTAL
-          </span>
-          <h1 className="complaint-page-title">
-            {currentUser.role === 'account_manager'
-              ? 'My Client Complaints & SLA Tracker'
-              : currentUser.role === 'manager'
-              ? 'Manager Complaint Review & Resolution Center'
-              : 'Admin Master Complaint Registry'}
-          </h1>
-          <p className="complaint-page-subtitle">
-            {currentUser.role === 'account_manager'
-              ? 'Submit new client complaints and monitor status updates from Manager Teja.'
-              : currentUser.role === 'manager'
-              ? 'Filter complaints across Shakti, Kavita, and Linda. Update resolution statuses and record manager remarks.'
-              : 'Full administrative control to log, edit, resolve, or remove complaint records across all accounts.'}
-          </p>
-        </div>
-
-        {(currentUser.role === 'account_manager' || currentUser.role === 'admin') && (
+        <h1 className="complaint-page-title">Complaints</h1>
+        {currentUser.role === 'account_manager' && (
           <button
             type="button"
-            className="new-complaint-btn"
-            onClick={() => setShowCreateForm((prev) => !prev)}
+            className="header-add-btn"
+            onClick={() => setShowCreateModal(true)}
           >
-            {showCreateForm ? '✕ Close Form' : '+ Log New Complaint'}
+            + Add Complaint
           </button>
         )}
       </div>
 
-      {/* Create New Complaint Form Panel */}
-      {showCreateForm && (
-        <section className="create-complaint-card">
-          <div className="create-complaint-header">
-            <h3>Submit New Client Complaint</h3>
-            <p>All fields marked with * are required for SLA tracking.</p>
-          </div>
+      <section className="complaints-table-card">
+        <div className="complaints-table-wrapper">
+          <table className="complaints-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>ID</th>
+                {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
+                  <th>Account Manager</th>
+                )}
+                {(currentUser.role === 'account_manager' ||
+                  currentUser.role === 'admin') && <th>Manager</th>}
+                <th>Complaint</th>
+                <th>Manager Remark</th>
+                <th className="th-center">Manager Done</th>
+                <th>AM Remark</th>
+                <th className="th-center">AM Done</th>
+                <th className="th-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scopedComplaints.map((item) => {
+                const completed = isComplaintDone(item);
+                const delayed = isComplaintDelayed(item);
+                const isRowSaving = savingComplaintId === item.complaintId;
 
-          <form className="create-complaint-form" onSubmit={handleCreateSubmit}>
-            <div className="form-grid-row">
-              <div className="cp-form-group">
-                <label htmlFor="cp-client">Client / Company Name *</label>
-                <input
-                  id="cp-client"
-                  type="text"
-                  placeholder="e.g. Apex Logistics Sdn Bhd"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="cp-form-group">
-                <label htmlFor="cp-subject">Complaint Subject *</label>
-                <input
-                  id="cp-subject"
-                  type="text"
-                  placeholder="Brief summary of the client issue"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="form-grid-row form-grid-row--three">
-              <div className="cp-form-group">
-                <label htmlFor="cp-category">Issue Category *</label>
-                <select
-                  id="cp-category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as ComplaintCategory)}
-                >
-                  <option value="Service Quality">Service Quality</option>
-                  <option value="Billing & Invoice">Billing &amp; Invoice</option>
-                  <option value="Delivery & SLA">Delivery &amp; SLA</option>
-                  <option value="Technical Issue">Technical Issue</option>
-                  <option value="Account Support">Account Support</option>
-                </select>
-              </div>
-
-              <div className="cp-form-group">
-                <label htmlFor="cp-priority">Priority Level *</label>
-                <select
-                  id="cp-priority"
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value as ComplaintPriority)}
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Critical">Critical</option>
-                </select>
-              </div>
-
-              {currentUser.role === 'admin' ? (
-                <div className="cp-form-group">
-                  <label htmlFor="cp-am-owner">Assign Account Manager *</label>
-                  <select
-                    id="cp-am-owner"
-                    value={selectedAmEmail}
-                    onChange={(e) => setSelectedAmEmail(e.target.value)}
+                return (
+                  <tr
+                    key={item.complaintId}
+                    className={completed ? 'row-completed' : 'row-pending'}
                   >
-                    {accountManagers.map((am) => (
-                      <option key={am.id} value={am.email}>
-                        {am.name} ({am.email})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="cp-form-group">
-                  <label>Submitted By (Account Manager)</label>
-                  <input type="text" value={currentUser.email} disabled />
-                </div>
+                    <td className="td-timestamp">{item.createdAt}</td>
+
+                    <td className="td-complaint-id">
+                      <span className="complaint-id-badge">{item.complaintId}</span>
+                    </td>
+
+                    {(currentUser.role === 'manager' ||
+                      currentUser.role === 'admin') && (
+                      <td className="td-person">{item.accountManagerName}</td>
+                    )}
+
+                    {(currentUser.role === 'account_manager' ||
+                      currentUser.role === 'admin') && (
+                      <td className="td-person">{item.managerName}</td>
+                    )}
+
+                    <td className="td-complaint-text">
+                      {currentUser.role === 'account_manager' &&
+                      editingComplaintTextId === item.complaintId ? (
+                        <div className="inline-edit-box">
+                          <textarea
+                            rows={2}
+                            value={complaintTextDraft}
+                            onChange={(e) => setComplaintTextDraft(e.target.value)}
+                            placeholder="Edit complaint..."
+                          />
+                          <div className="inline-edit-actions">
+                            <button
+                              type="button"
+                              className="btn-inline-save"
+                              disabled={isRowSaving}
+                              onClick={() => saveComplaintText(item.complaintId)}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-inline-cancel"
+                              onClick={() => setEditingComplaintTextId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="remark-display-row">
+                          <p className="complaint-body-text">{item.complaintText}</p>
+                          {currentUser.role === 'account_manager' && (
+                            <button
+                              type="button"
+                              className="btn-inline-edit"
+                              onClick={() => startEditComplaintText(item)}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="td-remark">
+                      {currentUser.role === 'manager' ? (
+                        editingMgrRemarkId === item.complaintId ? (
+                          <div className="inline-edit-box">
+                            <textarea
+                              rows={2}
+                              value={mgrRemarkDraft}
+                              onChange={(e) => setMgrRemarkDraft(e.target.value)}
+                              placeholder="Remark..."
+                            />
+                            <div className="inline-edit-actions">
+                              <button
+                                type="button"
+                                className="btn-inline-save"
+                                disabled={isRowSaving}
+                                onClick={() => saveMgrRemark(item.complaintId)}
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-inline-cancel"
+                                onClick={() => setEditingMgrRemarkId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="remark-display-row">
+                            <span
+                              className={
+                                item.managerRemark
+                                  ? 'remark-value'
+                                  : 'remark-placeholder'
+                              }
+                            >
+                              {item.managerRemark || '—'}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn-inline-edit"
+                              onClick={() => startEditMgrRemark(item)}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        )
+                      ) : (
+                        <span
+                          className={
+                            item.managerRemark ? 'remark-value' : 'remark-placeholder'
+                          }
+                        >
+                          {item.managerRemark || '—'}
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="td-check-cell">
+                      <label
+                        className={`check-button-label ${
+                          item.managerDone ? 'check-button-label--checked' : ''
+                        } ${
+                          currentUser.role !== 'manager'
+                            ? 'check-button-label--readonly'
+                            : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.managerDone}
+                          disabled={currentUser.role !== 'manager' || isRowSaving}
+                          onChange={() => handleToggleManagerDone(item)}
+                        />
+                        <span>Done</span>
+                      </label>
+                    </td>
+
+                    <td className="td-remark">
+                      {currentUser.role === 'account_manager' ? (
+                        editingAmRemarkId === item.complaintId ? (
+                          <div className="inline-edit-box">
+                            <textarea
+                              rows={2}
+                              value={amRemarkDraft}
+                              onChange={(e) => setAmRemarkDraft(e.target.value)}
+                              placeholder="Remark..."
+                            />
+                            <div className="inline-edit-actions">
+                              <button
+                                type="button"
+                                className="btn-inline-save"
+                                disabled={isRowSaving}
+                                onClick={() => saveAmRemark(item.complaintId)}
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-inline-cancel"
+                                onClick={() => setEditingAmRemarkId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="remark-display-row">
+                            <span
+                              className={
+                                item.accountManagerRemark
+                                  ? 'remark-value'
+                                  : 'remark-placeholder'
+                              }
+                            >
+                              {item.accountManagerRemark || '—'}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn-inline-edit"
+                              onClick={() => startEditAmRemark(item)}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        )
+                      ) : (
+                        <span
+                          className={
+                            item.accountManagerRemark
+                              ? 'remark-value'
+                              : 'remark-placeholder'
+                          }
+                        >
+                          {item.accountManagerRemark || '—'}
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="td-check-cell">
+                      <label
+                        className={`check-button-label ${
+                          item.accountManagerDone ? 'check-button-label--checked' : ''
+                        } ${
+                          currentUser.role !== 'account_manager'
+                            ? 'check-button-label--readonly'
+                            : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.accountManagerDone}
+                          disabled={currentUser.role !== 'account_manager' || isRowSaving}
+                          onChange={() => handleToggleAccountManagerDone(item)}
+                        />
+                        <span>Done</span>
+                      </label>
+                    </td>
+
+                    <td className="td-status-cell">
+                      <span
+                        className={`table-status-pill ${
+                          completed
+                            ? 'table-status-pill--completed'
+                            : delayed
+                            ? 'table-status-pill--delayed'
+                            : 'table-status-pill--pending'
+                        }`}
+                      >
+                        {completed ? 'Completed' : delayed ? 'Delayed' : 'Pending'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {scopedComplaints.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={currentUser.role === 'admin' ? 10 : 9}
+                    className="empty-complaints-cell"
+                  >
+                    No complaints found.
+                  </td>
+                </tr>
               )}
-            </div>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-            <div className="cp-form-group">
-              <label htmlFor="cp-desc">Detailed Description *</label>
-              <textarea
-                id="cp-desc"
-                rows={3}
-                placeholder="Provide full context, affected invoice/order numbers, and client expectations..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="create-form-actions">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setShowCreateForm(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn-primary">
-                Submit Complaint Ticket
-              </button>
-            </div>
-          </form>
-        </section>
+      {currentUser.role === 'account_manager' && (
+        <button
+          type="button"
+          className="floating-add-complaint-btn"
+          onClick={() => setShowCreateModal(true)}
+          title="Add Complaint"
+          aria-label="Add Complaint"
+        >
+          <span className="floating-plus-icon">+</span>
+        </button>
       )}
 
-      {/* Filter & Search Bar */}
-      <section className="filter-bar-card">
-        <div className="filter-search-box">
-          <input
-            type="text"
-            placeholder="Search by Ticket ID, Client, Subject, or Description..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        <div className="filter-selects-group">
-          {currentUser.role !== 'account_manager' && (
-            <select
-              value={accountManagerFilter}
-              onChange={(e) => setAccountManagerFilter(e.target.value)}
-              aria-label="Filter by Account Manager"
-            >
-              <option value="ALL">All Account Managers</option>
-              {accountManagers.map((am) => (
-                <option key={am.id} value={am.email}>
-                  {am.name.replace(' (Account Manager)', '')} ({am.email})
-                </option>
-              ))}
-            </select>
-          )}
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filter by Status"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="Open">Open</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Escalated">Escalated</option>
-            <option value="Resolved">Resolved</option>
-          </select>
-
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            aria-label="Filter by Priority"
-          >
-            <option value="ALL">All Priorities</option>
-            <option value="Critical">Critical</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
-          </select>
-        </div>
-      </section>
-
-      {/* Complaints List / Cards Grid */}
-      <section className="complaints-list-grid">
-        {filteredComplaints.map((complaint) => (
-          <article key={complaint.id} className="complaint-ticket-card">
-            <div className="ticket-card-top">
-              <div className="ticket-id-group">
-                <span className="ticket-id-badge">{complaint.ticketNumber}</span>
-                <span className="ticket-category-tag">{complaint.category}</span>
-              </div>
-
-              <div className="ticket-badges-group">
-                <span
-                  className={`priority-badge priority-badge--${complaint.priority.toLowerCase()}`}
-                >
-                  {complaint.priority} Priority
-                </span>
-                <span
-                  className={`status-badge status-badge--${complaint.status
-                    .toLowerCase()
-                    .replace(/\s+/g, '-')}`}
-                >
-                  {complaint.status}
-                </span>
-              </div>
-            </div>
-
-            <div className="ticket-card-body">
-              <div className="ticket-client-name">{complaint.clientName}</div>
-              <h3 className="ticket-subject">{complaint.subject}</h3>
-              <p className="ticket-description">{complaint.description}</p>
-            </div>
-
-            <div className="ticket-remarks-box">
-              <div className="remarks-label">
-                <span>Manager Remarks ({complaint.assignedManagerEmail})</span>
-                <span>Updated: {complaint.updatedAt}</span>
-              </div>
-              <p className="remarks-text">{complaint.managerRemarks}</p>
-            </div>
-
-            <div className="ticket-card-footer">
-              <div className="ticket-meta-info">
-                <span>
-                  <strong>Account Manager:</strong> {complaint.submittedByName} (
-                  {complaint.submittedByEmail})
-                </span>
-                <span>
-                  <strong>Logged:</strong> {complaint.createdAt}
-                </span>
-              </div>
-
-              <div className="ticket-action-buttons">
-                {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
-                  <button
-                    type="button"
-                    className="btn-manage-ticket"
-                    onClick={() => openEditModal(complaint)}
-                  >
-                    Update Status / Remarks
-                  </button>
-                )}
-
-                {currentUser.role === 'admin' && (
-                  <button
-                    type="button"
-                    className="btn-delete-ticket"
-                    onClick={() => onDeleteComplaint(complaint.id)}
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            </div>
-          </article>
-        ))}
-
-        {filteredComplaints.length === 0 && (
-          <div className="empty-complaints-state">
-            <h3>No matching complaints found</h3>
-            <p>Try adjusting your search filters or log a new client complaint.</p>
-          </div>
-        )}
-      </section>
-
-      {/* Manager / Admin Update Modal */}
-      {editingComplaint && (
-        <div className="modal-backdrop" onClick={() => setEditingComplaint(null)}>
+      {currentUser.role === 'account_manager' && showCreateModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowCreateModal(false)}
+        >
           <div
             className="modal-dialog"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
+            aria-labelledby="create-complaint-modal-title"
           >
             <div className="modal-header">
-              <div>
-                <span className="modal-ticket-tag">{editingComplaint.ticketNumber}</span>
-                <h3>Update Complaint Resolution</h3>
-              </div>
+              <h3 id="create-complaint-modal-title">New Complaint</h3>
               <button
                 type="button"
                 className="modal-close-btn"
-                onClick={() => setEditingComplaint(null)}
+                onClick={() => setShowCreateModal(false)}
+                aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
-            <div className="modal-summary-box">
-              <strong>{editingComplaint.clientName}</strong> — {editingComplaint.subject}
-              <div className="modal-summary-sub">
-                Submitted by {editingComplaint.submittedByName} (
-                {editingComplaint.submittedByEmail})
-              </div>
-            </div>
-
-            <form className="modal-form" onSubmit={handleSaveReview}>
-              <div className="form-grid-row">
-                <div className="cp-form-group">
-                  <label htmlFor="edit-status">Resolution Status</label>
-                  <select
-                    id="edit-status"
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value as ComplaintStatus)}
-                  >
-                    <option value="Open">Open</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Escalated">Escalated</option>
-                    <option value="Resolved">Resolved</option>
-                  </select>
-                </div>
-
-                <div className="cp-form-group">
-                  <label htmlFor="edit-priority">Priority Level</label>
-                  <select
-                    id="edit-priority"
-                    value={editPriority}
-                    onChange={(e) => setEditPriority(e.target.value as ComplaintPriority)}
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Critical">Critical</option>
-                  </select>
-                </div>
+            <form className="modal-form" onSubmit={handleCreateSubmit}>
+              <div className="cp-form-group">
+                <label htmlFor="select-manager">Manager</label>
+                <select
+                  id="select-manager"
+                  value={selectedManagerId}
+                  onChange={(e) => setSelectedManagerId(e.target.value)}
+                  required
+                >
+                  {managers.map((mgr) => (
+                    <option key={mgr.id} value={mgr.id}>
+                      {mgr.name} ({mgr.email})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="edit-remarks">Manager Resolution Remarks</label>
+                <label htmlFor="write-complaint">Complaint</label>
                 <textarea
-                  id="edit-remarks"
+                  id="write-complaint"
                   rows={4}
-                  value={editRemarks}
-                  onChange={(e) => setEditRemarks(e.target.value)}
-                  placeholder="Enter resolution steps, escalation notes, or instructions for the Account Manager..."
+                  placeholder="Write complaint..."
+                  value={complaintInput}
+                  onChange={(e) => setComplaintInput(e.target.value)}
                   required
                 />
               </div>
@@ -502,12 +514,16 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setEditingComplaint(null)}
+                  onClick={() => setShowCreateModal(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary">
-                  Save Resolution Update
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isSubmittingNew}
+                >
+                  {isSubmittingNew ? '...' : 'Submit'}
                 </button>
               </div>
             </form>
