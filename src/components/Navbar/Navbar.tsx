@@ -17,8 +17,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   activePage,
   onNavigate,
   onLogout,
-  tvMode,
-  onToggleTvMode,
+  // tvMode,
+  // onToggleTvMode,
   openComplaintsCount,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
@@ -30,10 +30,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     >
       <div className="sidebar-top">
         <div className="sidebar-brand">
-          <div className="sidebar-logo">WM</div>
+          {/* <div className="sidebar-logo">WM</div> */}
           {!isCollapsed && (
             <div className="sidebar-brand-text">
-              <span className="sidebar-app-name">WM Portal</span>
+              <span className="sidebar-app-name">WMD Query Portal</span>
               <span className="sidebar-role-pill">{currentUser.roleLabel}</span>
             </div>
           )}
@@ -115,7 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </button>
 
-        <button
+        {/* <button
           type="button"
           className={`sidebar-link-btn sidebar-tv-btn ${
             tvMode ? 'sidebar-tv-btn--active' : ''
@@ -141,7 +141,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {tvMode ? 'TV: ON' : 'TV View'}
             </span>
           )}
-        </button>
+        </button> */}
       </nav>
 
       <div className="sidebar-bottom">

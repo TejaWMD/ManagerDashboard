@@ -445,7 +445,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         </div>
       </section>
 
-      {currentUser.role === 'account_manager' && (
+      {/* {currentUser.role === 'account_manager' && (
         <button
           type="button"
           className="floating-add-complaint-btn"
@@ -455,7 +455,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         >
           <span className="floating-plus-icon">+</span>
         </button>
-      )}
+      )} */}
 
       {currentUser.role === 'account_manager' && showCreateModal && (
         <div

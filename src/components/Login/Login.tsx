@@ -41,7 +41,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     <div className="login-page">
       <div className="login-card">
         <div className="login-header">
-          <div className="login-logo-mark">WM</div>
+          {/* <div className="login-logo-mark">WMD</div> */}
           <h1 className="login-title">Sign In</h1>
         </div>
 

@@ -77,13 +77,13 @@ export const HomePage: React.FC<HomePageProps> = ({
             </select>
           )}
 
-          <button
+          {/* <button
             type="button"
             className="hero-primary-btn"
             onClick={() => onNavigate('complaints')}
           >
             Complaints &rarr;
-          </button>
+          </button> */}
         </div>
       </header>
 
@@ -109,7 +109,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      <section className="recent-section-card">
+      {/* <section className="recent-section-card">
         <div className="recent-section-header">
           <h2>Recent Complaints</h2>
           <button
@@ -174,7 +174,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             </tbody>
           </table>
         </div>
-      </section>
+      </section> */}
     </div>
   );
 };
