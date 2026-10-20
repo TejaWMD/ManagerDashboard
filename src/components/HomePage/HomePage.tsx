@@ -20,7 +20,7 @@ interface HomePageProps {
 export const HomePage: React.FC<HomePageProps> = ({
   currentUser,
   complaints,
-  onNavigate,
+  onNavigate: _onNavigate,
 }) => {
   const managers = AUTHORIZED_USERS.filter((u) => u.role === 'manager');
   const [selectedManagerId, setSelectedManagerId] = useState<string>('ALL');
