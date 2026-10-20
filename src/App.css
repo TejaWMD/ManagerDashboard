@@ -1,0 +1,80 @@
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.app-main-content {
+  flex: 1;
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 1.75rem;
+}
+
+.app-footer {
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  padding: 1rem 1.75rem;
+  margin-top: auto;
+}
+
+.app-footer-inner {
+  max-width: 1680px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: #64748b;
+  flex-wrap: wrap;
+}
+
+/* Simulated TV Wall Mode toggleable on any screen + Native TV screens */
+.app-shell--tv-mode {
+  font-size: 118%;
+}
+
+.app-shell--tv-mode .app-main-content {
+  max-width: 2400px;
+  padding: 2.25rem 3rem;
+}
+
+.app-shell--tv-mode .kpi-value {
+  font-size: 2.75rem;
+}
+
+.app-shell--tv-mode .hero-title {
+  font-size: 2.15rem;
+}
+
+@media (min-width: 1800px) {
+  .app-main-content {
+    max-width: 2300px;
+    padding: 2.5rem 3rem;
+  }
+
+  .app-footer-inner {
+    max-width: 2300px;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-main-content {
+    padding: 1rem;
+  }
+
+  .app-footer {
+    padding: 0.85rem 1rem;
+  }
+
+  .app-footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+}
