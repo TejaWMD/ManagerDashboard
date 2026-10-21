@@ -99,9 +99,46 @@
 @media (max-width: 768px) {
   .app-shell {
     flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .app-body-column {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
   }
 
   .app-main-content {
-    padding: 0.6rem 0.75rem;
+    flex: none;
+    min-height: auto;
+    height: auto;
+    max-width: 100%;
+    padding: 0.65rem 0.65rem 1.75rem;
+    overflow: visible;
+  }
+
+  .db-setup-banner,
+  .db-error-banner {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.76rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+
+  .db-setup-banner-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .db-banner-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.76rem;
   }
 }

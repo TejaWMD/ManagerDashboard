@@ -196,3 +196,62 @@
     opacity: 1;
   }
 }
+
+@media (max-width: 600px) {
+  .notif-modal-overlay {
+    padding: 10px;
+  }
+
+  .notif-modal {
+    max-height: 92dvh;
+    border-radius: 14px;
+  }
+
+  .notif-modal-header {
+    padding: 14px 16px;
+  }
+
+  .notif-modal-header h3 {
+    font-size: 1.05rem;
+  }
+
+  .notif-subtitle {
+    font-size: 0.78rem;
+  }
+
+  .notif-modal-body {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .notif-section {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .notif-section-header h4 {
+    font-size: 0.9rem;
+  }
+
+  .notif-desc {
+    font-size: 0.8rem;
+  }
+
+  .notif-info-box {
+    padding: 10px 12px;
+    font-size: 0.78rem;
+  }
+
+  .notif-btn-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .notif-btn {
+    width: 100%;
+    text-align: center;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    min-height: 42px;
+  }
+}

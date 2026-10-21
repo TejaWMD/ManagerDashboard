@@ -272,10 +272,14 @@
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    padding: 0.5rem 0.85rem;
+    padding: 0.45rem 0.75rem;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    gap: 0.5rem;
+    gap: 0.4rem;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
   }
 
   .sidebar-top,
@@ -283,6 +287,23 @@
     padding-bottom: 0;
     border-bottom: none;
     flex-direction: row;
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .sidebar-brand-text {
+    min-width: 0;
+    gap: 0.1rem;
+  }
+
+  .sidebar-app-name {
+    font-size: 0.84rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-role-pill {
+    font-size: 0.58rem;
   }
 
   .sidebar-collapse-btn {
@@ -301,9 +322,16 @@
   .sidebar-link-btn,
   .sidebar--collapsed .sidebar-link-btn {
     width: auto;
-    padding: 0.42rem 0.68rem;
-    font-size: 0.78rem;
-    gap: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.76rem;
+    gap: 0.35rem;
+    min-height: 34px;
+    border-radius: 8px;
+  }
+
+  .sidebar-nav-icon {
+    width: 16px;
+    height: 16px;
   }
 
   .sidebar-bottom {
@@ -312,13 +340,21 @@
     border-top: none;
     flex-direction: row;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
+    flex-shrink: 0;
   }
 
   .sidebar-user-card {
-    padding: 0.25rem;
+    padding: 0;
     background: transparent;
     border: none;
+  }
+
+  .sidebar-user-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 0.68rem;
+    border-radius: 7px;
   }
 
   .sidebar-user-info {
@@ -326,12 +362,70 @@
   }
 
   .sidebar-logout-btn {
-    width: auto;
-    padding: 0.38rem 0.6rem;
-    font-size: 0.74rem;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
   }
 
   .sidebar-logout-btn span {
     display: none;
+  }
+
+  .sidebar-logout-btn .sidebar-nav-icon {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+@media (max-width: 560px) {
+  .sidebar,
+  .sidebar--collapsed {
+    padding: 0.4rem 0.55rem;
+    gap: 0.3rem;
+  }
+
+  .sidebar-app-name {
+    font-size: 0.8rem;
+    max-width: 110px;
+  }
+
+  .sidebar-role-pill {
+    font-size: 0.54rem;
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-nav {
+    gap: 0.25rem;
+  }
+
+  .sidebar-link-btn,
+  .sidebar--collapsed .sidebar-link-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    justify-content: center;
+    position: relative;
+  }
+
+  .sidebar-link-text {
+    display: none;
+  }
+
+  .sidebar-badge-count {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    margin-left: 0;
+    font-size: 0.56rem;
+    padding: 0.08rem 0.32rem;
+    min-width: 15px;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   }
 }
