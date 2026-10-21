@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   belongsToAccountManager,
   belongsToManager,
   Complaint,
   isComplaintDelayed,
   isComplaintDone,
+  sortComplaintsByStatusAndTimestamp,
   UserAccount,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
@@ -35,6 +36,14 @@ interface ComplaintPageProps {
   ) => Promise<void>;
 }
 
+type StatusFilterValue =
+  | 'ALL'
+  | 'Pending'
+  | 'Unchecked'
+  | 'ManagerDone'
+  | 'Delayed'
+  | 'Completed';
+
 export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   currentUser,
   complaints,
@@ -42,8 +51,22 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   onCreateComplaint,
   onUpdateComplaint,
 }) => {
-  const managers = AUTHORIZED_USERS.filter((u) => u.role === 'manager');
+  const accountManagers = useMemo(
+    () => AUTHORIZED_USERS.filter((u) => u.role === 'account_manager'),
+    []
+  );
+  const managers = useMemo(
+    () => AUTHORIZED_USERS.filter((u) => u.role === 'manager'),
+    []
+  );
 
+  // Header filter states
+  const [filterAccountManagerId, setFilterAccountManagerId] = useState<string>('ALL');
+  const [filterManagerId, setFilterManagerId] = useState<string>('ALL');
+  const [filterStatus, setFilterStatus] = useState<StatusFilterValue>('ALL');
+  const [timestampOrder, setTimestampOrder] = useState<'desc' | 'asc'>('desc');
+
+  // Create modal states
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [selectedManagerId, setSelectedManagerId] = useState<string>(
     managers[0]?.id || ''
@@ -51,6 +74,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   const [complaintInput, setComplaintInput] = useState<string>('');
   const [isSubmittingNew, setIsSubmittingNew] = useState<boolean>(false);
 
+  // Inline editing states
   const [editingAmRemarkId, setEditingAmRemarkId] = useState<string | null>(null);
   const [amRemarkDraft, setAmRemarkDraft] = useState<string>('');
 
@@ -60,15 +84,87 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   const [editingMgrRemarkId, setEditingMgrRemarkId] = useState<string | null>(null);
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
-  const scopedComplaints = complaints.filter((c) => {
-    if (currentUser.role === 'account_manager') {
-      return belongsToAccountManager(c, currentUser);
-    }
-    if (currentUser.role === 'manager') {
-      return belongsToManager(c, currentUser);
-    }
-    return true;
-  });
+  // 1. Role-scoped complaints
+  const roleScopedComplaints = useMemo(() => {
+    return complaints.filter((c) => {
+      if (currentUser.role === 'account_manager') {
+        return belongsToAccountManager(c, currentUser);
+      }
+      if (currentUser.role === 'manager') {
+        return belongsToManager(c, currentUser);
+      }
+      return true;
+    });
+  }, [complaints, currentUser]);
+
+  // 2. Apply header filters & automatic status + timestamp sorting
+  const sortedAndFilteredComplaints = useMemo(() => {
+    const selectedAmObj = accountManagers.find((am) => am.id === filterAccountManagerId);
+    const selectedMgrObj = managers.find((m) => m.id === filterManagerId);
+
+    const filtered = roleScopedComplaints.filter((c) => {
+      // Account Manager filter (available to Manager & Admin)
+      if (
+        (currentUser.role === 'manager' || currentUser.role === 'admin') &&
+        filterAccountManagerId !== 'ALL' &&
+        selectedAmObj
+      ) {
+        if (!belongsToAccountManager(c, selectedAmObj)) {
+          return false;
+        }
+      }
+
+      // Manager filter (available to Account Manager & Admin)
+      if (
+        (currentUser.role === 'account_manager' || currentUser.role === 'admin') &&
+        filterManagerId !== 'ALL' &&
+        selectedMgrObj
+      ) {
+        if (!belongsToManager(c, selectedMgrObj)) {
+          return false;
+        }
+      }
+
+      // Status filter (available to all roles)
+      if (filterStatus !== 'ALL') {
+        const done = isComplaintDone(c);
+        const delayed = isComplaintDelayed(c);
+        if (filterStatus === 'Completed' && !done) return false;
+        if (filterStatus === 'Pending' && done) return false;
+        if (filterStatus === 'Delayed' && !delayed) return false;
+        if (filterStatus === 'Unchecked' && (c.managerDone || c.accountManagerDone)) {
+          return false;
+        }
+        if (filterStatus === 'ManagerDone' && (!c.managerDone || c.accountManagerDone)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    return sortComplaintsByStatusAndTimestamp(filtered, timestampOrder);
+  }, [
+    roleScopedComplaints,
+    currentUser.role,
+    filterAccountManagerId,
+    filterManagerId,
+    filterStatus,
+    accountManagers,
+    managers,
+    timestampOrder,
+  ]);
+
+  const hasActiveFilters =
+    filterAccountManagerId !== 'ALL' ||
+    filterManagerId !== 'ALL' ||
+    filterStatus !== 'ALL';
+
+  const handleResetFilters = () => {
+    setFilterAccountManagerId('ALL');
+    setFilterManagerId('ALL');
+    setFilterStatus('ALL');
+  };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,13 +231,20 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
   const handleToggleManagerDone = async (item: Complaint) => {
     if (currentUser.role !== 'manager') return;
+    const nextManagerDone = !item.managerDone;
     await onUpdateComplaint(item.complaintId, {
-      managerDone: !item.managerDone,
+      managerDone: nextManagerDone,
+      // If manager unchecks their box, also reset accountManagerDone so AM only checks when fully completed
+      ...(!nextManagerDone && item.accountManagerDone
+        ? { accountManagerDone: false }
+        : {}),
     });
   };
 
   const handleToggleAccountManagerDone = async (item: Complaint) => {
     if (currentUser.role !== 'account_manager') return;
+    // Account manager will only check the box once the complaint is completed by manager
+    if (!item.accountManagerDone && !item.managerDone) return;
     await onUpdateComplaint(item.complaintId, {
       accountManagerDone: !item.accountManagerDone,
     });
@@ -149,25 +252,119 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
   return (
     <div className="complaint-page-container">
-      <div className="complaint-page-header">
-        <h1 className="complaint-page-title">Complaints</h1>
-        {currentUser.role === 'account_manager' && (
-          <button
-            type="button"
-            className="header-add-btn"
-            onClick={() => setShowCreateModal(true)}
-          >
-            + Add Complaint
-          </button>
-        )}
-      </div>
+      <header className="complaint-page-header">
+        <div className="complaint-header-title-group">
+          <h1 className="complaint-page-title">Complaints</h1>
+          <span className="complaint-count-pill">
+            {sortedAndFilteredComplaints.length} / {roleScopedComplaints.length}
+          </span>
+        </div>
+
+        <div className="complaint-header-controls">
+          {/* Account Manager Filter: shown for Managers & Admin */}
+          {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
+            <div className="header-filter-group">
+              <label htmlFor="filter-am" className="header-filter-label">
+                Account Mgr
+              </label>
+              <select
+                id="filter-am"
+                className="header-filter-select"
+                value={filterAccountManagerId}
+                onChange={(e) => setFilterAccountManagerId(e.target.value)}
+              >
+                <option value="ALL">All Account Managers</option>
+                {accountManagers.map((am) => (
+                  <option key={am.id} value={am.id}>
+                    {am.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Manager Filter: shown for Account Managers & Admin */}
+          {(currentUser.role === 'account_manager' || currentUser.role === 'admin') && (
+            <div className="header-filter-group">
+              <label htmlFor="filter-mgr" className="header-filter-label">
+                Manager
+              </label>
+              <select
+                id="filter-mgr"
+                className="header-filter-select"
+                value={filterManagerId}
+                onChange={(e) => setFilterManagerId(e.target.value)}
+              >
+                <option value="ALL">All Managers</option>
+                {managers.map((mgr) => (
+                  <option key={mgr.id} value={mgr.id}>
+                    {mgr.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Status Filter: shown for all roles */}
+          <div className="header-filter-group">
+            <label htmlFor="filter-status" className="header-filter-label">
+              Status
+            </label>
+            <select
+              id="filter-status"
+              className="header-filter-select"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as StatusFilterValue)}
+            >
+              <option value="ALL">All Status</option>
+              <option value="Pending">Pending (All Open)</option>
+              <option value="Unchecked">Unchecked</option>
+              <option value="ManagerDone">Manager Checked</option>
+              <option value="Delayed">Delayed (&gt;24h)</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              className="header-reset-btn"
+              onClick={handleResetFilters}
+              title="Clear Filters"
+            >
+              Reset
+            </button>
+          )}
+
+          {currentUser.role === 'account_manager' && (
+            <button
+              type="button"
+              className="header-add-btn"
+              onClick={() => setShowCreateModal(true)}
+            >
+              + Add Complaint
+            </button>
+          )}
+        </div>
+      </header>
 
       <section className="complaints-table-card">
         <div className="complaints-table-wrapper">
           <table className="complaints-table">
             <thead>
               <tr>
-                <th>Date</th>
+                <th
+                  className="th-sortable"
+                  onClick={() =>
+                    setTimestampOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+                  }
+                  title="Click to toggle timestamp order within each status group"
+                >
+                  <span>Date</span>
+                  <span className="sort-indicator">
+                    {timestampOrder === 'desc' ? '↓' : '↑'}
+                  </span>
+                </th>
                 <th>ID</th>
                 {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
                   <th>Account Manager</th>
@@ -183,16 +380,27 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {scopedComplaints.map((item) => {
+              {sortedAndFilteredComplaints.map((item) => {
                 const completed = isComplaintDone(item);
                 const delayed = isComplaintDelayed(item);
+                const managerOnlyChecked = item.managerDone && !item.accountManagerDone;
                 const isRowSaving = savingComplaintId === item.complaintId;
 
+                const amCannotCheckYet =
+                  !item.managerDone && !item.accountManagerDone;
+                const isAmCheckboxDisabled =
+                  currentUser.role !== 'account_manager' ||
+                  isRowSaving ||
+                  amCannotCheckYet;
+
+                const rowStateClass = completed
+                  ? 'row-completed'
+                  : managerOnlyChecked
+                  ? 'row-manager-done'
+                  : 'row-unchecked';
+
                 return (
-                  <tr
-                    key={item.complaintId}
-                    className={completed ? 'row-completed' : 'row-pending'}
-                  >
+                  <tr key={item.complaintId} className={rowStateClass}>
                     <td className="td-timestamp">{item.createdAt}</td>
 
                     <td className="td-complaint-id">
@@ -398,15 +606,18 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                         className={`check-button-label ${
                           item.accountManagerDone ? 'check-button-label--checked' : ''
                         } ${
-                          currentUser.role !== 'account_manager'
-                            ? 'check-button-label--readonly'
-                            : ''
+                          isAmCheckboxDisabled ? 'check-button-label--readonly' : ''
                         }`}
+                        title={
+                          amCannotCheckYet
+                            ? 'Manager must check Done before Account Manager can mark as completed'
+                            : undefined
+                        }
                       >
                         <input
                           type="checkbox"
                           checked={item.accountManagerDone}
-                          disabled={currentUser.role !== 'account_manager' || isRowSaving}
+                          disabled={isAmCheckboxDisabled}
                           onChange={() => handleToggleAccountManagerDone(item)}
                         />
                         <span>Done</span>
@@ -420,23 +631,31 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                             ? 'table-status-pill--completed'
                             : delayed
                             ? 'table-status-pill--delayed'
+                            : managerOnlyChecked
+                            ? 'table-status-pill--mgr-done'
                             : 'table-status-pill--pending'
                         }`}
                       >
-                        {completed ? 'Completed' : delayed ? 'Delayed' : 'Pending'}
+                        {completed
+                          ? 'Completed'
+                          : delayed
+                          ? 'Delayed'
+                          : managerOnlyChecked
+                          ? 'Mgr Checked'
+                          : 'Pending'}
                       </span>
                     </td>
                   </tr>
                 );
               })}
 
-              {scopedComplaints.length === 0 && (
+              {sortedAndFilteredComplaints.length === 0 && (
                 <tr>
                   <td
                     colSpan={currentUser.role === 'admin' ? 10 : 9}
                     className="empty-complaints-cell"
                   >
-                    No complaints found.
+                    No complaints match the selected filters.
                   </td>
                 </tr>
               )}
@@ -444,18 +663,6 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
           </table>
         </div>
       </section>
-
-      {/* {currentUser.role === 'account_manager' && (
-        <button
-          type="button"
-          className="floating-add-complaint-btn"
-          onClick={() => setShowCreateModal(true)}
-          title="Add Complaint"
-          aria-label="Add Complaint"
-        >
-          <span className="floating-plus-icon">+</span>
-        </button>
-      )} */}
 
       {currentUser.role === 'account_manager' && showCreateModal && (
         <div

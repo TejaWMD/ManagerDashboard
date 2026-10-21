@@ -39,6 +39,52 @@ export function isComplaintDone(complaint: Complaint): boolean {
   return Boolean(complaint.managerDone && complaint.accountManagerDone);
 }
 
+export function getComplaintStageRank(complaint: Complaint): number {
+  // 0: both unchecked (top priority)
+  // 1: only checked by manager (middle priority)
+  // 2: checked by both (completed - bottom)
+  if (complaint.managerDone && complaint.accountManagerDone) {
+    return 2;
+  }
+  if (complaint.managerDone && !complaint.accountManagerDone) {
+    return 1;
+  }
+  if (!complaint.managerDone && !complaint.accountManagerDone) {
+    return 0;
+  }
+  return 1;
+}
+
+export function getComplaintTimestampMs(complaint: Complaint): number {
+  if (
+    typeof complaint.createdAtMs === 'number' &&
+    !Number.isNaN(complaint.createdAtMs) &&
+    complaint.createdAtMs > 0
+  ) {
+    return complaint.createdAtMs;
+  }
+  const parsed = Date.parse(complaint.createdAt.replace(' ', 'T'));
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export function sortComplaintsByStatusAndTimestamp(
+  list: Complaint[],
+  timestampOrder: 'desc' | 'asc' = 'desc'
+): Complaint[] {
+  return [...list].sort((a, b) => {
+    const rankDiff = getComplaintStageRank(a) - getComplaintStageRank(b);
+    if (rankDiff !== 0) {
+      return rankDiff;
+    }
+    const timeA = getComplaintTimestampMs(a);
+    const timeB = getComplaintTimestampMs(b);
+    if (timeA !== timeB) {
+      return timestampOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    }
+    return a.complaintId.localeCompare(b.complaintId);
+  });
+}
+
 export function isComplaintDelayed(complaint: Complaint): boolean {
   if (isComplaintDone(complaint)) {
     return false;

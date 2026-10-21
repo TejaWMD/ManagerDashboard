@@ -1,24 +1,29 @@
 .login-page {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
+  padding: 1.25rem;
+  overflow: hidden;
   background-image:
-  radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.42) 0%, transparent 38%),
-  radial-gradient(circle at 88% 85%, rgba(255, 255, 255, 0.18) 0%, transparent 42%),
-  radial-gradient(circle at 50% 50%, rgba(255, 243, 153, 0.28) 0%, transparent 60%),
-  linear-gradient(135deg, #fbe0ad 0%, #e2953b 52%, #dfa049 100%);
+    radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.42) 0%, transparent 38%),
+    radial-gradient(circle at 88% 85%, rgba(255, 255, 255, 0.18) 0%, transparent 42%),
+    radial-gradient(circle at 50% 50%, rgba(255, 243, 153, 0.28) 0%, transparent 60%),
+    linear-gradient(135deg, #fbe0ad 0%, #e2953b 52%, #dfa049 100%);
 }
 
 .login-card {
   width: 100%;
-  max-width: 550px;
+  max-width: 520px;
+  max-height: calc(100dvh - 2.5rem);
+  overflow-y: auto;
   background: #efedce;
   border: 1px solid #c18036;
   border-radius: 16px;
-  padding: 2.25rem 2rem;
+  padding: 2rem 1.85rem;
   box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
 }
 
@@ -26,26 +31,11 @@
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.35rem;
   text-align: center;
 }
 
-.login-logo-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: #844918;
-  color: #efedce;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
 .login-title {
-  margin: 0;
   font-size: 1.4rem;
   font-weight: 700;
   color: #251a0a;
@@ -60,7 +50,7 @@
   background: rgba(132, 73, 24, 0.12);
   padding: 0.3rem;
   border-radius: 10px;
-  margin-bottom: 1.4rem;
+  margin-bottom: 1.25rem;
 }
 
 .role-tab {
@@ -75,11 +65,6 @@
   transition: all 0.15s ease;
 }
 
-/* 
-.role-tab:hover {
-  color: #ece9ba;
-} */
-
 .role-tab--active {
   background: #835d24;
   color: #efedce;
@@ -89,23 +74,23 @@
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
+  gap: 1rem;
 }
 
 .login-error-alert {
-  padding: 0.75rem 0.9rem;
+  padding: 0.65rem 0.85rem;
   border-radius: 8px;
   background: #f4b9ae;
   border: 1px solid #e82705;
   color: #f82900;
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .form-group label {
@@ -116,10 +101,10 @@
 
 .form-input {
   width: 100%;
-  padding: 0.75rem 0.95rem;
+  padding: 0.72rem 0.9rem;
   border-radius: 8px;
   border: 1.5px solid #c18036;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   color: #251a0a;
   background: #fdfcf5;
   transition: border-color 0.15s ease;
@@ -160,11 +145,11 @@
 }
 
 .login-submit-btn {
-  margin-top: 0.25rem;
-  padding: 0.82rem 1.2rem;
+  margin-top: 0.2rem;
+  padding: 0.78rem 1.2rem;
   border: none;
   border-radius: 8px;
-  font-size: 0.94rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #efedce;
   background: #d6742b;
@@ -175,15 +160,24 @@
 
 .login-submit-btn:active {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-  transform: translateY(4px);
+  transform: translateY(2px);
 }
 
 @media (max-width: 480px) {
+  .login-page {
+    padding: 0.85rem;
+  }
+
   .login-card {
-    padding: 1.75rem 1.35rem;
+    padding: 1.35rem 1.15rem;
   }
 
   .role-selector-tabs {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .role-tab {
+    font-size: 0.72rem;
+    padding: 0.45rem 0.25rem;
   }
 }
