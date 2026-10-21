@@ -15,13 +15,12 @@ import './HomePage.css';
 interface HomePageProps {
   currentUser: UserAccount;
   complaints: Complaint[];
-  onNavigate: (page: PageView) => void;
+  onNavigate?: (page: PageView) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
   currentUser,
   complaints,
-  onNavigate,
 }) => {
   const accountManagers = useMemo(
     () => AUTHORIZED_USERS.filter((u) => u.role === 'account_manager'),
@@ -44,6 +43,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   );
   const selectedManagerObj = managers.find((m) => m.id === selectedManagerId);
 
+  // Filter complaints based on user role and active dropdown filters
   const scopedComplaints = useMemo(() => {
     const filtered = complaints.filter((c) => {
       if (currentUser.role === 'account_manager') {
@@ -62,7 +62,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         return true;
       }
 
-      // Admin
+      // Admin role
       if (selectedAccountManagerId !== 'ALL' && selectedAmObj) {
         if (!belongsToAccountManager(c, selectedAmObj)) return false;
       }
@@ -82,6 +82,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     selectedManagerObj,
   ]);
 
+  // Core KPI metrics
   const totalCount = scopedComplaints.length;
   const doneCount = scopedComplaints.filter((c) => isComplaintDone(c)).length;
   const pendingCount = scopedComplaints.filter((c) => !isComplaintDone(c)).length;
@@ -100,15 +101,16 @@ export const HomePage: React.FC<HomePageProps> = ({
   const uncheckedPct = pct(uncheckedCount);
   const mgrDonePct = pct(mgrDoneCount);
   const delayedPct = pct(delayedCount);
+  const onTimePct = totalCount > 0 ? Math.max(0, 100 - delayedPct) : 100;
 
   const totalCardLabel =
     currentUser.role === 'account_manager'
       ? 'Created'
       : currentUser.role === 'manager'
       ? 'Received'
-      : 'Total Complaints';
+      : 'Total';
 
-  // Team breakdown metrics (base role-scoped complaints so breakdown shows all team members clearly)
+  // Team breakdown metrics
   const baseRoleComplaints = useMemo(() => {
     return complaints.filter((c) => {
       if (currentUser.role === 'account_manager') {
@@ -161,15 +163,29 @@ export const HomePage: React.FC<HomePageProps> = ({
     });
   }, [targetPeopleList, baseRoleComplaints]);
 
+  // Chart 1: Vertical Bar Chart heights calculation (scaled to max count)
+  const maxBarVal = Math.max(uncheckedCount, mgrDoneCount, doneCount, delayedCount, 1);
+  const calcBarHeight = (val: number) => {
+    if (val === 0) return 6; // minimum visual stub
+    return Math.max(14, Math.round((val / maxBarVal) * 100));
+  };
+
+  // Chart 2: SVG Circular Donut Gauge calculations
+  const donutRadius = 46;
+  const donutCircumference = 2 * Math.PI * donutRadius;
+  const donutDashOffset =
+    donutCircumference - (onTimePct / 100) * donutCircumference;
+
   return (
     <div className="homepage-container">
-      {/* Top Banner */}
+      {/* Top Banner Header with Filters */}
       <header className="hero-banner">
         <div className="hero-banner-left">
           <span className="hero-role-tag">{currentUser.roleLabel} Dashboard</span>
           <h1 className="hero-title">Welcome, {currentUser.name}</h1>
         </div>
 
+        {/* Filters preserved exactly as required */}
         <div className="hero-banner-actions">
           {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
             <div className="hero-filter-item">
@@ -215,345 +231,321 @@ export const HomePage: React.FC<HomePageProps> = ({
               </select>
             </div>
           )}
-
-          <button
-            type="button"
-            className="hero-primary-btn"
-            onClick={() => onNavigate('complaints')}
-          >
-            Complaints &rarr;
-          </button>
         </div>
       </header>
 
-      {/* KPI Summary Cards */}
-      <section className="kpi-grid" aria-label="Metrics">
-        <div className="kpi-card">
-          <div className="kpi-card-top">
+      {/* TOP SECTION: Prominent, Bigger Symmetrical KPI Metric Cards */}
+      <section className="kpi-grid" aria-label="KPI Overview">
+        {/* Card 1: Total */}
+        <div className="kpi-card kpi-card--total">
+          <div className="kpi-card-header">
             <span className="kpi-label">{totalCardLabel}</span>
             <span className="kpi-badge kpi-badge--neutral">All Scoped</span>
           </div>
-          <div className="kpi-value">{totalCount}</div>
-          <span className="kpi-subtext">
-            {uncheckedCount} Unchecked &bull; {mgrDoneCount} Mgr Checked
-          </span>
+          <div className="kpi-card-body">
+            <div className="kpi-value">{totalCount}</div>
+            <div className="kpi-mini-distribution">
+              <div
+                className="kpi-mini-dist-seg kpi-mini-dist-seg--done"
+                style={{ width: `${completionPct}%` }}
+                title={`Done: ${doneCount}`}
+              />
+              <div
+                className="kpi-mini-dist-seg kpi-mini-dist-seg--pending"
+                style={{ width: `${totalCount > 0 ? 100 - completionPct : 0}%` }}
+                title={`Pending: ${pendingCount}`}
+              />
+            </div>
+          </div>
+          <div className="kpi-card-footer">
+            <span>{uncheckedCount} New &bull; {mgrDoneCount} In Progress</span>
+          </div>
         </div>
 
+        {/* Card 2: Completed */}
         <div className="kpi-card kpi-card--done">
-          <div className="kpi-card-top">
-            <span className="kpi-label">Done</span>
+          <div className="kpi-card-header">
+            <span className="kpi-label">Completed</span>
             <span className="kpi-badge kpi-badge--done">{completionPct}%</span>
           </div>
-          <div className="kpi-value">{doneCount}</div>
-          <span className="kpi-subtext">Checked by both Manager &amp; AM</span>
+          <div className="kpi-card-body">
+            <div className="kpi-value">{doneCount}</div>
+            <div className="kpi-meter-track">
+              <div
+                className="kpi-meter-fill kpi-meter-fill--done"
+                style={{ width: `${completionPct}%` }}
+              />
+            </div>
+          </div>
+          <div className="kpi-card-footer">
+            <span>Verified by both</span>
+          </div>
         </div>
 
+        {/* Card 3: Pending */}
         <div className="kpi-card kpi-card--pending">
-          <div className="kpi-card-top">
+          <div className="kpi-card-header">
             <span className="kpi-label">Pending</span>
             <span className="kpi-badge kpi-badge--pending">
               {totalCount > 0 ? 100 - completionPct : 0}%
             </span>
           </div>
-          <div className="kpi-value">{pendingCount}</div>
-          <span className="kpi-subtext">
-            {uncheckedCount} New &bull; {mgrDoneCount} Awaiting AM
-          </span>
+          <div className="kpi-card-body">
+            <div className="kpi-value">{pendingCount}</div>
+            <div className="kpi-meter-track">
+              <div
+                className="kpi-meter-fill kpi-meter-fill--pending"
+                style={{ width: `${totalCount > 0 ? 100 - completionPct : 0}%` }}
+              />
+            </div>
+          </div>
+          <div className="kpi-card-footer">
+            <span>{uncheckedCount} New &bull; {mgrDoneCount} Awaiting AM</span>
+          </div>
         </div>
 
+        {/* Card 4: Overdue */}
         <div className="kpi-card kpi-card--delayed">
-          <div className="kpi-card-top">
-            <span className="kpi-label">Delayed</span>
+          <div className="kpi-card-header">
+            <span className="kpi-label">Overdue</span>
             <span className="kpi-badge kpi-badge--delayed">&gt; 24h</span>
           </div>
-          <div className="kpi-value">{delayedCount}</div>
-          <span className="kpi-subtext">
-            {delayedCount > 0
-              ? `${delayedPct}% of total overdue`
-              : 'All complaints within SLA'}
-          </span>
+          <div className="kpi-card-body">
+            <div className="kpi-value">{delayedCount}</div>
+            <div className="kpi-meter-track">
+              <div
+                className="kpi-meter-fill kpi-meter-fill--delayed"
+                style={{ width: `${delayedPct}%` }}
+              />
+            </div>
+          </div>
+          <div className="kpi-card-footer">
+            <span>
+              {delayedCount === 0 ? 'All within 24 hours' : `${delayedPct}% of total overdue`}
+            </span>
+          </div>
         </div>
       </section>
 
-      {/* Non-scrollable Dashboard Content Grid */}
-      <div className="dashboard-main-grid">
-        {/* Left Analytics Column */}
-        <div className="dashboard-left-col">
-          {/* Workflow Pipeline Breakdown Card */}
-          <section className="dash-panel-card">
-            <div className="dash-panel-header">
-              <h2 className="dash-panel-title">Resolution Pipeline</h2>
-              <span className="dash-panel-subtitle">
-                {completionPct}% Completed
-              </span>
+      {/* BOTTOM SECTION: Symmetrical Visual Analytics & Chart Panels */}
+      <section className="dashboard-charts-grid" aria-label="Visual Analytics Charts">
+        {/* Chart Card 1: Pipeline Breakdown Column Chart */}
+        <div className="chart-card chart-card--pipeline">
+          <div className="chart-card-header">
+            <div className="chart-card-title-wrap">
+              <h2 className="chart-card-title">Resolution Pipeline</h2>
+              <span className="chart-card-tag">{completionPct}% Resolved</span>
             </div>
+          </div>
 
-            <div className="pipeline-stacked-bar" aria-label="Status Distribution">
-              <div
-                className="pipeline-segment pipeline-segment--unchecked"
-                style={{ width: `${uncheckedPct}%` }}
-                title={`Unchecked: ${uncheckedCount} (${uncheckedPct}%)`}
-              />
-              <div
-                className="pipeline-segment pipeline-segment--mgr"
-                style={{ width: `${mgrDonePct}%` }}
-                title={`Manager Checked: ${mgrDoneCount} (${mgrDonePct}%)`}
-              />
-              <div
-                className="pipeline-segment pipeline-segment--done"
-                style={{ width: `${completionPct}%` }}
-                title={`Completed: ${doneCount} (${completionPct}%)`}
-              />
-            </div>
-
-            <div className="pipeline-stages-list">
-              <div className="pipeline-stage-item">
-                <div className="pipeline-stage-info">
-                  <span className="stage-dot stage-dot--unchecked" />
-                  <span className="stage-name">1. Both Unchecked (Top)</span>
+          {/* Interactive Column Bar Chart */}
+          <div className="chart-column-visualizer" aria-label="Pipeline Stages Chart">
+            <div className="column-chart-bars">
+              {/* Bar 1: New */}
+              <div className="column-bar-item">
+                <span className="column-val-label">{uncheckedCount}</span>
+                <div className="column-bar-track">
+                  <div
+                    className="column-bar-fill column-bar-fill--unchecked"
+                    style={{ height: `${calcBarHeight(uncheckedCount)}%` }}
+                  />
                 </div>
-                <div className="pipeline-stage-metrics">
-                  <strong>{uncheckedCount}</strong>
-                  <span>({uncheckedPct}%)</span>
-                </div>
+                <span className="column-axis-label">New</span>
+                <span className="column-pct-pill">{uncheckedPct}%</span>
               </div>
 
-              <div className="pipeline-stage-item">
-                <div className="pipeline-stage-info">
-                  <span className="stage-dot stage-dot--mgr" />
-                  <span className="stage-name">2. Checked by Manager</span>
+              {/* Bar 2: Mgr Checked */}
+              <div className="column-bar-item">
+                <span className="column-val-label">{mgrDoneCount}</span>
+                <div className="column-bar-track">
+                  <div
+                    className="column-bar-fill column-bar-fill--mgr"
+                    style={{ height: `${calcBarHeight(mgrDoneCount)}%` }}
+                  />
                 </div>
-                <div className="pipeline-stage-metrics">
-                  <strong>{mgrDoneCount}</strong>
-                  <span>({mgrDonePct}%)</span>
-                </div>
+                <span className="column-axis-label">Mgr Done</span>
+                <span className="column-pct-pill">{mgrDonePct}%</span>
               </div>
 
-              <div className="pipeline-stage-item">
-                <div className="pipeline-stage-info">
-                  <span className="stage-dot stage-dot--done" />
-                  <span className="stage-name">3. Checked by Both (Done)</span>
+              {/* Bar 3: Completed */}
+              <div className="column-bar-item">
+                <span className="column-val-label">{doneCount}</span>
+                <div className="column-bar-track">
+                  <div
+                    className="column-bar-fill column-bar-fill--done"
+                    style={{ height: `${calcBarHeight(doneCount)}%` }}
+                  />
                 </div>
-                <div className="pipeline-stage-metrics">
-                  <strong>{doneCount}</strong>
-                  <span>({completionPct}%)</span>
-                </div>
+                <span className="column-axis-label">Both Done</span>
+                <span className="column-pct-pill">{completionPct}%</span>
               </div>
 
-              <div className="pipeline-stage-item pipeline-stage-item--delayed">
-                <div className="pipeline-stage-info">
-                  <span className="stage-dot stage-dot--delayed" />
-                  <span className="stage-name">Delayed (&gt; 24 Hours)</span>
+              {/* Bar 4: Overdue */}
+              <div className="column-bar-item">
+                <span className="column-val-label">{delayedCount}</span>
+                <div className="column-bar-track">
+                  <div
+                    className="column-bar-fill column-bar-fill--delayed"
+                    style={{ height: `${calcBarHeight(delayedCount)}%` }}
+                  />
                 </div>
-                <div className="pipeline-stage-metrics">
-                  <strong>{delayedCount}</strong>
-                  <span>({delayedPct}%)</span>
-                </div>
+                <span className="column-axis-label">Overdue</span>
+                <span className="column-pct-pill">{delayedPct}%</span>
               </div>
             </div>
-          </section>
-
-          {/* Team Workload Breakdown Card */}
-          <section className="dash-panel-card dash-panel-card--grow">
-            <div className="dash-panel-header">
-              <h2 className="dash-panel-title">
-                {currentUser.role === 'account_manager'
-                  ? 'Managers Overview'
-                  : currentUser.role === 'manager'
-                  ? 'Account Managers Overview'
-                  : 'Team Breakdown'}
-              </h2>
-
-              {currentUser.role === 'admin' && (
-                <div className="dash-mini-tabs">
-                  <button
-                    type="button"
-                    className={`dash-mini-tab ${
-                      adminTeamTab === 'managers' ? 'dash-mini-tab--active' : ''
-                    }`}
-                    onClick={() => setAdminTeamTab('managers')}
-                  >
-                    Managers
-                  </button>
-                  <button
-                    type="button"
-                    className={`dash-mini-tab ${
-                      adminTeamTab === 'account_managers'
-                        ? 'dash-mini-tab--active'
-                        : ''
-                    }`}
-                    onClick={() => setAdminTeamTab('account_managers')}
-                  >
-                    Account Mgrs
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="team-breakdown-list">
-              {teamStats.map((stat) => (
-                <div key={stat.person.id} className="team-stat-row">
-                  <div className="team-stat-person">
-                    <span className="team-avatar">{stat.person.avatarInitials}</span>
-                    <div className="team-person-text">
-                      <span className="team-person-name">{stat.person.name}</span>
-                      <span className="team-person-sub">
-                        {stat.total} total &bull; {stat.rate}% done
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="team-stat-pills">
-                    <span
-                      className="mini-stat-pill mini-stat-pill--unchecked"
-                      title="Both Unchecked"
-                    >
-                      New: {stat.unchecked}
-                    </span>
-                    <span
-                      className="mini-stat-pill mini-stat-pill--mgr"
-                      title="Manager Checked"
-                    >
-                      Mgr: {stat.mgrDone}
-                    </span>
-                    <span
-                      className="mini-stat-pill mini-stat-pill--done"
-                      title="Completed"
-                    >
-                      Done: {stat.done}
-                    </span>
-                    {stat.delayed > 0 && (
-                      <span
-                        className="mini-stat-pill mini-stat-pill--delayed"
-                        title="Delayed > 24h"
-                      >
-                        Late: {stat.delayed}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          </div>
         </div>
 
-        {/* Right Priority Queue Table Column */}
-        <section className="dash-panel-card dashboard-right-col">
-          <div className="dash-panel-header">
-            <div>
-              <h2 className="dash-panel-title">Priority Queue &amp; Live Status</h2>
-              <span className="dash-panel-subtitle">
-                Auto-sorted: Unchecked &rarr; Manager Checked &rarr; Completed
+        {/* Chart Card 2: 24h Response Speed with Visual SVG Gauge */}
+        <div className="chart-card chart-card--speed">
+          <div className="chart-card-header">
+            <div className="chart-card-title-wrap">
+              <h2 className="chart-card-title">24h Response Speed</h2>
+              <span
+                className={`speed-status-badge ${
+                  delayedCount === 0
+                    ? 'speed-status-badge--healthy'
+                    : 'speed-status-badge--warning'
+                }`}
+              >
+                {delayedCount === 0 ? 'On Track' : `${delayedCount} Overdue`}
               </span>
             </div>
-            <button
-              type="button"
-              className="view-all-link-btn"
-              onClick={() => onNavigate('complaints')}
-            >
-              Open Table &rarr;
-            </button>
           </div>
 
-          <div className="dashboard-table-scroll">
-            <table className="dashboard-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>ID</th>
-                  {currentUser.role !== 'account_manager' && <th>Account Mgr</th>}
-                  {currentUser.role !== 'manager' && <th>Manager</th>}
-                  <th>Complaint</th>
-                  <th className="th-center">Mgr</th>
-                  <th className="th-center">AM</th>
-                  <th className="th-center">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scopedComplaints.map((item) => {
-                  const done = isComplaintDone(item);
-                  const delayed = isComplaintDelayed(item);
-                  const mgrOnly = item.managerDone && !item.accountManagerDone;
+          {/* Central Donut Gauge Chart */}
+          <div className="speed-chart-visual">
+            <div className="donut-chart-box">
+              <svg className="donut-svg" viewBox="0 0 110 110">
+                <circle
+                  className="donut-bg-circle"
+                  cx="55"
+                  cy="55"
+                  r={donutRadius}
+                />
+                <circle
+                  className={`donut-fill-circle ${
+                    onTimePct >= 90
+                      ? 'donut-fill-circle--healthy'
+                      : onTimePct >= 70
+                      ? 'donut-fill-circle--moderate'
+                      : 'donut-fill-circle--alert'
+                  }`}
+                  cx="55"
+                  cy="55"
+                  r={donutRadius}
+                  strokeDasharray={donutCircumference}
+                  strokeDashoffset={donutDashOffset}
+                />
+              </svg>
+              <div className="donut-center-content">
+                <span className="donut-center-pct">{onTimePct}%</span>
+                <span className="donut-center-lbl">On-Time</span>
+              </div>
+            </div>
 
-                  return (
-                    <tr
-                      key={item.complaintId}
-                      className={
-                        done
-                          ? 'dash-row-done'
-                          : mgrOnly
-                          ? 'dash-row-mgr'
-                          : 'dash-row-unchecked'
-                      }
-                    >
-                      <td className="td-date">{item.createdAt}</td>
-                      <td className="td-ticket">
-                        <span className="dash-id-pill">{item.complaintId}</span>
-                      </td>
-                      {currentUser.role !== 'account_manager' && (
-                        <td className="td-person-cell">{item.accountManagerName}</td>
-                      )}
-                      {currentUser.role !== 'manager' && (
-                        <td className="td-person-cell">{item.managerName}</td>
-                      )}
-                      <td className="td-subject">{item.complaintText}</td>
-                      <td className="td-center">
-                        <span
-                          className={`mini-check-indicator ${
-                            item.managerDone ? 'mini-check-indicator--on' : ''
-                          }`}
-                        >
-                          {item.managerDone ? '✓' : '—'}
-                        </span>
-                      </td>
-                      <td className="td-center">
-                        <span
-                          className={`mini-check-indicator ${
-                            item.accountManagerDone ? 'mini-check-indicator--on' : ''
-                          }`}
-                        >
-                          {item.accountManagerDone ? '✓' : '—'}
-                        </span>
-                      </td>
-                      <td className="td-center">
-                        <span
-                          className={`status-badge ${
-                            done
-                              ? 'status-badge--resolved'
-                              : delayed
-                              ? 'status-badge--escalated'
-                              : mgrOnly
-                              ? 'status-badge--mgr-done'
-                              : 'status-badge--in-progress'
-                          }`}
-                        >
-                          {done
-                            ? 'Completed'
-                            : delayed
-                            ? 'Delayed'
-                            : mgrOnly
-                            ? 'Mgr Checked'
-                            : 'Pending'}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {scopedComplaints.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={currentUser.role === 'admin' ? 8 : 7}
-                      className="empty-table-cell"
-                    >
-                      No complaints found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            {/* Quick Action Matrix Tiles */}
+            <div className="speed-action-tiles">
+              <div className="speed-action-tile">
+                <div className="speed-action-header">
+                  <span className="tile-dot tile-dot--manager" />
+                  <span className="tile-name">Needs Mgr</span>
+                </div>
+                <span className="tile-val tile-val--manager">{uncheckedCount}</span>
+              </div>
+
+              <div className="speed-action-tile">
+                <div className="speed-action-header">
+                  <span className="tile-dot tile-dot--am" />
+                  <span className="tile-name">Needs AM</span>
+                </div>
+                <span className="tile-val tile-val--am">{mgrDoneCount}</span>
+              </div>
+            </div>
           </div>
-        </section>
-      </div>
+        </div>
+
+        {/* Chart Card 3: Team Workload Comparative Bar Chart */}
+        <div className="chart-card chart-card--team">
+          <div className="chart-card-header">
+            <div className="chart-card-title-wrap">
+              <h2 className="chart-card-title">
+                {currentUser.role === 'account_manager'
+                  ? 'Managers'
+                  : currentUser.role === 'manager'
+                  ? 'Account Managers'
+                  : 'Team Performance'}
+              </h2>
+            </div>
+
+            {currentUser.role === 'admin' && (
+              <div className="chart-mini-tabs">
+                <button
+                  type="button"
+                  className={`chart-mini-tab ${
+                    adminTeamTab === 'managers' ? 'chart-mini-tab--active' : ''
+                  }`}
+                  onClick={() => setAdminTeamTab('managers')}
+                >
+                  Managers
+                </button>
+                <button
+                  type="button"
+                  className={`chart-mini-tab ${
+                    adminTeamTab === 'account_managers'
+                      ? 'chart-mini-tab--active'
+                      : ''
+                  }`}
+                  onClick={() => setAdminTeamTab('account_managers')}
+                >
+                  Account Mgrs
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Comparative Workload List */}
+          <div className="team-bars-container">
+            {teamStats.map((stat) => (
+              <div key={stat.person.id} className="team-bar-row">
+                <div className="team-bar-top">
+                  <div className="team-bar-user">
+                    <span className="team-bar-avatar">
+                      {stat.person.avatarInitials}
+                    </span>
+                    <span className="team-bar-name">{stat.person.name}</span>
+                  </div>
+                  <div className="team-bar-stat-nums">
+                    <span className="team-bar-rate">{stat.rate}%</span>
+                    <span className="team-bar-total">({stat.done}/{stat.total})</span>
+                  </div>
+                </div>
+
+                {/* Comparative Horizontal Progress Bar */}
+                <div className="team-bar-track">
+                  <div
+                    className="team-bar-fill"
+                    style={{ width: `${stat.rate}%` }}
+                  />
+                </div>
+
+                {/* Metric count pills */}
+                <div className="team-bar-pills">
+                  <span className="team-pill team-pill--new">New: {stat.unchecked}</span>
+                  <span className="team-pill team-pill--mgr">Mgr: {stat.mgrDone}</span>
+                  <span className="team-pill team-pill--done">Done: {stat.done}</span>
+                  {stat.delayed > 0 && (
+                    <span className="team-pill team-pill--late">Late: {stat.delayed}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {teamStats.length === 0 && (
+              <div className="team-empty-state">No team members found.</div>
+            )}
+          </div>
+        </div>
+      </section>
     </div>
   );
 };
