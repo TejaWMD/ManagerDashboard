@@ -1,6 +1,6 @@
 -- ============================================================================
--- WM Manager Dashboard - Supabase Relational Schema
--- Connected by: complaint_id, account_manager_id, manager_id, and created_at
+-- WM Manager Dashboard - Supabase Relational Schema (Updated with SLA / Delay Tracking)
+-- Connected by: complaint_id, account_manager_id, manager_id, created_at, and completed_at
 -- Run this script in your Supabase Dashboard -> SQL Editor -> New Query
 -- ============================================================================
 
@@ -39,7 +39,7 @@ ON CONFLICT (id) DO UPDATE SET
   avatar_initials = EXCLUDED.avatar_initials;
 
 -- 2. Complaints Table
--- Keyed by complaint_id and linked to account_manager_id, manager_id, and immutable created_at
+-- Keyed by complaint_id and linked to account_manager_id, manager_id, immutable created_at, and completion SLA tracking
 CREATE TABLE IF NOT EXISTS public.complaints (
   complaint_id TEXT PRIMARY KEY,
   account_manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE,
@@ -55,30 +55,92 @@ CREATE TABLE IF NOT EXISTS public.complaints (
   account_manager_done BOOLEAN NOT NULL DEFAULT FALSE,
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Completed')),
   created_at TEXT NOT NULL,
-  created_at_ms BIGINT NOT NULL
+  created_at_ms BIGINT NOT NULL,
+  completed_at TEXT DEFAULT NULL,
+  completed_at_ms BIGINT DEFAULT NULL,
+  is_delayed BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+-- Safely add new columns if upgrading an existing complaints table
+ALTER TABLE public.complaints
+  ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS completed_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS is_delayed BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Backfill existing completed rows that do not have completed_at_ms yet
+UPDATE public.complaints
+SET
+  completed_at = COALESCE(completed_at, created_at),
+  completed_at_ms = COALESCE(completed_at_ms, created_at_ms)
+WHERE manager_done = TRUE
+  AND account_manager_done = TRUE
+  AND completed_at_ms IS NULL;
+
+-- Backfill is_delayed for existing rows (> 3 minutes = 180,000 ms for testing)
+UPDATE public.complaints
+SET is_delayed = CASE
+  WHEN manager_done = TRUE AND account_manager_done = TRUE THEN
+    ((COALESCE(completed_at_ms, created_at_ms) - created_at_ms) > 180000) OR is_delayed
+  ELSE
+    (((EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT - created_at_ms) > 180000)
+END;
 
 -- Indexes for fast filtering & metric calculations
 CREATE INDEX IF NOT EXISTS idx_complaints_manager_id ON public.complaints(manager_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_account_manager_id ON public.complaints(account_manager_id);
 CREATE INDEX IF NOT EXISTS idx_complaints_created_at_ms ON public.complaints(created_at_ms DESC);
 CREATE INDEX IF NOT EXISTS idx_complaints_status ON public.complaints(status);
+CREATE INDEX IF NOT EXISTS idx_complaints_is_delayed ON public.complaints(is_delayed);
 
 -- Trigger to enforce:
 -- 1) created_at and created_at_ms NEVER change on UPDATE
--- 2) status is 'Completed' ONLY when BOTH manager_done AND account_manager_done are TRUE
+-- 2) account_manager_done is automatically reset to FALSE if manager_done is FALSE
+-- 3) status is 'Completed' ONLY when BOTH manager_done AND account_manager_done are TRUE
+-- 4) completed_at / completed_at_ms and is_delayed (>3m SLA breach for testing) are persisted even after completion
 CREATE OR REPLACE FUNCTION public.enforce_complaint_rules()
 RETURNS TRIGGER AS $$
+DECLARE
+  now_ms BIGINT := (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT;
+  delay_threshold_ms BIGINT := 180000; -- 3 minutes (180,000 ms) for testing; change back to 86400000 for 24h
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     NEW.created_at := OLD.created_at;
     NEW.created_at_ms := OLD.created_at_ms;
   END IF;
 
+  IF NEW.manager_done = FALSE THEN
+    NEW.account_manager_done := FALSE;
+  END IF;
+
   IF NEW.manager_done = TRUE AND NEW.account_manager_done = TRUE THEN
     NEW.status := 'Completed';
+
+    IF TG_OP = 'UPDATE' AND OLD.completed_at_ms IS NOT NULL THEN
+      NEW.completed_at := OLD.completed_at;
+      NEW.completed_at_ms := OLD.completed_at_ms;
+    ELSIF NEW.completed_at_ms IS NULL THEN
+      NEW.completed_at := TO_CHAR(NOW() AT TIME ZONE 'Asia/Kuala_Lumpur', 'YYYY-MM-DD HH24:MI:SS');
+      NEW.completed_at_ms := now_ms;
+    END IF;
+
+    -- Keep is_delayed = TRUE if it took >3m to complete or was already delayed before completion
+    IF ((NEW.completed_at_ms - NEW.created_at_ms) > delay_threshold_ms)
+       OR (TG_OP = 'UPDATE' AND OLD.is_delayed = TRUE)
+       OR (NEW.is_delayed = TRUE) THEN
+      NEW.is_delayed := TRUE;
+    ELSE
+      NEW.is_delayed := FALSE;
+    END IF;
   ELSE
     NEW.status := 'Pending';
+    NEW.completed_at := NULL;
+    NEW.completed_at_ms := NULL;
+
+    IF ((now_ms - NEW.created_at_ms) > delay_threshold_ms) THEN
+      NEW.is_delayed := TRUE;
+    ELSE
+      NEW.is_delayed := FALSE;
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -108,7 +170,9 @@ CREATE POLICY "Allow full access to complaints"
   USING (true)
   WITH CHECK (true);
 
--- 4. Enable Realtime for complaints table
+-- 4. Enable Realtime for complaints table (with full replica identity for updates/deletes)
+ALTER TABLE public.complaints REPLICA IDENTITY FULL;
+
 DO $$
 BEGIN
   IF NOT EXISTS (

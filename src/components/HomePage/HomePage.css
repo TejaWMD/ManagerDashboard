@@ -286,6 +286,11 @@
   height: 100%;
 }
 
+.kpi-mini-dist-seg--delayed {
+  background: #f43f5e;
+  height: 100%;
+}
+
 .kpi-meter-fill {
   height: 100%;
   border-radius: 999px;
@@ -789,6 +794,13 @@
 .recent-arrow {
   color: #94a3b8;
   font-size: 0.68rem;
+}
+
+.recent-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex-shrink: 0;
 }
 
 .recent-status-pill {

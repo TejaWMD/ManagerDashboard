@@ -3,6 +3,9 @@ import {
   belongsToAccountManager,
   belongsToManager,
   Complaint,
+  DELAY_THRESHOLD_MS,
+  getComplaintTimestampMs,
+  isComplaintDelayed,
   isComplaintDone,
   PageView,
   UserAccount,
@@ -11,6 +14,7 @@ import { AUTHORIZED_USERS } from './data/users';
 import { INITIAL_COMPLAINTS } from './data/initialComplaints';
 import {
   ComplaintRow,
+  ensureUsersSeededInDb,
   fetchComplaintsFromDb,
   insertComplaintInDb,
   mapRowToComplaint,
@@ -27,6 +31,14 @@ import './App.css';
 const OLD_DUMMY_STORAGE_KEY = 'wm_portal_complaints_v1';
 const STORAGE_KEY_COMPLAINTS = 'wm_portal_complaints_v3';
 const STORAGE_KEY_SESSION = 'wm_portal_active_user_v1';
+
+function persistComplaintsCache(list: Complaint[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_COMPLAINTS, JSON.stringify(list));
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
@@ -65,6 +77,7 @@ export const App: React.FC = () => {
       // Ignore storage errors
     }
 
+    await ensureUsersSeededInDb();
     const result = await fetchComplaintsFromDb();
     if (result.error) {
       setDbTableMissing(result.tableMissing);
@@ -84,11 +97,7 @@ export const App: React.FC = () => {
       setDbTableMissing(false);
       setDbError(null);
       setComplaints(result.data);
-      try {
-        localStorage.setItem(STORAGE_KEY_COMPLAINTS, JSON.stringify(result.data));
-      } catch {
-        // Ignore
-      }
+      persistComplaintsCache(result.data);
     }
     setIsLoadingDb(false);
   }, []);
@@ -106,26 +115,31 @@ export const App: React.FC = () => {
             const incoming = mapRowToComplaint(payload.new as ComplaintRow);
             setComplaints((prev) => {
               const exists = prev.some((c) => c.complaintId === incoming.complaintId);
-              if (exists) {
-                return prev.map((c) =>
-                  c.complaintId === incoming.complaintId ? incoming : c
-                );
-              }
-              return [incoming, ...prev];
+              const next = exists
+                ? prev.map((c) =>
+                    c.complaintId === incoming.complaintId ? incoming : c
+                  )
+                : [incoming, ...prev];
+              persistComplaintsCache(next);
+              return next;
             });
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             const updated = mapRowToComplaint(payload.new as ComplaintRow);
-            setComplaints((prev) =>
-              prev.map((c) =>
+            setComplaints((prev) => {
+              const next = prev.map((c) =>
                 c.complaintId === updated.complaintId ? updated : c
-              )
-            );
+              );
+              persistComplaintsCache(next);
+              return next;
+            });
           } else if (payload.eventType === 'DELETE' && payload.old) {
             const deletedId = (payload.old as { complaint_id?: string }).complaint_id;
             if (deletedId) {
-              setComplaints((prev) =>
-                prev.filter((c) => c.complaintId !== deletedId)
-              );
+              setComplaints((prev) => {
+                const next = prev.filter((c) => c.complaintId !== deletedId);
+                persistComplaintsCache(next);
+                return next;
+              });
             }
           }
         }
@@ -190,13 +204,16 @@ export const App: React.FC = () => {
   }) => {
     if (!currentUser) return;
     const now = new Date();
-    const nextComplaintId = generateNextComplaintId(complaints);
+    const tempComplaintId = generateNextComplaintId(complaints);
 
     const created: Complaint = {
-      id: nextComplaintId,
-      complaintId: nextComplaintId,
+      id: tempComplaintId,
+      complaintId: tempComplaintId,
       createdAt: formatTimestamp(now),
       createdAtMs: now.getTime(),
+      completedAt: null,
+      completedAtMs: null,
+      isDelayed: false,
       accountManagerId: currentUser.id,
       accountManagerEmail: currentUser.email,
       accountManagerName: currentUser.name,
@@ -213,22 +230,29 @@ export const App: React.FC = () => {
 
     setComplaints((prev) => {
       const next = [created, ...prev];
-      try {
-        localStorage.setItem(STORAGE_KEY_COMPLAINTS, JSON.stringify(next));
-      } catch {
-        // Ignore
-      }
+      persistComplaintsCache(next);
       return next;
     });
 
     const { data, error } = await insertComplaintInDb(created);
     if (error) {
       setDbError(error);
+      // Roll back optimistic insert on error
+      setComplaints((prev) => {
+        const rolledBack = prev.filter((c) => c.complaintId !== tempComplaintId);
+        persistComplaintsCache(rolledBack);
+        return rolledBack;
+      });
     } else if (data) {
       setDbError(null);
-      setComplaints((prev) =>
-        prev.map((c) => (c.complaintId === data.complaintId ? data : c))
-      );
+      setComplaints((prev) => {
+        const withoutTemp = prev.filter(
+          (c) => c.complaintId !== tempComplaintId && c.complaintId !== data.complaintId
+        );
+        const next = [data, ...withoutTemp];
+        persistComplaintsCache(next);
+        return next;
+      });
     }
   };
 
@@ -248,17 +272,42 @@ export const App: React.FC = () => {
     const existing = complaints.find((c) => c.complaintId === complaintId);
     if (!existing) return;
 
+    const now = new Date();
+    const nowMs = now.getTime();
+    const createdMs = getComplaintTimestampMs(existing);
+
     const nextManagerDone =
       updates.managerDone !== undefined
         ? updates.managerDone
         : existing.managerDone;
-    const nextAccountManagerDone =
-      updates.accountManagerDone !== undefined
-        ? updates.accountManagerDone
-        : existing.accountManagerDone;
 
-    const nextStatus =
-      nextManagerDone && nextAccountManagerDone ? 'Completed' : 'Pending';
+    // Account Manager cannot stay done if Manager Done is unchecked
+    const nextAccountManagerDone = !nextManagerDone
+      ? false
+      : updates.accountManagerDone !== undefined
+      ? updates.accountManagerDone
+      : existing.accountManagerDone;
+
+    const nextIsCompleted = Boolean(nextManagerDone && nextAccountManagerDone);
+    const nextStatus = nextIsCompleted ? 'Completed' : 'Pending';
+
+    const nextCompletedAt = nextIsCompleted
+      ? existing.completedAt || formatTimestamp(now)
+      : null;
+    const nextCompletedAtMs = nextIsCompleted
+      ? existing.completedAtMs || nowMs
+      : null;
+
+    // Once delayed (>24h), it stays delayed even when both Manager Done & AM Done are checked
+    const wasAlreadyDelayed = isComplaintDelayed(existing, nowMs);
+    const nextIsDelayed = nextIsCompleted
+      ? Boolean(
+          wasAlreadyDelayed ||
+            (createdMs > 0 &&
+              nextCompletedAtMs !== null &&
+              nextCompletedAtMs - createdMs > DELAY_THRESHOLD_MS)
+        )
+      : Boolean(createdMs > 0 && nowMs - createdMs > DELAY_THRESHOLD_MS);
 
     const optimisticItem: Complaint = {
       ...existing,
@@ -268,6 +317,9 @@ export const App: React.FC = () => {
       status: nextStatus,
       createdAt: existing.createdAt,
       createdAtMs: existing.createdAtMs,
+      completedAt: nextCompletedAt,
+      completedAtMs: nextCompletedAtMs,
+      isDelayed: nextIsDelayed,
     };
 
     setSavingComplaintId(complaintId);
@@ -276,28 +328,41 @@ export const App: React.FC = () => {
       const next = prev.map((item) =>
         item.complaintId === complaintId ? optimisticItem : item
       );
-      try {
-        localStorage.setItem(STORAGE_KEY_COMPLAINTS, JSON.stringify(next));
-      } catch {
-        // Ignore
-      }
+      persistComplaintsCache(next);
       return next;
     });
 
     const { data, error } = await updateComplaintInDb(complaintId, {
       ...updates,
+      managerDone: nextManagerDone,
+      accountManagerDone: nextAccountManagerDone,
       status: nextStatus,
+      completedAt: nextCompletedAt,
+      completedAtMs: nextCompletedAtMs,
+      isDelayed: nextIsDelayed,
     });
 
     setSavingComplaintId(null);
 
     if (error) {
       setDbError(error);
+      // Roll back optimistic update on error
+      setComplaints((prev) => {
+        const rolledBack = prev.map((item) =>
+          item.complaintId === complaintId ? existing : item
+        );
+        persistComplaintsCache(rolledBack);
+        return rolledBack;
+      });
     } else if (data) {
       setDbError(null);
-      setComplaints((prev) =>
-        prev.map((item) => (item.complaintId === complaintId ? data : item))
-      );
+      setComplaints((prev) => {
+        const next = prev.map((item) =>
+          item.complaintId === complaintId ? data : item
+        );
+        persistComplaintsCache(next);
+        return next;
+      });
     }
   };
 

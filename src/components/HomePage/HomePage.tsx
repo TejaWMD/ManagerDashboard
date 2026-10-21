@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   belongsToAccountManager,
   belongsToManager,
   Complaint,
   isComplaintDelayed,
   isComplaintDone,
+  isComplaintPending,
   PageView,
   sortComplaintsByStatusAndTimestamp,
   UserAccount,
@@ -31,6 +32,15 @@ export const HomePage: React.FC<HomePageProps> = ({
     () => AUTHORIZED_USERS.filter((u) => u.role === 'manager'),
     []
   );
+
+  // Live clock so delay / SLA calculations stay accurate in real time
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const [selectedAccountManagerId, setSelectedAccountManagerId] =
     useState<string>('ALL');
@@ -83,24 +93,47 @@ export const HomePage: React.FC<HomePageProps> = ({
     selectedManagerObj,
   ]);
 
-  // Core KPI metrics
+  // Core KPI metrics:
+  // - Completed: both Manager Done & AM Done are checked
+  // - Pending: open complaints under 24h (!done && !delayed)
+  // - Delayed / Overdue: complaints that exceeded 24h (stays Delayed even after Completed so KPIs are accurate)
   const totalCount = scopedComplaints.length;
   const doneCount = scopedComplaints.filter((c) => isComplaintDone(c)).length;
-  const pendingCount = scopedComplaints.filter((c) => !isComplaintDone(c)).length;
+  const pendingCount = scopedComplaints.filter((c) =>
+    isComplaintPending(c, nowMs)
+  ).length;
+  const delayedCount = scopedComplaints.filter((c) =>
+    isComplaintDelayed(c, nowMs)
+  ).length;
+  const openDelayedCount = scopedComplaints.filter(
+    (c) => !isComplaintDone(c) && isComplaintDelayed(c, nowMs)
+  ).length;
+
+  // Stage breakdown counts
   const uncheckedCount = scopedComplaints.filter(
-    (c) => !c.managerDone && !c.accountManagerDone
+    (c) => !c.managerDone && !c.accountManagerDone && !isComplaintDelayed(c, nowMs)
   ).length;
   const mgrDoneCount = scopedComplaints.filter(
+    (c) => c.managerDone && !c.accountManagerDone && !isComplaintDelayed(c, nowMs)
+  ).length;
+
+  // Action queues (all open items waiting on Manager or AM)
+  const mgrQueueCount = scopedComplaints.filter(
+    (c) => !c.managerDone && !c.accountManagerDone
+  ).length;
+  const amQueueCount = scopedComplaints.filter(
     (c) => c.managerDone && !c.accountManagerDone
   ).length;
-  const delayedCount = scopedComplaints.filter((c) => isComplaintDelayed(c)).length;
 
   const pct = (value: number) =>
     totalCount > 0 ? Math.round((value / totalCount) * 100) : 0;
 
   const completionPct = pct(doneCount);
+  const pendingPct = pct(pendingCount);
   const delayedPct = pct(delayedCount);
-  const onTimePct = totalCount > 0 ? Math.max(0, 100 - delayedPct) : 100;
+  const openDelayedPct = pct(openDelayedCount);
+  const onTimeCount = Math.max(0, totalCount - delayedCount);
+  const onTimePct = totalCount > 0 ? Math.round((onTimeCount / totalCount) * 100) : 100;
 
   const totalCardLabel =
     currentUser.role === 'account_manager'
@@ -147,7 +180,9 @@ export const HomePage: React.FC<HomePageProps> = ({
       const unchecked = personComplaints.filter(
         (c) => !c.managerDone && !c.accountManagerDone
       ).length;
-      const delayed = personComplaints.filter((c) => isComplaintDelayed(c)).length;
+      const delayed = personComplaints.filter((c) =>
+        isComplaintDelayed(c, nowMs)
+      ).length;
       const rate = total > 0 ? Math.round((done / total) * 100) : 0;
 
       return {
@@ -160,7 +195,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         rate,
       };
     });
-  }, [targetPeopleList, baseRoleComplaints]);
+  }, [targetPeopleList, baseRoleComplaints, nowMs]);
 
   // Chart 1: Vertical Bar Chart heights calculation (scaled to max count)
   const maxBarVal = Math.max(uncheckedCount, mgrDoneCount, doneCount, delayedCount, 1);
@@ -270,7 +305,11 @@ export const HomePage: React.FC<HomePageProps> = ({
             />
             <div
               className="kpi-mini-dist-seg kpi-mini-dist-seg--pending"
-              style={{ width: `${totalCount > 0 ? 100 - completionPct : 0}%` }}
+              style={{ width: `${pendingPct}%` }}
+            />
+            <div
+              className="kpi-mini-dist-seg kpi-mini-dist-seg--delayed"
+              style={{ width: `${openDelayedPct}%` }}
             />
           </div>
         </div>
@@ -297,7 +336,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        {/* Card 3: Pending */}
+        {/* Card 3: Pending (< 24h Open) */}
         <div className="kpi-card kpi-card--pending">
           <div className="kpi-card-top">
             <div className="kpi-icon-box kpi-icon-box--pending">
@@ -306,9 +345,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <polyline points="12 7 12 12 15 15" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <span className="kpi-badge kpi-badge--pending">
-              {totalCount > 0 ? 100 - completionPct : 0}%
-            </span>
+            <span className="kpi-badge kpi-badge--pending">{pendingPct}%</span>
           </div>
           <div className="kpi-card-mid">
             <div className="kpi-value">{pendingCount}</div>
@@ -317,12 +354,12 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="kpi-meter-track">
             <div
               className="kpi-meter-fill kpi-meter-fill--pending"
-              style={{ width: `${totalCount > 0 ? 100 - completionPct : 0}%` }}
+              style={{ width: `${pendingPct}%` }}
             />
           </div>
         </div>
 
-        {/* Card 4: Overdue */}
+        {/* Card 4: Overdue / Delayed (> 24h) */}
         <div className="kpi-card kpi-card--delayed">
           <div className="kpi-card-top">
             <div className="kpi-icon-box kpi-icon-box--delayed">
@@ -330,7 +367,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <span className="kpi-badge kpi-badge--delayed">&gt; 24h</span>
+            <span className="kpi-badge kpi-badge--delayed">&gt; 24h ({delayedPct}%)</span>
           </div>
           <div className="kpi-card-mid">
             <div className="kpi-value">{delayedCount}</div>
@@ -482,12 +519,12 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="speed-action-tile">
                 <span className="tile-dot tile-dot--manager" />
                 <span className="tile-name">Mgr Queue</span>
-                <span className="tile-val tile-val--manager">{uncheckedCount}</span>
+                <span className="tile-val tile-val--manager">{mgrQueueCount}</span>
               </div>
               <div className="speed-action-tile">
                 <span className="tile-dot tile-dot--am" />
                 <span className="tile-name">AM Queue</span>
-                <span className="tile-val tile-val--am">{mgrDoneCount}</span>
+                <span className="tile-val tile-val--am">{amQueueCount}</span>
               </div>
             </div>
           </div>
@@ -579,21 +616,8 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="recent-list-container">
             {recentComplaints.map((item) => {
               const isDone = isComplaintDone(item);
-              const isLate = isComplaintDelayed(item);
-              const statusLabel = isDone
-                ? 'Done'
-                : isLate
-                ? 'Overdue'
-                : item.managerDone
-                ? 'Mgr Done'
-                : 'New';
-              const statusMod = isDone
-                ? 'done'
-                : isLate
-                ? 'late'
-                : item.managerDone
-                ? 'mgr'
-                : 'new';
+              const isLate = isComplaintDelayed(item, nowMs);
+              const isMgrChecked = item.managerDone && !item.accountManagerDone;
 
               return (
                 <div key={item.complaintId} className="recent-row-item">
@@ -603,9 +627,39 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <span className="recent-arrow">&rarr;</span>
                     <span className="recent-person-chip">{item.managerName}</span>
                   </div>
-                  <span className={`recent-status-pill recent-status-pill--${statusMod}`}>
-                    {statusLabel}
-                  </span>
+                  <div className="recent-status-group">
+                    {isDone ? (
+                      <>
+                        <span className="recent-status-pill recent-status-pill--done">
+                          Done
+                        </span>
+                        {isLate && (
+                          <span className="recent-status-pill recent-status-pill--late">
+                            Overdue
+                          </span>
+                        )}
+                      </>
+                    ) : isMgrChecked ? (
+                      <>
+                        <span className="recent-status-pill recent-status-pill--mgr">
+                          Mgr Done
+                        </span>
+                        {isLate && (
+                          <span className="recent-status-pill recent-status-pill--late">
+                            Overdue
+                          </span>
+                        )}
+                      </>
+                    ) : isLate ? (
+                      <span className="recent-status-pill recent-status-pill--late">
+                        Overdue
+                      </span>
+                    ) : (
+                      <span className="recent-status-pill recent-status-pill--new">
+                        New
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}

@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   belongsToAccountManager,
   belongsToManager,
   Complaint,
   isComplaintDelayed,
   isComplaintDone,
+  isComplaintPending,
   sortComplaintsByStatusAndTimestamp,
   UserAccount,
 } from '../../types';
@@ -59,6 +60,15 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     () => AUTHORIZED_USERS.filter((u) => u.role === 'manager'),
     []
   );
+
+  // Live clock so Delayed status updates automatically
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Header filter states
   const [filterAccountManagerId, setFilterAccountManagerId] = useState<string>('ALL');
@@ -128,9 +138,11 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
       // Status filter (available to all roles)
       if (filterStatus !== 'ALL') {
         const done = isComplaintDone(c);
-        const delayed = isComplaintDelayed(c);
+        const delayed = isComplaintDelayed(c, nowMs);
+        const pendingUnder24h = isComplaintPending(c, nowMs);
+
         if (filterStatus === 'Completed' && !done) return false;
-        if (filterStatus === 'Pending' && done) return false;
+        if (filterStatus === 'Pending' && !pendingUnder24h) return false;
         if (filterStatus === 'Delayed' && !delayed) return false;
         if (filterStatus === 'Unchecked' && (c.managerDone || c.accountManagerDone)) {
           return false;
@@ -153,17 +165,20 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     accountManagers,
     managers,
     timestampOrder,
+    nowMs,
   ]);
 
   const hasActiveFilters =
     filterAccountManagerId !== 'ALL' ||
     filterManagerId !== 'ALL' ||
-    filterStatus !== 'ALL';
+    filterStatus !== 'ALL' ||
+    timestampOrder !== 'desc';
 
   const handleResetFilters = () => {
     setFilterAccountManagerId('ALL');
     setFilterManagerId('ALL');
     setFilterStatus('ALL');
+    setTimestampOrder('desc');
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -317,7 +332,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               onChange={(e) => setFilterStatus(e.target.value as StatusFilterValue)}
             >
               <option value="ALL">All Status</option>
-              <option value="Pending">Pending (All Open)</option>
+              <option value="Pending">Pending (&lt;24h)</option>
               <option value="Unchecked">Unchecked</option>
               <option value="ManagerDone">Manager Checked</option>
               <option value="Delayed">Delayed (&gt;24h)</option>
@@ -330,7 +345,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               type="button"
               className="header-reset-btn"
               onClick={handleResetFilters}
-              title="Clear Filters"
+              title="Reset Filters & Sorting"
             >
               Reset
             </button>
@@ -382,7 +397,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
             <tbody>
               {sortedAndFilteredComplaints.map((item) => {
                 const completed = isComplaintDone(item);
-                const delayed = isComplaintDelayed(item);
+                const delayed = isComplaintDelayed(item, nowMs);
                 const managerOnlyChecked = item.managerDone && !item.accountManagerDone;
                 const isRowSaving = savingComplaintId === item.complaintId;
 
@@ -625,25 +640,39 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                     </td>
 
                     <td className="td-status-cell">
-                      <span
-                        className={`table-status-pill ${
-                          completed
-                            ? 'table-status-pill--completed'
-                            : delayed
-                            ? 'table-status-pill--delayed'
-                            : managerOnlyChecked
-                            ? 'table-status-pill--mgr-done'
-                            : 'table-status-pill--pending'
-                        }`}
-                      >
-                        {completed
-                          ? 'Completed'
-                          : delayed
-                          ? 'Delayed'
-                          : managerOnlyChecked
-                          ? 'Mgr Checked'
-                          : 'Pending'}
-                      </span>
+                      <div className="td-status-pills-wrap">
+                        {completed ? (
+                          <>
+                            <span className="table-status-pill table-status-pill--completed">
+                              Completed
+                            </span>
+                            {delayed && (
+                              <span className="table-status-pill table-status-pill--delayed">
+                                Delayed
+                              </span>
+                            )}
+                          </>
+                        ) : managerOnlyChecked ? (
+                          <>
+                            <span className="table-status-pill table-status-pill--mgr-done">
+                              Mgr Checked
+                            </span>
+                            {delayed && (
+                              <span className="table-status-pill table-status-pill--delayed">
+                                Delayed
+                              </span>
+                            )}
+                          </>
+                        ) : delayed ? (
+                          <span className="table-status-pill table-status-pill--delayed">
+                            Delayed
+                          </span>
+                        ) : (
+                          <span className="table-status-pill table-status-pill--pending">
+                            Pending
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

@@ -19,6 +19,9 @@ export interface Complaint {
   complaintId: string; // e.g., CMP-001 (Primary Key in Supabase)
   createdAt: string; // Immutable creation timestamp string (YYYY-MM-DD HH:mm:ss)
   createdAtMs: number; // Immutable creation epoch milliseconds for calculations
+  completedAt?: string | null; // Completion timestamp string when both Manager & AM checked
+  completedAtMs?: number | null; // Completion epoch milliseconds for SLA / delay persistence
+  isDelayed?: boolean; // Persisted flag if complaint exceeded 24h before or at completion
   accountManagerId: string; // Foreign Key -> UserAccount.id (e.g., 'am-1')
   accountManagerEmail: string;
   accountManagerName: string;
@@ -33,7 +36,7 @@ export interface Complaint {
   status: ComplaintStatus;
 }
 
-const DELAY_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 24 hours
+export const DELAY_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes (temporary for testing; change back to 24 * 60 * 60 * 1000)
 
 export function isComplaintDone(complaint: Complaint): boolean {
   return Boolean(complaint.managerDone && complaint.accountManagerDone);
@@ -63,8 +66,13 @@ export function getComplaintTimestampMs(complaint: Complaint): number {
   ) {
     return complaint.createdAtMs;
   }
-  const parsed = Date.parse(complaint.createdAt.replace(' ', 'T'));
-  return Number.isNaN(parsed) ? 0 : parsed;
+  if (complaint.createdAt) {
+    const parsed = Date.parse(complaint.createdAt.replace(' ', 'T'));
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 0;
 }
 
 export function sortComplaintsByStatusAndTimestamp(
@@ -85,18 +93,46 @@ export function sortComplaintsByStatusAndTimestamp(
   });
 }
 
-export function isComplaintDelayed(complaint: Complaint): boolean {
+export function isComplaintDelayed(
+  complaint: Complaint,
+  nowMs: number = Date.now()
+): boolean {
+  if (complaint.isDelayed === true) {
+    return true;
+  }
+
+  const createdMs = getComplaintTimestampMs(complaint);
+  if (createdMs <= 0) {
+    return false;
+  }
+
+  // If completed (both Manager Done & AM Done are checked), check if it took >24h to complete
   if (isComplaintDone(complaint)) {
+    if (
+      typeof complaint.completedAtMs === 'number' &&
+      !Number.isNaN(complaint.completedAtMs) &&
+      complaint.completedAtMs > 0
+    ) {
+      return complaint.completedAtMs - createdMs > DELAY_THRESHOLD_MS;
+    }
+    if (complaint.completedAt) {
+      const parsedCompleted = Date.parse(complaint.completedAt.replace(' ', 'T'));
+      if (!Number.isNaN(parsedCompleted) && parsedCompleted > 0) {
+        return parsedCompleted - createdMs > DELAY_THRESHOLD_MS;
+      }
+    }
     return false;
   }
-  const createdMs =
-    typeof complaint.createdAtMs === 'number' && !Number.isNaN(complaint.createdAtMs)
-      ? complaint.createdAtMs
-      : Date.parse(complaint.createdAt.replace(' ', 'T'));
-  if (Number.isNaN(createdMs)) {
-    return false;
-  }
-  return Date.now() - createdMs > DELAY_THRESHOLD_MS;
+
+  // Open complaint: delayed if more than 24h has elapsed since creation
+  return nowMs - createdMs > DELAY_THRESHOLD_MS;
+}
+
+export function isComplaintPending(
+  complaint: Complaint,
+  nowMs: number = Date.now()
+): boolean {
+  return !isComplaintDone(complaint) && !isComplaintDelayed(complaint, nowMs);
 }
 
 export function belongsToAccountManager(
@@ -106,7 +142,10 @@ export function belongsToAccountManager(
   if (complaint.accountManagerId && user.id) {
     return complaint.accountManagerId === user.id;
   }
-  return complaint.accountManagerEmail.toLowerCase() === user.email.toLowerCase();
+  return (
+    Boolean(complaint.accountManagerEmail) &&
+    complaint.accountManagerEmail.toLowerCase() === user.email.toLowerCase()
+  );
 }
 
 export function belongsToManager(
@@ -116,5 +155,8 @@ export function belongsToManager(
   if (complaint.managerId && manager.id) {
     return complaint.managerId === manager.id;
   }
-  return complaint.managerEmail.toLowerCase() === manager.email.toLowerCase();
+  return (
+    Boolean(complaint.managerEmail) &&
+    complaint.managerEmail.toLowerCase() === manager.email.toLowerCase()
+  );
 }

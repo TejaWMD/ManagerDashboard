@@ -443,6 +443,14 @@
   white-space: nowrap;
 }
 
+.td-status-pills-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: nowrap;
+}
+
 .table-status-pill {
   display: inline-block;
   padding: 0.22rem 0.62rem;
