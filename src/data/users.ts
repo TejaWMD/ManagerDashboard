@@ -82,17 +82,17 @@ export const ROLE_META: Record<
   account_manager: {
     title: 'Account Manager',
     shortTitle: 'Account Manager',
-    badgeColor: '#d6742b',
+    badgeColor: '#0ea5e9',
   },
   manager: {
     title: 'Manager',
     shortTitle: 'Manager',
-    badgeColor: '#844918',
+    badgeColor: '#4f46e5',
   },
   admin: {
     title: 'Admin',
     shortTitle: 'Admin',
-    badgeColor: '#c18036',
+    badgeColor: '#10b981',
   },
 };
 

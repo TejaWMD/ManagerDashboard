@@ -21,6 +21,7 @@ interface HomePageProps {
 export const HomePage: React.FC<HomePageProps> = ({
   currentUser,
   complaints,
+  onNavigate,
 }) => {
   const accountManagers = useMemo(
     () => AUTHORIZED_USERS.filter((u) => u.role === 'account_manager'),
@@ -98,8 +99,6 @@ export const HomePage: React.FC<HomePageProps> = ({
     totalCount > 0 ? Math.round((value / totalCount) * 100) : 0;
 
   const completionPct = pct(doneCount);
-  const uncheckedPct = pct(uncheckedCount);
-  const mgrDonePct = pct(mgrDoneCount);
   const delayedPct = pct(delayedCount);
   const onTimePct = totalCount > 0 ? Math.max(0, 100 - delayedPct) : 100;
 
@@ -176,16 +175,28 @@ export const HomePage: React.FC<HomePageProps> = ({
   const donutDashOffset =
     donutCircumference - (onTimePct / 100) * donutCircumference;
 
+  // Completion Ring for Done percentage
+  const doneDashOffset =
+    donutCircumference - (completionPct / 100) * donutCircumference;
+
+  const recentComplaints = useMemo(
+    () => scopedComplaints.slice(0, 4),
+    [scopedComplaints]
+  );
+
   return (
     <div className="homepage-container">
       {/* Top Banner Header with Filters */}
       <header className="hero-banner">
         <div className="hero-banner-left">
-          <span className="hero-role-tag">{currentUser.roleLabel} Dashboard</span>
-          <h1 className="hero-title">Welcome, {currentUser.name}</h1>
+          <div className="hero-brand-dot" />
+          <div className="hero-text-stack">
+            <span className="hero-role-tag">{currentUser.roleLabel} Dashboard</span>
+            <h1 className="hero-title">Welcome, {currentUser.name}</h1>
+          </div>
         </div>
 
-        {/* Filters preserved exactly as required */}
+        {/* Filters preserved as required */}
         <div className="hero-banner-actions">
           {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
             <div className="hero-filter-item">
@@ -234,114 +245,117 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </header>
 
-      {/* TOP SECTION: Prominent, Bigger Symmetrical KPI Metric Cards */}
+      {/* TOP SECTION: Clean KPI Metric Cards */}
       <section className="kpi-grid" aria-label="KPI Overview">
         {/* Card 1: Total */}
         <div className="kpi-card kpi-card--total">
-          <div className="kpi-card-header">
-            <span className="kpi-label">{totalCardLabel}</span>
+          <div className="kpi-card-top">
+            <div className="kpi-icon-box kpi-icon-box--total">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="7" y1="9" x2="17" y2="9" />
+                <line x1="7" y1="13" x2="13" y2="13" />
+              </svg>
+            </div>
             <span className="kpi-badge kpi-badge--neutral">All Scoped</span>
           </div>
-          <div className="kpi-card-body">
+          <div className="kpi-card-mid">
             <div className="kpi-value">{totalCount}</div>
-            <div className="kpi-mini-distribution">
-              <div
-                className="kpi-mini-dist-seg kpi-mini-dist-seg--done"
-                style={{ width: `${completionPct}%` }}
-                title={`Done: ${doneCount}`}
-              />
-              <div
-                className="kpi-mini-dist-seg kpi-mini-dist-seg--pending"
-                style={{ width: `${totalCount > 0 ? 100 - completionPct : 0}%` }}
-                title={`Pending: ${pendingCount}`}
-              />
-            </div>
+            <span className="kpi-label">{totalCardLabel}</span>
           </div>
-          <div className="kpi-card-footer">
-            <span>{uncheckedCount} New &bull; {mgrDoneCount} In Progress</span>
+          <div className="kpi-mini-distribution">
+            <div
+              className="kpi-mini-dist-seg kpi-mini-dist-seg--done"
+              style={{ width: `${completionPct}%` }}
+            />
+            <div
+              className="kpi-mini-dist-seg kpi-mini-dist-seg--pending"
+              style={{ width: `${totalCount > 0 ? 100 - completionPct : 0}%` }}
+            />
           </div>
         </div>
 
         {/* Card 2: Completed */}
         <div className="kpi-card kpi-card--done">
-          <div className="kpi-card-header">
-            <span className="kpi-label">Completed</span>
+          <div className="kpi-card-top">
+            <div className="kpi-icon-box kpi-icon-box--done">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
             <span className="kpi-badge kpi-badge--done">{completionPct}%</span>
           </div>
-          <div className="kpi-card-body">
+          <div className="kpi-card-mid">
             <div className="kpi-value">{doneCount}</div>
-            <div className="kpi-meter-track">
-              <div
-                className="kpi-meter-fill kpi-meter-fill--done"
-                style={{ width: `${completionPct}%` }}
-              />
-            </div>
+            <span className="kpi-label">Completed</span>
           </div>
-          <div className="kpi-card-footer">
-            <span>Verified by both</span>
+          <div className="kpi-meter-track">
+            <div
+              className="kpi-meter-fill kpi-meter-fill--done"
+              style={{ width: `${completionPct}%` }}
+            />
           </div>
         </div>
 
         {/* Card 3: Pending */}
         <div className="kpi-card kpi-card--pending">
-          <div className="kpi-card-header">
-            <span className="kpi-label">Pending</span>
+          <div className="kpi-card-top">
+            <div className="kpi-icon-box kpi-icon-box--pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 7 12 12 15 15" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
             <span className="kpi-badge kpi-badge--pending">
               {totalCount > 0 ? 100 - completionPct : 0}%
             </span>
           </div>
-          <div className="kpi-card-body">
+          <div className="kpi-card-mid">
             <div className="kpi-value">{pendingCount}</div>
-            <div className="kpi-meter-track">
-              <div
-                className="kpi-meter-fill kpi-meter-fill--pending"
-                style={{ width: `${totalCount > 0 ? 100 - completionPct : 0}%` }}
-              />
-            </div>
+            <span className="kpi-label">Pending</span>
           </div>
-          <div className="kpi-card-footer">
-            <span>{uncheckedCount} New &bull; {mgrDoneCount} Awaiting AM</span>
+          <div className="kpi-meter-track">
+            <div
+              className="kpi-meter-fill kpi-meter-fill--pending"
+              style={{ width: `${totalCount > 0 ? 100 - completionPct : 0}%` }}
+            />
           </div>
         </div>
 
         {/* Card 4: Overdue */}
         <div className="kpi-card kpi-card--delayed">
-          <div className="kpi-card-header">
-            <span className="kpi-label">Overdue</span>
+          <div className="kpi-card-top">
+            <div className="kpi-icon-box kpi-icon-box--delayed">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
             <span className="kpi-badge kpi-badge--delayed">&gt; 24h</span>
           </div>
-          <div className="kpi-card-body">
+          <div className="kpi-card-mid">
             <div className="kpi-value">{delayedCount}</div>
-            <div className="kpi-meter-track">
-              <div
-                className="kpi-meter-fill kpi-meter-fill--delayed"
-                style={{ width: `${delayedPct}%` }}
-              />
-            </div>
+            <span className="kpi-label">Overdue</span>
           </div>
-          <div className="kpi-card-footer">
-            <span>
-              {delayedCount === 0 ? 'All within 24 hours' : `${delayedPct}% of total overdue`}
-            </span>
+          <div className="kpi-meter-track">
+            <div
+              className="kpi-meter-fill kpi-meter-fill--delayed"
+              style={{ width: `${delayedPct}%` }}
+            />
           </div>
         </div>
       </section>
 
-      {/* BOTTOM SECTION: Symmetrical Visual Analytics & Chart Panels */}
-      <section className="dashboard-charts-grid" aria-label="Visual Analytics Charts">
-        {/* Chart Card 1: Pipeline Breakdown Column Chart */}
-        <div className="chart-card chart-card--pipeline">
+      {/* BOTTOM SECTION: Balanced 2x2 Dashboard Analytics Grid */}
+      <section className="dashboard-bento-grid" aria-label="Visual Analytics Charts">
+        {/* Panel 1: Pipeline Breakdown Column Chart */}
+        <div className="chart-card">
           <div className="chart-card-header">
-            <div className="chart-card-title-wrap">
-              <h2 className="chart-card-title">Resolution Pipeline</h2>
-              <span className="chart-card-tag">{completionPct}% Resolved</span>
-            </div>
+            <h2 className="chart-card-title">Status Breakdown</h2>
+            <span className="chart-card-tag">{totalCount} Total</span>
           </div>
 
-          {/* Interactive Column Bar Chart */}
           <div className="chart-column-visualizer" aria-label="Pipeline Stages Chart">
             <div className="column-chart-bars">
-              {/* Bar 1: New */}
               <div className="column-bar-item">
                 <span className="column-val-label">{uncheckedCount}</span>
                 <div className="column-bar-track">
@@ -351,10 +365,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                   />
                 </div>
                 <span className="column-axis-label">New</span>
-                <span className="column-pct-pill">{uncheckedPct}%</span>
               </div>
 
-              {/* Bar 2: Mgr Checked */}
               <div className="column-bar-item">
                 <span className="column-val-label">{mgrDoneCount}</span>
                 <div className="column-bar-track">
@@ -364,10 +376,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                   />
                 </div>
                 <span className="column-axis-label">Mgr Done</span>
-                <span className="column-pct-pill">{mgrDonePct}%</span>
               </div>
 
-              {/* Bar 3: Completed */}
               <div className="column-bar-item">
                 <span className="column-val-label">{doneCount}</span>
                 <div className="column-bar-track">
@@ -376,11 +386,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                     style={{ height: `${calcBarHeight(doneCount)}%` }}
                   />
                 </div>
-                <span className="column-axis-label">Both Done</span>
-                <span className="column-pct-pill">{completionPct}%</span>
+                <span className="column-axis-label">Verified</span>
               </div>
 
-              {/* Bar 4: Overdue */}
               <div className="column-bar-item">
                 <span className="column-val-label">{delayedCount}</span>
                 <div className="column-bar-track">
@@ -390,93 +398,111 @@ export const HomePage: React.FC<HomePageProps> = ({
                   />
                 </div>
                 <span className="column-axis-label">Overdue</span>
-                <span className="column-pct-pill">{delayedPct}%</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Chart Card 2: 24h Response Speed with Visual SVG Gauge */}
-        <div className="chart-card chart-card--speed">
+        {/* Panel 2: Dual Radial Gauges & Queue Split */}
+        <div className="chart-card">
           <div className="chart-card-header">
-            <div className="chart-card-title-wrap">
-              <h2 className="chart-card-title">24h Response Speed</h2>
-              <span
-                className={`speed-status-badge ${
-                  delayedCount === 0
-                    ? 'speed-status-badge--healthy'
-                    : 'speed-status-badge--warning'
-                }`}
-              >
-                {delayedCount === 0 ? 'On Track' : `${delayedCount} Overdue`}
-              </span>
-            </div>
+            <h2 className="chart-card-title">24h Response Speed</h2>
+            <span
+              className={`speed-status-badge ${
+                delayedCount === 0
+                  ? 'speed-status-badge--healthy'
+                  : 'speed-status-badge--warning'
+              }`}
+            >
+              {delayedCount === 0 ? 'On Track' : `${delayedCount} Overdue`}
+            </span>
           </div>
 
-          {/* Central Donut Gauge Chart */}
-          <div className="speed-chart-visual">
-            <div className="donut-chart-box">
-              <svg className="donut-svg" viewBox="0 0 110 110">
-                <circle
-                  className="donut-bg-circle"
-                  cx="55"
-                  cy="55"
-                  r={donutRadius}
-                />
-                <circle
-                  className={`donut-fill-circle ${
-                    onTimePct >= 90
-                      ? 'donut-fill-circle--healthy'
-                      : onTimePct >= 70
-                      ? 'donut-fill-circle--moderate'
-                      : 'donut-fill-circle--alert'
-                  }`}
-                  cx="55"
-                  cy="55"
-                  r={donutRadius}
-                  strokeDasharray={donutCircumference}
-                  strokeDashoffset={donutDashOffset}
-                />
-              </svg>
-              <div className="donut-center-content">
-                <span className="donut-center-pct">{onTimePct}%</span>
-                <span className="donut-center-lbl">On-Time</span>
+          <div className="gauges-split-body">
+            {/* Gauge 1: On-Time SLA */}
+            <div className="gauge-unit">
+              <div className="donut-chart-box">
+                <svg className="donut-svg" viewBox="0 0 110 110">
+                  <circle
+                    className="donut-bg-circle"
+                    cx="55"
+                    cy="55"
+                    r={donutRadius}
+                  />
+                  <circle
+                    className={`donut-fill-circle ${
+                      onTimePct >= 90
+                        ? 'donut-fill-circle--healthy'
+                        : onTimePct >= 70
+                        ? 'donut-fill-circle--moderate'
+                        : 'donut-fill-circle--alert'
+                    }`}
+                    cx="55"
+                    cy="55"
+                    r={donutRadius}
+                    strokeDasharray={donutCircumference}
+                    strokeDashoffset={donutDashOffset}
+                  />
+                </svg>
+                <div className="donut-center-content">
+                  <span className="donut-center-pct">{onTimePct}%</span>
+                  <span className="donut-center-lbl">On-Time</span>
+                </div>
               </div>
             </div>
 
-            {/* Quick Action Matrix Tiles */}
+            {/* Gauge 2: Resolution Rate */}
+            <div className="gauge-unit">
+              <div className="donut-chart-box">
+                <svg className="donut-svg" viewBox="0 0 110 110">
+                  <circle
+                    className="donut-bg-circle"
+                    cx="55"
+                    cy="55"
+                    r={donutRadius}
+                  />
+                  <circle
+                    className="donut-fill-circle donut-fill-circle--moderate"
+                    cx="55"
+                    cy="55"
+                    r={donutRadius}
+                    strokeDasharray={donutCircumference}
+                    strokeDashoffset={doneDashOffset}
+                  />
+                </svg>
+                <div className="donut-center-content">
+                  <span className="donut-center-pct">{completionPct}%</span>
+                  <span className="donut-center-lbl">Resolved</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Queue Action Tiles */}
             <div className="speed-action-tiles">
               <div className="speed-action-tile">
-                <div className="speed-action-header">
-                  <span className="tile-dot tile-dot--manager" />
-                  <span className="tile-name">Needs Mgr</span>
-                </div>
+                <span className="tile-dot tile-dot--manager" />
+                <span className="tile-name">Mgr Queue</span>
                 <span className="tile-val tile-val--manager">{uncheckedCount}</span>
               </div>
-
               <div className="speed-action-tile">
-                <div className="speed-action-header">
-                  <span className="tile-dot tile-dot--am" />
-                  <span className="tile-name">Needs AM</span>
-                </div>
+                <span className="tile-dot tile-dot--am" />
+                <span className="tile-name">AM Queue</span>
                 <span className="tile-val tile-val--am">{mgrDoneCount}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Chart Card 3: Team Workload Comparative Bar Chart */}
-        <div className="chart-card chart-card--team">
+        {/* Panel 3: Team Workload Comparative Chart */}
+        <div className="chart-card">
           <div className="chart-card-header">
-            <div className="chart-card-title-wrap">
-              <h2 className="chart-card-title">
-                {currentUser.role === 'account_manager'
-                  ? 'Managers'
-                  : currentUser.role === 'manager'
-                  ? 'Account Managers'
-                  : 'Team Performance'}
-              </h2>
-            </div>
+            <h2 className="chart-card-title">
+              {currentUser.role === 'account_manager'
+                ? 'Manager Metrics'
+                : currentUser.role === 'manager'
+                ? 'AM Metrics'
+                : 'Team Metrics'}
+            </h2>
 
             {currentUser.role === 'admin' && (
               <div className="chart-mini-tabs">
@@ -498,50 +524,93 @@ export const HomePage: React.FC<HomePageProps> = ({
                   }`}
                   onClick={() => setAdminTeamTab('account_managers')}
                 >
-                  Account Mgrs
+                  AMs
                 </button>
               </div>
             )}
           </div>
 
-          {/* Comparative Workload List */}
           <div className="team-bars-container">
             {teamStats.map((stat) => (
               <div key={stat.person.id} className="team-bar-row">
-                <div className="team-bar-top">
-                  <div className="team-bar-user">
-                    <span className="team-bar-avatar">
-                      {stat.person.avatarInitials}
-                    </span>
-                    <span className="team-bar-name">{stat.person.name}</span>
-                  </div>
-                  <div className="team-bar-stat-nums">
-                    <span className="team-bar-rate">{stat.rate}%</span>
-                    <span className="team-bar-total">({stat.done}/{stat.total})</span>
+                <div className="team-bar-user">
+                  <span className="team-bar-avatar">
+                    {stat.person.avatarInitials}
+                  </span>
+                  <span className="team-bar-name">{stat.person.name}</span>
+                </div>
+
+                <div className="team-bar-track-wrap">
+                  <div className="team-bar-track">
+                    <div
+                      className="team-bar-fill"
+                      style={{ width: `${stat.rate}%` }}
+                    />
                   </div>
                 </div>
 
-                {/* Comparative Horizontal Progress Bar */}
-                <div className="team-bar-track">
-                  <div
-                    className="team-bar-fill"
-                    style={{ width: `${stat.rate}%` }}
-                  />
-                </div>
-
-                {/* Metric count pills */}
-                <div className="team-bar-pills">
-                  <span className="team-pill team-pill--new">New: {stat.unchecked}</span>
-                  <span className="team-pill team-pill--mgr">Mgr: {stat.mgrDone}</span>
-                  <span className="team-pill team-pill--done">Done: {stat.done}</span>
-                  {stat.delayed > 0 && (
-                    <span className="team-pill team-pill--late">Late: {stat.delayed}</span>
-                  )}
+                <div className="team-bar-stat-nums">
+                  <span className="team-bar-rate">{stat.rate}%</span>
+                  <span className="team-bar-total">{stat.done}/{stat.total}</span>
                 </div>
               </div>
             ))}
             {teamStats.length === 0 && (
-              <div className="team-empty-state">No team members found.</div>
+              <div className="team-empty-state">No data</div>
+            )}
+          </div>
+        </div>
+
+        {/* Panel 4: Recent Queue Snapshot */}
+        <div className="chart-card">
+          <div className="chart-card-header">
+            <h2 className="chart-card-title">Recent Queue</h2>
+            {onNavigate && (
+              <button
+                type="button"
+                className="chart-link-btn"
+                onClick={() => onNavigate('complaints')}
+              >
+                View All &rarr;
+              </button>
+            )}
+          </div>
+
+          <div className="recent-list-container">
+            {recentComplaints.map((item) => {
+              const isDone = isComplaintDone(item);
+              const isLate = isComplaintDelayed(item);
+              const statusLabel = isDone
+                ? 'Done'
+                : isLate
+                ? 'Overdue'
+                : item.managerDone
+                ? 'Mgr Done'
+                : 'New';
+              const statusMod = isDone
+                ? 'done'
+                : isLate
+                ? 'late'
+                : item.managerDone
+                ? 'mgr'
+                : 'new';
+
+              return (
+                <div key={item.complaintId} className="recent-row-item">
+                  <span className="recent-id-badge">{item.complaintId}</span>
+                  <div className="recent-people-tags">
+                    <span className="recent-person-chip">{item.accountManagerName}</span>
+                    <span className="recent-arrow">&rarr;</span>
+                    <span className="recent-person-chip">{item.managerName}</span>
+                  </div>
+                  <span className={`recent-status-pill recent-status-pill--${statusMod}`}>
+                    {statusLabel}
+                  </span>
+                </div>
+              );
+            })}
+            {recentComplaints.length === 0 && (
+              <div className="team-empty-state">No active records</div>
             )}
           </div>
         </div>

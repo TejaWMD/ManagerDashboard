@@ -5,8 +5,8 @@
   max-height: 100dvh;
   display: flex;
   flex-direction: row;
-  background: var(--c-cream);
-  color: var(--c-dark);
+  background: radial-gradient(circle at 85% 10%, #e0e7ff 0%, #f1f5f9 45%, #f8fafc 100%);
+  color: var(--c-text);
   overflow: hidden;
 }
 
@@ -23,9 +23,9 @@
 .db-setup-banner,
 .db-error-banner {
   flex-shrink: 0;
-  background: var(--c-amber);
-  border-bottom: 1px solid var(--c-ochre);
-  color: var(--c-dark);
+  background: var(--c-amber-light);
+  border-bottom: 1px solid #fcd34d;
+  color: #92400e;
   padding: 0.55rem 1.25rem;
   display: flex;
   align-items: center;
@@ -45,27 +45,27 @@
 .db-banner-btn {
   padding: 0.35rem 0.75rem;
   border-radius: 6px;
-  border: 1px solid var(--c-brown);
-  background: var(--c-surface);
-  color: var(--c-dark);
+  border: 1px solid #f59e0b;
+  background: #ffffff;
+  color: #92400e;
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .db-banner-btn--primary {
-  background: var(--c-brown);
-  border-color: var(--c-brown);
-  color: var(--c-cream);
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #ffffff;
 }
 
 .app-main-content {
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 1760px;
+  max-width: 1780px;
   margin: 0 auto;
-  padding: 1.1rem 1.4rem;
+  padding: 1rem 1.35rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -92,7 +92,7 @@
 @media (min-width: 1800px) {
   .app-main-content {
     max-width: 2350px;
-    padding: 1.5rem 2.25rem;
+    padding: 1.4rem 2.1rem;
   }
 }
 
@@ -102,6 +102,6 @@
   }
 
   .app-main-content {
-    padding: 0.65rem 0.75rem;
+    padding: 0.6rem 0.75rem;
   }
 }

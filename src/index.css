@@ -1,11 +1,24 @@
 :root {
-  --c-dark: #251a0a;
-  --c-brown: #844918;
-  --c-ochre: #c18036;
-  --c-orange: #d6742b;
-  --c-cream: #efedce;
-  --c-amber: #f2bc6c;
-  --c-surface: #fdfcf5;
+  --c-bg: #f1f5f9;
+  --c-surface: #ffffff;
+  --c-surface-alt: #f8fafc;
+  --c-navy: #0f172a;
+  --c-navy-light: #1e293b;
+  --c-text: #0f172a;
+  --c-text-muted: #64748b;
+  --c-border: #e2e8f0;
+  --c-border-strong: #cbd5e1;
+
+  --c-primary: #4f46e5;
+  --c-primary-light: #eef2ff;
+  --c-teal: #0ea5e9;
+  --c-teal-light: #e0f2fe;
+  --c-emerald: #10b981;
+  --c-emerald-light: #d1fae5;
+  --c-amber: #f59e0b;
+  --c-amber-light: #fef3c7;
+  --c-rose: #f43f5e;
+  --c-rose-light: #ffe4e6;
 }
 
 *,
@@ -27,8 +40,8 @@ body,
     Ubuntu, Cantarell, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--c-cream);
-  color: var(--c-dark);
+  background-color: var(--c-bg);
+  color: var(--c-text);
 }
 
 button,
