@@ -12,8 +12,15 @@ CREATE TABLE IF NOT EXISTS public.users (
   role TEXT NOT NULL CHECK (role IN ('account_manager', 'manager', 'admin')),
   role_label TEXT NOT NULL,
   avatar_initials TEXT NOT NULL,
+  phone TEXT DEFAULT NULL,
+  callmebot_api_key TEXT DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Upgrade public.users table if it already exists
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS callmebot_api_key TEXT DEFAULT NULL;
 
 -- Drop legacy department column if it exists from an earlier schema version
 ALTER TABLE public.users DROP COLUMN IF EXISTS department;
@@ -21,22 +28,23 @@ ALTER TABLE public.users DROP COLUMN IF EXISTS department;
 -- Remove old manager account if present and not referenced, or update mgr-1
 DELETE FROM public.users WHERE email = 'wmgteja@gmail.com' AND id != 'mgr-1';
 
--- Seed authorized users so foreign keys for account_manager_id and manager_id work out of the box
-INSERT INTO public.users (id, name, email, role, role_label, avatar_initials)
+-- Seed authorized users with phone numbers so notifications work immediately
+INSERT INTO public.users (id, name, email, role, role_label, avatar_initials, phone)
 VALUES
-  ('am-1', 'Shakti', 'wmdklshakti@gmail.com', 'account_manager', 'Account Manager', 'SK'),
-  ('am-2', 'Kavita', 'wmdklkavita@gmail.com', 'account_manager', 'Account Manager', 'KV'),
-  ('am-3', 'Linda', 'wmdkllinda@gmail.com', 'account_manager', 'Account Manager', 'LD'),
-  ('mgr-1', 'Muugaa', 'wmdklmuugaa@gmail.com', 'manager', 'Manager', 'MG'),
-  ('mgr-2', 'Awi', 'wmdklawi@gmail.com', 'manager', 'Manager', 'AW'),
-  ('mgr-3', 'Jay', 'wmdkljay@gmail.com', 'manager', 'Manager', 'JY'),
-  ('adm-1', 'Admin', 'admin1@gmail.com', 'admin', 'Admin', 'AD')
+  ('am-1', 'Shakti', 'wmdklshakti@gmail.com', 'account_manager', 'Account Manager', 'SK', '+60194167570'),
+  ('am-2', 'Kavita', 'wmdklkavita@gmail.com', 'account_manager', 'Account Manager', 'KV', NULL),
+  ('am-3', 'Linda', 'wmdkllinda@gmail.com', 'account_manager', 'Account Manager', 'LD', NULL),
+  ('mgr-1', 'Muugaa', 'wmdklmuugaa@gmail.com', 'manager', 'Manager', 'MG', '+601940017570'),
+  ('mgr-2', 'Awi', 'wmdklawi@gmail.com', 'manager', 'Manager', 'AW', NULL),
+  ('mgr-3', 'Jay', 'wmdkljay@gmail.com', 'manager', 'Manager', 'JY', NULL),
+  ('adm-1', 'Admin', 'admin1@gmail.com', 'admin', 'Admin', 'AD', '+601157350949')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   email = EXCLUDED.email,
   role = EXCLUDED.role,
   role_label = EXCLUDED.role_label,
-  avatar_initials = EXCLUDED.avatar_initials;
+  avatar_initials = EXCLUDED.avatar_initials,
+  phone = COALESCE(EXCLUDED.phone, public.users.phone);
 
 -- 2. Complaints Table
 -- Keyed by complaint_id and linked to account_manager_id, manager_id, immutable created_at, and completion SLA tracking
@@ -182,3 +190,21 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.complaints;
   END IF;
 END $$;
+
+-- 5. Push Subscriptions Table (for Web Push notifications across desktop & mobile)
+CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+  id BIGSERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT,
+  auth TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, endpoint)
+);
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow full access to push_subscriptions" ON public.push_subscriptions;
+CREATE POLICY "Allow full access to push_subscriptions"
+  ON public.push_subscriptions FOR ALL
+  USING (true)
+  WITH CHECK (true);

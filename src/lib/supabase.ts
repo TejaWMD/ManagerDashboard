@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Complaint, ComplaintStatus, DELAY_THRESHOLD_MS } from '../types';
+import { Complaint, ComplaintStatus, DELAY_THRESHOLD_MS, UserAccount } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 
 export const SUPABASE_URL =
@@ -163,10 +163,64 @@ export async function ensureUsersSeededInDb(): Promise<void> {
       role: u.role,
       role_label: u.roleLabel,
       avatar_initials: u.avatarInitials,
+      phone: u.phone || null,
+      callmebot_api_key: u.callmebotApiKey || null,
     }));
-    await supabase.from('users').upsert(userRows, { onConflict: 'id' });
+    const { error } = await supabase.from('users').upsert(userRows, { onConflict: 'id' });
+    if (error && (error.message.includes('phone') || error.message.includes('callmebot_api_key'))) {
+      const fallbackRows = AUTHORIZED_USERS.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        role_label: u.roleLabel,
+        avatar_initials: u.avatarInitials,
+      }));
+      await supabase.from('users').upsert(fallbackRows, { onConflict: 'id' });
+    }
   } catch {
     // Non-blocking if table does not exist yet
+  }
+}
+
+export async function fetchUsersFromDb(): Promise<UserAccount[]> {
+  try {
+    const { data, error } = await supabase.from('users').select('*');
+    if (error || !data) return AUTHORIZED_USERS;
+
+    return AUTHORIZED_USERS.map((localUser) => {
+      const dbMatch = (data as { id: string; phone?: string; callmebot_api_key?: string }[]).find(
+        (d) => d.id === localUser.id
+      );
+      if (dbMatch) {
+        return {
+          ...localUser,
+          phone: dbMatch.phone || localUser.phone || '',
+          callmebotApiKey: dbMatch.callmebot_api_key || localUser.callmebotApiKey || '',
+        };
+      }
+      return localUser;
+    });
+  } catch {
+    return AUTHORIZED_USERS;
+  }
+}
+
+export async function updateUserSettingsInDb(
+  userId: string,
+  settings: { phone?: string; callmebotApiKey?: string }
+): Promise<void> {
+  try {
+    const updates: Record<string, string | null> = {};
+    if (settings.phone !== undefined) {
+      updates.phone = settings.phone.trim() || null;
+    }
+    if (settings.callmebotApiKey !== undefined) {
+      updates.callmebot_api_key = settings.callmebotApiKey.trim() || null;
+    }
+    await supabase.from('users').update(updates).eq('id', userId);
+  } catch {
+    // Non-blocking
   }
 }
 

@@ -16,15 +16,23 @@ import {
   ComplaintRow,
   ensureUsersSeededInDb,
   fetchComplaintsFromDb,
+  fetchUsersFromDb,
   insertComplaintInDb,
   mapRowToComplaint,
   supabase,
   updateComplaintInDb,
 } from './lib/supabase';
+import {
+  dispatchComplaintNotifications,
+  registerServiceWorker,
+  showWebNotification,
+  ComplaintNotificationAction,
+} from './lib/notifications';
 import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
 import { HomePage } from './components/HomePage/HomePage';
 import { ComplaintPage } from './components/ComplaintPage/ComplaintPage';
+import { NotificationModal } from './components/NotificationModal/NotificationModal';
 import sqlSchemaText from '../supabase_schema.sql?raw';
 import './App.css';
 
@@ -60,6 +68,8 @@ export const App: React.FC = () => {
 
   const [activePage, setActivePage] = useState<PageView>('home');
   const [tvMode, setTvMode] = useState<boolean>(false);
+  const [allUsers, setAllUsers] = useState<UserAccount[]>(AUTHORIZED_USERS);
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState<boolean>(false);
 
   const [complaints, setComplaints] = useState<Complaint[]>(INITIAL_COMPLAINTS);
   const [isLoadingDb, setIsLoadingDb] = useState<boolean>(true);
@@ -67,6 +77,16 @@ export const App: React.FC = () => {
   const [dbError, setDbError] = useState<string | null>(null);
   const [savingComplaintId, setSavingComplaintId] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
+
+  // Initialize Service Worker for Web Push and fetch updated user phone & keys
+  useEffect(() => {
+    registerServiceWorker();
+    fetchUsersFromDb().then((users) => {
+      if (users && users.length > 0) {
+        setAllUsers(users);
+      }
+    });
+  }, []);
 
   const loadComplaints = useCallback(async () => {
     setIsLoadingDb(true);
@@ -123,9 +143,59 @@ export const App: React.FC = () => {
               persistComplaintsCache(next);
               return next;
             });
+
+            // Trigger real-time browser/system notification on receiver's device
+            if (currentUser && incoming.accountManagerId !== currentUser.id) {
+              if (currentUser.role === 'admin') {
+                showWebNotification(
+                  '🚨 New Complaint Created',
+                  `${incoming.accountManagerName} submitted ${incoming.complaintId} to ${incoming.managerName}`
+                );
+              } else if (currentUser.id === incoming.managerId) {
+                showWebNotification(
+                  '🚨 New Complaint Assigned',
+                  `${incoming.accountManagerName} assigned ${incoming.complaintId} to you`
+                );
+              }
+            }
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             const updated = mapRowToComplaint(payload.new as ComplaintRow);
             setComplaints((prev) => {
+              const prevItem = prev.find((c) => c.complaintId === updated.complaintId);
+
+              // Trigger real-time browser/system notifications for relevant receivers
+              if (prevItem && currentUser) {
+                if (updated.status === 'Completed' && prevItem.status !== 'Completed') {
+                  if (currentUser.id === updated.managerId || currentUser.role === 'admin') {
+                    showWebNotification(
+                      '🎉 Complaint Completed',
+                      `${updated.complaintId} marked Completed by ${updated.accountManagerName}!`
+                    );
+                  }
+                } else if (updated.managerDone !== prevItem.managerDone) {
+                  if (currentUser.id === updated.accountManagerId || currentUser.role === 'admin') {
+                    showWebNotification(
+                      updated.managerDone ? '✅ Manager Marked Done' : '↩️ Manager Unmarked Done',
+                      `Manager ${updated.managerName} ${updated.managerDone ? 'marked Done on' : 'unmarked'} ${updated.complaintId}`
+                    );
+                  }
+                } else if (updated.managerRemark !== prevItem.managerRemark) {
+                  if (currentUser.id === updated.accountManagerId || currentUser.role === 'admin') {
+                    showWebNotification(
+                      '💬 Manager Added Remark',
+                      `Manager ${updated.managerName} on ${updated.complaintId}: "${updated.managerRemark}"`
+                    );
+                  }
+                } else if (updated.accountManagerRemark !== prevItem.accountManagerRemark) {
+                  if (currentUser.id === updated.managerId || currentUser.role === 'admin') {
+                    showWebNotification(
+                      '💬 AM Added Remark',
+                      `AM ${updated.accountManagerName} on ${updated.complaintId}: "${updated.accountManagerRemark}"`
+                    );
+                  }
+                }
+              }
+
               const next = prev.map((c) =>
                 c.complaintId === updated.complaintId ? updated : c
               );
@@ -253,6 +323,14 @@ export const App: React.FC = () => {
         persistComplaintsCache(next);
         return next;
       });
+
+      // Dispatch WhatsApp & Web Push notifications for new complaint
+      dispatchComplaintNotifications({
+        action: 'NEW_COMPLAINT',
+        complaint: data,
+        actor: currentUser,
+        allUsers,
+      });
     }
   };
 
@@ -269,6 +347,7 @@ export const App: React.FC = () => {
       >
     >
   ) => {
+    if (!currentUser) return;
     const existing = complaints.find((c) => c.complaintId === complaintId);
     if (!existing) return;
 
@@ -363,6 +442,27 @@ export const App: React.FC = () => {
         persistComplaintsCache(next);
         return next;
       });
+
+      // Determine specific action and dispatch WhatsApp / Web Push notifications
+      let action: ComplaintNotificationAction = 'MANAGER_REMARK';
+      if (nextIsCompleted && existing.status !== 'Completed') {
+        action = 'COMPLETED';
+      } else if (updates.managerDone !== undefined && updates.managerDone !== existing.managerDone) {
+        action = updates.managerDone ? 'MANAGER_DONE' : 'MANAGER_UNDONE';
+      } else if (updates.managerRemark !== undefined && updates.managerRemark !== existing.managerRemark) {
+        action = 'MANAGER_REMARK';
+      } else if (updates.accountManagerDone !== undefined && updates.accountManagerDone !== existing.accountManagerDone) {
+        action = 'AM_DONE';
+      } else if (updates.accountManagerRemark !== undefined && updates.accountManagerRemark !== existing.accountManagerRemark) {
+        action = 'AM_REMARK';
+      }
+
+      dispatchComplaintNotifications({
+        action,
+        complaint: data,
+        actor: currentUser,
+        allUsers,
+      });
     }
   };
 
@@ -401,6 +501,7 @@ export const App: React.FC = () => {
         tvMode={tvMode}
         onToggleTvMode={() => setTvMode((prev) => !prev)}
         openComplaintsCount={openComplaintsCount}
+        onOpenNotifications={() => setIsNotifModalOpen(true)}
       />
 
       <div className="app-body-column">
@@ -458,6 +559,21 @@ export const App: React.FC = () => {
           )}
         </main>
       </div>
+
+      <NotificationModal
+        currentUser={currentUser}
+        allUsers={allUsers}
+        isOpen={isNotifModalOpen}
+        onClose={() => setIsNotifModalOpen(false)}
+        onUpdateUser={(updated) => {
+          setAllUsers((prev) =>
+            prev.map((u) => (u.id === updated.id ? updated : u))
+          );
+          if (currentUser.id === updated.id) {
+            setCurrentUser(updated);
+          }
+        }}
+      />
     </div>
   );
 };
