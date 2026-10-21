@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   belongsToAccountManager,
   belongsToManager,
@@ -76,6 +76,12 @@ export const App: React.FC = () => {
   const [savingComplaintId, setSavingComplaintId] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
 
+  // Keep fresh references for realtime subscription closures
+  const currentUserRef = useRef<UserAccount | null>(currentUser);
+  currentUserRef.current = currentUser;
+  const complaintsRef = useRef<Complaint[]>(complaints);
+  complaintsRef.current = complaints;
+
   // Initialize Service Worker for Web Push and fetch updated user phone & keys
   useEffect(() => {
     registerServiceWorker();
@@ -129,6 +135,8 @@ export const App: React.FC = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'complaints' },
         (payload) => {
+          const user = currentUserRef.current;
+
           if (payload.eventType === 'INSERT' && payload.new) {
             const incoming = mapRowToComplaint(payload.new as ComplaintRow);
             setComplaints((prev) => {
@@ -143,13 +151,13 @@ export const App: React.FC = () => {
             });
 
             // Trigger real-time browser/system notification on receiver's device
-            if (currentUser && incoming.accountManagerId !== currentUser.id) {
-              if (currentUser.role === 'admin') {
+            if (user && incoming.accountManagerId !== user.id) {
+              if (user.role === 'admin') {
                 showWebNotification(
                   '🚨 New Complaint Created',
                   `${incoming.accountManagerName} submitted ${incoming.complaintId} to ${incoming.managerName}`
                 );
-              } else if (currentUser.id === incoming.managerId) {
+              } else if (user.id === incoming.managerId) {
                 showWebNotification(
                   '🚨 New Complaint Assigned',
                   `${incoming.accountManagerName} assigned ${incoming.complaintId} to you`
@@ -158,48 +166,48 @@ export const App: React.FC = () => {
             }
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             const updated = mapRowToComplaint(payload.new as ComplaintRow);
+            const prevItem = complaintsRef.current.find((c) => c.complaintId === updated.complaintId);
+
             setComplaints((prev) => {
-              const prevItem = prev.find((c) => c.complaintId === updated.complaintId);
-
-              // Trigger real-time browser/system notifications for relevant receivers
-              if (prevItem && currentUser) {
-                if (updated.status === 'Completed' && prevItem.status !== 'Completed') {
-                  if (currentUser.id === updated.managerId || currentUser.role === 'admin') {
-                    showWebNotification(
-                      '🎉 Complaint Completed',
-                      `${updated.complaintId} marked Completed by ${updated.accountManagerName}!`
-                    );
-                  }
-                } else if (updated.managerDone !== prevItem.managerDone) {
-                  if (currentUser.id === updated.accountManagerId || currentUser.role === 'admin') {
-                    showWebNotification(
-                      updated.managerDone ? '✅ Manager Marked Done' : '↩️ Manager Unmarked Done',
-                      `Manager ${updated.managerName} ${updated.managerDone ? 'marked Done on' : 'unmarked'} ${updated.complaintId}`
-                    );
-                  }
-                } else if (updated.managerRemark !== prevItem.managerRemark) {
-                  if (currentUser.id === updated.accountManagerId || currentUser.role === 'admin') {
-                    showWebNotification(
-                      '💬 Manager Added Remark',
-                      `Manager ${updated.managerName} on ${updated.complaintId}: "${updated.managerRemark}"`
-                    );
-                  }
-                } else if (updated.accountManagerRemark !== prevItem.accountManagerRemark) {
-                  if (currentUser.id === updated.managerId || currentUser.role === 'admin') {
-                    showWebNotification(
-                      '💬 AM Added Remark',
-                      `AM ${updated.accountManagerName} on ${updated.complaintId}: "${updated.accountManagerRemark}"`
-                    );
-                  }
-                }
-              }
-
               const next = prev.map((c) =>
                 c.complaintId === updated.complaintId ? updated : c
               );
               persistComplaintsCache(next);
               return next;
             });
+
+            // Trigger real-time browser/system notifications for relevant receivers
+            if (prevItem && user) {
+              if (updated.status === 'Completed' && prevItem.status !== 'Completed') {
+                if (user.id === updated.managerId || user.role === 'admin') {
+                  showWebNotification(
+                    '🎉 Complaint Completed',
+                    `${updated.complaintId} marked Completed by ${updated.accountManagerName}!`
+                  );
+                }
+              } else if (updated.managerDone !== prevItem.managerDone) {
+                if (user.id === updated.accountManagerId || user.role === 'admin') {
+                  showWebNotification(
+                    updated.managerDone ? '✅ Manager Marked Done' : '↩️ Manager Unmarked Done',
+                    `Manager ${updated.managerName} ${updated.managerDone ? 'marked Done on' : 'unmarked'} ${updated.complaintId}`
+                  );
+                }
+              } else if (updated.managerRemark !== prevItem.managerRemark) {
+                if (user.id === updated.accountManagerId || user.role === 'admin') {
+                  showWebNotification(
+                    '💬 Manager Added Remark',
+                    `Manager ${updated.managerName} on ${updated.complaintId}: "${updated.managerRemark}"`
+                  );
+                }
+              } else if (updated.accountManagerRemark !== prevItem.accountManagerRemark) {
+                if (user.id === updated.managerId || user.role === 'admin') {
+                  showWebNotification(
+                    '💬 AM Added Remark',
+                    `AM ${updated.accountManagerName} on ${updated.complaintId}: "${updated.accountManagerRemark}"`
+                  );
+                }
+              }
+            }
           } else if (payload.eventType === 'DELETE' && payload.old) {
             const deletedId = (payload.old as { complaint_id?: string }).complaint_id;
             if (deletedId) {

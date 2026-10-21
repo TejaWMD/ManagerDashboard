@@ -1,7 +1,7 @@
 // Service Worker for Manager Dashboard Web Push & System Notifications
-const SW_VERSION = 'v1.0.0';
+const SW_VERSION = 'v1.0.1';
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -14,8 +14,8 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
     const notificationOptions = {
-      icon: './vite.svg',
-      badge: './vite.svg',
+      icon: './portal-icon.svg',
+      badge: './portal-icon.svg',
       vibrate: [200, 100, 200],
       ...options,
     };
@@ -43,8 +43,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'WMD Query Portal';
   const options = {
     body: data.body || '',
-    icon: data.icon || './vite.svg',
-    badge: data.badge || './vite.svg',
+    icon: data.icon || './portal-icon.svg',
+    badge: data.badge || './portal-icon.svg',
     tag: data.tag || 'wmd-notification',
     data: data.data || {},
     vibrate: [200, 100, 200],

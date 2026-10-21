@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   getNotificationPermissionStatus,
+  isSecureContextEnvironment,
   requestWebNotificationPermission,
   showWebNotification,
 } from '../../lib/notifications';
@@ -16,34 +17,75 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   onClose,
 }) => {
   const [webPermission, setWebPermission] = useState<NotificationPermission | 'unsupported'>('default');
-  const [testFeedback, setTestFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
+  const isSecure = isSecureContextEnvironment();
 
   useEffect(() => {
     if (isOpen) {
       setWebPermission(getNotificationPermissionStatus());
-      setTestFeedback(null);
+      setFeedback(null);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleEnableWebPush = async () => {
-    setTestFeedback(null);
+    setFeedback(null);
+
+    if (!isSecure) {
+      setFeedback({
+        type: 'error',
+        message: 'Browser notifications require a secure HTTPS connection (or localhost). HTTP on LAN IPs blocks notifications.',
+      });
+      return;
+    }
+
+    if (webPermission === 'denied') {
+      setFeedback({
+        type: 'warning',
+        message: 'Notifications are currently blocked. Click the lock/settings icon in your browser address bar and switch Notifications to "Allow", then reload the page.',
+      });
+      return;
+    }
+
     const granted = await requestWebNotificationPermission();
-    setWebPermission(getNotificationPermissionStatus());
+    const updatedStatus = getNotificationPermissionStatus();
+    setWebPermission(updatedStatus);
+
     if (granted) {
-      setTestFeedback('Browser notifications activated successfully on this device!');
+      setFeedback({
+        type: 'success',
+        message: 'Browser notifications activated successfully on this device!',
+      });
+    } else if (updatedStatus === 'denied') {
+      setFeedback({
+        type: 'warning',
+        message: 'Permission was blocked in your browser settings. Please click the site settings / lock icon in the address bar and set Notifications to "Allow".',
+      });
     } else {
-      setTestFeedback('Permission was blocked or denied in your browser settings.');
+      setFeedback({
+        type: 'warning',
+        message: 'Permission was dismissed or not granted.',
+      });
     }
   };
 
-  const handleTestWebPush = () => {
-    showWebNotification(
-      '🔔 Portal Alert Test',
-      'If you see and hear this chime, your device is ready to receive instant complaint alerts!'
-    );
-    setTestFeedback('Test notification triggered!');
+  const handleTestWebPush = async () => {
+    try {
+      await showWebNotification(
+        '🔔 Portal Alert Test',
+        'If you see and hear this chime, your device is ready to receive instant complaint alerts!'
+      );
+      setFeedback({
+        type: 'success',
+        message: 'Test alert sent! Check your system notification tray/banners and sound.',
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: `Failed to trigger alert: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
   };
 
   return (
@@ -63,6 +105,12 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
         </div>
 
         <div className="notif-modal-body">
+          {!isSecure && (
+            <div className="notif-feedback notif-feedback--error">
+              ⚠️ <strong>Insecure Connection:</strong> Web notifications require HTTPS. If accessing over HTTP (e.g. via local Wi-Fi IP), modern browsers will disable notifications.
+            </div>
+          )}
+
           <section className="notif-section">
             <div className="notif-section-header">
               <h4>Device Push & Chime Alerts</h4>
@@ -71,11 +119,15 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                   webPermission === 'granted' ? 'active' : 'inactive'
                 }`}
               >
-                {webPermission === 'granted' ? '● Active' : '○ Not Enabled'}
+                {webPermission === 'granted'
+                  ? '● Active'
+                  : webPermission === 'denied'
+                  ? '✕ Blocked'
+                  : '○ Not Enabled'}
               </span>
             </div>
             <p className="notif-desc">
-              When enabled, your device will pop up system notification banners and play a sound
+              When enabled, your device will pop up system notification banners and play a chime
               whenever a new complaint is assigned, a remark is added, or a complaint is finalized.
             </p>
 
@@ -109,8 +161,10 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             </p>
           </div>
 
-          {testFeedback && (
-            <div className="notif-feedback notif-feedback--success">{testFeedback}</div>
+          {feedback && (
+            <div className={`notif-feedback notif-feedback--${feedback.type}`}>
+              {feedback.message}
+            </div>
           )}
         </div>
       </div>

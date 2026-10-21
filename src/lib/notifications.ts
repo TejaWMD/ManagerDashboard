@@ -13,6 +13,10 @@ export function playNotificationChime(): void {
     if (!AudioContextClass) return;
 
     const ctx = new AudioContextClass();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
     const now = ctx.currentTime;
 
     const osc1 = ctx.createOscillator();
@@ -43,6 +47,27 @@ export function playNotificationChime(): void {
   }
 }
 
+// Compute the exact absolute path to sw.js regardless of whether we're on localhost,
+// custom domain, or GitHub Pages subpath (e.g. /ManagerDashboard/)
+export function getServiceWorkerConfig(): { scriptUrl: string; scope: string } {
+  if (typeof window === 'undefined') {
+    return { scriptUrl: './sw.js', scope: './' };
+  }
+  const loc = window.location;
+  let dir = loc.pathname;
+  if (!dir.endsWith('/')) {
+    if (dir.includes('.')) {
+      dir = dir.substring(0, dir.lastIndexOf('/') + 1);
+    } else {
+      dir = dir + '/';
+    }
+  }
+  return {
+    scriptUrl: `${loc.origin}${dir}sw.js`,
+    scope: `${loc.origin}${dir}`,
+  };
+}
+
 // Service worker reference
 let swRegistration: ServiceWorkerRegistration | null = null;
 
@@ -52,13 +77,27 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
     return null;
   }
   try {
-    const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+    const { scriptUrl, scope } = getServiceWorkerConfig();
+    const reg = await navigator.serviceWorker.register(scriptUrl, { scope });
     swRegistration = reg;
     return reg;
   } catch (err) {
     console.warn('[SW] Registration failed:', err);
-    return null;
+    try {
+      // Fallback relative register
+      const regFallback = await navigator.serviceWorker.register('./sw.js');
+      swRegistration = regFallback;
+      return regFallback;
+    } catch {
+      return null;
+    }
   }
+}
+
+// Check if current context is secure (HTTPS or localhost)
+export function isSecureContextEnvironment(): boolean {
+  if (typeof window === 'undefined') return true;
+  return window.isSecureContext ?? (window.location.protocol === 'https:' || window.location.hostname === 'localhost');
 }
 
 // Check current browser notification permission
@@ -91,11 +130,11 @@ export async function requestWebNotificationPermission(): Promise<boolean> {
 }
 
 // Trigger a native system / lock-screen notification banner
-export function showWebNotification(
+export async function showWebNotification(
   title: string,
   body: string,
   tag = 'wmd-complaint-alert'
-): void {
+): Promise<void> {
   playNotificationChime();
 
   if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -106,26 +145,46 @@ export function showWebNotification(
     return;
   }
 
-  // 1. Try displaying via Service Worker registration (native system tray on mobile & desktop)
-  if (swRegistration && swRegistration.showNotification) {
-    swRegistration.showNotification(title, {
-      body,
-      icon: './vite.svg',
-      badge: './vite.svg',
-      tag,
-      vibrate: [200, 100, 200],
-    } as any);
-    return;
+  const { scriptUrl } = getServiceWorkerConfig();
+  const iconUrl = scriptUrl.replace(/sw\.js$/, 'portal-icon.svg');
+
+  const notificationOptions = {
+    body,
+    icon: iconUrl,
+    badge: iconUrl,
+    tag,
+    vibrate: [200, 100, 200],
+  };
+
+  // 1. Try displaying via Service Worker registration (required for Android / mobile & system tray)
+  let activeRegistration = swRegistration;
+  if (!activeRegistration && 'serviceWorker' in navigator) {
+    try {
+      activeRegistration =
+        (await navigator.serviceWorker.getRegistration()) ||
+        (await navigator.serviceWorker.ready);
+    } catch {
+      // Ignore
+    }
   }
 
-  // 2. Fallback to standard Window Notification
+  if (activeRegistration && typeof activeRegistration.showNotification === 'function') {
+    try {
+      await activeRegistration.showNotification(title, notificationOptions);
+      return;
+    } catch (err) {
+      console.warn('[SW] showNotification error:', err);
+    }
+  }
+
+  // 2. Fallback to standard Window Notification (for desktop browsers without SW active)
   try {
     new Notification(title, {
       body,
-      icon: './vite.svg',
+      icon: iconUrl,
       tag,
     });
   } catch (err) {
-    console.warn('[Notification] Could not display notification:', err);
+    console.warn('[Notification] Window notification error:', err);
   }
 }

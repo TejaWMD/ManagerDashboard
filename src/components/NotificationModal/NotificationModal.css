@@ -188,6 +188,18 @@
   color: #166534;
 }
 
+.notif-feedback--warning {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.notif-feedback--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
