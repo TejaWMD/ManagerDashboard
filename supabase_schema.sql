@@ -13,14 +13,16 @@ CREATE TABLE IF NOT EXISTS public.users (
   role_label TEXT NOT NULL,
   avatar_initials TEXT NOT NULL,
   phone TEXT DEFAULT NULL,
-  callmebot_api_key TEXT DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Upgrade public.users table if it already exists
 ALTER TABLE public.users
-  ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS callmebot_api_key TEXT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT NULL;
+
+-- Drop callmebot column if present from previous test
+ALTER TABLE public.users
+  DROP COLUMN IF EXISTS callmebot_api_key;
 
 -- Drop legacy department column if it exists from an earlier schema version
 ALTER TABLE public.users DROP COLUMN IF EXISTS department;

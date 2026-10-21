@@ -11,7 +11,6 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     roleLabel: 'Account Manager',
     avatarInitials: 'SK',
     phone: '+60194167570',
-    callmebotApiKey: '',
   },
   {
     id: 'am-2',
@@ -22,7 +21,6 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     roleLabel: 'Account Manager',
     avatarInitials: 'KV',
     phone: '',
-    callmebotApiKey: '',
   },
   {
     id: 'am-3',
@@ -33,7 +31,6 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     roleLabel: 'Account Manager',
     avatarInitials: 'LD',
     phone: '',
-    callmebotApiKey: '',
   },
 
   // Managers
@@ -46,7 +43,6 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     roleLabel: 'Manager',
     avatarInitials: 'MG',
     phone: '+601940017570',
-    callmebotApiKey: '',
   },
   {
     id: 'mgr-2',
@@ -57,7 +53,6 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     roleLabel: 'Manager',
     avatarInitials: 'AW',
     phone: '',
-    callmebotApiKey: '',
   },
   {
     id: 'mgr-3',
@@ -68,7 +63,6 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     roleLabel: 'Manager',
     avatarInitials: 'JY',
     phone: '',
-    callmebotApiKey: '',
   },
 
   // Admin
@@ -81,7 +75,6 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     roleLabel: 'Admin',
     avatarInitials: 'AD',
     phone: '+601157350949',
-    callmebotApiKey: '',
   },
 ];
 

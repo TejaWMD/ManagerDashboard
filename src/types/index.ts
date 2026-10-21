@@ -11,7 +11,6 @@ export interface UserAccount {
   roleLabel: string;
   avatarInitials: string;
   phone?: string;
-  callmebotApiKey?: string;
 }
 
 export type ComplaintStatus = 'Pending' | 'Completed';

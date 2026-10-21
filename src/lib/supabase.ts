@@ -164,10 +164,9 @@ export async function ensureUsersSeededInDb(): Promise<void> {
       role_label: u.roleLabel,
       avatar_initials: u.avatarInitials,
       phone: u.phone || null,
-      callmebot_api_key: u.callmebotApiKey || null,
     }));
     const { error } = await supabase.from('users').upsert(userRows, { onConflict: 'id' });
-    if (error && (error.message.includes('phone') || error.message.includes('callmebot_api_key'))) {
+    if (error && error.message.includes('phone')) {
       const fallbackRows = AUTHORIZED_USERS.map((u) => ({
         id: u.id,
         name: u.name,
@@ -189,14 +188,13 @@ export async function fetchUsersFromDb(): Promise<UserAccount[]> {
     if (error || !data) return AUTHORIZED_USERS;
 
     return AUTHORIZED_USERS.map((localUser) => {
-      const dbMatch = (data as { id: string; phone?: string; callmebot_api_key?: string }[]).find(
+      const dbMatch = (data as { id: string; phone?: string }[]).find(
         (d) => d.id === localUser.id
       );
       if (dbMatch) {
         return {
           ...localUser,
           phone: dbMatch.phone || localUser.phone || '',
-          callmebotApiKey: dbMatch.callmebot_api_key || localUser.callmebotApiKey || '',
         };
       }
       return localUser;
@@ -208,15 +206,12 @@ export async function fetchUsersFromDb(): Promise<UserAccount[]> {
 
 export async function updateUserSettingsInDb(
   userId: string,
-  settings: { phone?: string; callmebotApiKey?: string }
+  settings: { phone?: string }
 ): Promise<void> {
   try {
     const updates: Record<string, string | null> = {};
     if (settings.phone !== undefined) {
       updates.phone = settings.phone.trim() || null;
-    }
-    if (settings.callmebotApiKey !== undefined) {
-      updates.callmebot_api_key = settings.callmebotApiKey.trim() || null;
     }
     await supabase.from('users').update(updates).eq('id', userId);
   } catch {

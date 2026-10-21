@@ -122,7 +122,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="button"
             className="sidebar-link-btn"
             onClick={onOpenNotifications}
-            title="Notification Settings (WhatsApp & Push)"
+            title="Notification Settings (Browser Alerts)"
           >
             <svg
               className="sidebar-nav-icon"
@@ -136,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            {!isCollapsed && <span className="sidebar-link-text">Alerts & WhatsApp</span>}
+            {!isCollapsed && <span className="sidebar-link-text">Notifications</span>}
           </button>
         )}
 

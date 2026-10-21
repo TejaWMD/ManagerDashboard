@@ -23,10 +23,8 @@ import {
   updateComplaintInDb,
 } from './lib/supabase';
 import {
-  dispatchComplaintNotifications,
   registerServiceWorker,
   showWebNotification,
-  ComplaintNotificationAction,
 } from './lib/notifications';
 import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
@@ -323,14 +321,6 @@ export const App: React.FC = () => {
         persistComplaintsCache(next);
         return next;
       });
-
-      // Dispatch WhatsApp & Web Push notifications for new complaint
-      dispatchComplaintNotifications({
-        action: 'NEW_COMPLAINT',
-        complaint: data,
-        actor: currentUser,
-        allUsers,
-      });
     }
   };
 
@@ -442,27 +432,6 @@ export const App: React.FC = () => {
         persistComplaintsCache(next);
         return next;
       });
-
-      // Determine specific action and dispatch WhatsApp / Web Push notifications
-      let action: ComplaintNotificationAction = 'MANAGER_REMARK';
-      if (nextIsCompleted && existing.status !== 'Completed') {
-        action = 'COMPLETED';
-      } else if (updates.managerDone !== undefined && updates.managerDone !== existing.managerDone) {
-        action = updates.managerDone ? 'MANAGER_DONE' : 'MANAGER_UNDONE';
-      } else if (updates.managerRemark !== undefined && updates.managerRemark !== existing.managerRemark) {
-        action = 'MANAGER_REMARK';
-      } else if (updates.accountManagerDone !== undefined && updates.accountManagerDone !== existing.accountManagerDone) {
-        action = 'AM_DONE';
-      } else if (updates.accountManagerRemark !== undefined && updates.accountManagerRemark !== existing.accountManagerRemark) {
-        action = 'AM_REMARK';
-      }
-
-      dispatchComplaintNotifications({
-        action,
-        complaint: data,
-        actor: currentUser,
-        allUsers,
-      });
     }
   };
 
@@ -561,18 +530,8 @@ export const App: React.FC = () => {
       </div>
 
       <NotificationModal
-        currentUser={currentUser}
-        allUsers={allUsers}
         isOpen={isNotifModalOpen}
         onClose={() => setIsNotifModalOpen(false)}
-        onUpdateUser={(updated) => {
-          setAllUsers((prev) =>
-            prev.map((u) => (u.id === updated.id ? updated : u))
-          );
-          if (currentUser.id === updated.id) {
-            setCurrentUser(updated);
-          }
-        }}
       />
     </div>
   );
