@@ -216,9 +216,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               <strong>How to get your free CallMeBot API key:</strong>
               <ol>
                 <li>
-                  Add this number to your WhatsApp contacts: <code>+34 911 06 73 81</code> (or tap{' '}
+                  Add this number to your WhatsApp contacts: <code>+34 623 78 64 49</code> (or tap{' '}
                   <a
-                    href="https://wa.me/34911067381?text=I%20allow%20callmebot%20to%20send%20me%20messages"
+                    href="https://wa.me/34623786449?text=I%20allow%20callmebot%20to%20send%20me%20messages"
                     target="_blank"
                     rel="noreferrer"
                   >

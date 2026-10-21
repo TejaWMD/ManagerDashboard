@@ -170,7 +170,7 @@ export async function sendCallMeBotWhatsApp(
   if (!apiKey || !apiKey.trim()) {
     return {
       success: false,
-      error: `No CallMeBot API key configured for phone ${phone}. Send "I allow callmebot to send me messages" to +34 911 06 73 81 on WhatsApp to get one.`,
+      error: `No CallMeBot API key configured for phone ${phone}. Send "I allow callmebot to send me messages" to +34 623 78 64 49 on WhatsApp to get one.`,
     };
   }
 
