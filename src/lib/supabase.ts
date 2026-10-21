@@ -11,7 +11,8 @@ export const SUPABASE_ANON_KEY =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v1';
+const OLD_COMPLETION_META_KEY = 'wm_portal_completion_meta_v1';
+const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v2';
 
 interface LocalCompletionMeta {
   completedAt: string | null;
@@ -21,6 +22,7 @@ interface LocalCompletionMeta {
 
 function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
   try {
+    localStorage.removeItem(OLD_COMPLETION_META_KEY);
     const raw = localStorage.getItem(COMPLETION_META_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
@@ -99,15 +101,10 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
     : null;
 
   const computedDelayed = isDone
-    ? Boolean(
-        row.is_delayed === true ||
-          localMeta?.isDelayed === true ||
-          (completedAtMs && createdAtMs > 0 && completedAtMs - createdAtMs > DELAY_THRESHOLD_MS)
-      )
-    : Boolean(
-        row.is_delayed === true ||
-          (createdAtMs > 0 && Date.now() - createdAtMs > DELAY_THRESHOLD_MS)
-      );
+    ? completedAtMs && createdAtMs > 0
+      ? completedAtMs - createdAtMs > DELAY_THRESHOLD_MS
+      : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)
+    : Boolean(createdAtMs > 0 && Date.now() - createdAtMs > DELAY_THRESHOLD_MS);
 
   return {
     id: row.complaint_id,

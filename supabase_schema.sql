@@ -76,13 +76,13 @@ WHERE manager_done = TRUE
   AND account_manager_done = TRUE
   AND completed_at_ms IS NULL;
 
--- Backfill is_delayed for existing rows (> 3 minutes = 180,000 ms for testing)
+-- Backfill is_delayed for existing rows (> 48 hours = 172,800,000 ms)
 UPDATE public.complaints
 SET is_delayed = CASE
   WHEN manager_done = TRUE AND account_manager_done = TRUE THEN
-    ((COALESCE(completed_at_ms, created_at_ms) - created_at_ms) > 180000) OR is_delayed
+    ((COALESCE(completed_at_ms, created_at_ms) - created_at_ms) > 172800000)
   ELSE
-    (((EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT - created_at_ms) > 180000)
+    (((EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT - created_at_ms) > 172800000)
 END;
 
 -- Indexes for fast filtering & metric calculations
@@ -96,12 +96,12 @@ CREATE INDEX IF NOT EXISTS idx_complaints_is_delayed ON public.complaints(is_del
 -- 1) created_at and created_at_ms NEVER change on UPDATE
 -- 2) account_manager_done is automatically reset to FALSE if manager_done is FALSE
 -- 3) status is 'Completed' ONLY when BOTH manager_done AND account_manager_done are TRUE
--- 4) completed_at / completed_at_ms and is_delayed (>3m SLA breach for testing) are persisted even after completion
+-- 4) completed_at / completed_at_ms and is_delayed (>48h SLA breach) are persisted even after completion
 CREATE OR REPLACE FUNCTION public.enforce_complaint_rules()
 RETURNS TRIGGER AS $$
 DECLARE
   now_ms BIGINT := (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT;
-  delay_threshold_ms BIGINT := 180000; -- 3 minutes (180,000 ms) for testing; change back to 86400000 for 24h
+  delay_threshold_ms BIGINT := 172800000; -- 48 hours (172,800,000 ms)
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     NEW.created_at := OLD.created_at;
@@ -123,7 +123,7 @@ BEGIN
       NEW.completed_at_ms := now_ms;
     END IF;
 
-    -- Keep is_delayed = TRUE if it took >3m to complete or was already delayed before completion
+    -- Keep is_delayed = TRUE if it took >48h to complete or was already delayed (>48h) before completion
     IF ((NEW.completed_at_ms - NEW.created_at_ms) > delay_threshold_ms)
        OR (TG_OP = 'UPDATE' AND OLD.is_delayed = TRUE)
        OR (NEW.is_delayed = TRUE) THEN

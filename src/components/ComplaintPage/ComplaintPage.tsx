@@ -332,10 +332,10 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               onChange={(e) => setFilterStatus(e.target.value as StatusFilterValue)}
             >
               <option value="ALL">All Status</option>
-              <option value="Pending">Pending (&lt;24h)</option>
+              <option value="Pending">Pending (&lt;48h)</option>
               <option value="Unchecked">Unchecked</option>
               <option value="ManagerDone">Manager Checked</option>
-              <option value="Delayed">Delayed (&gt;24h)</option>
+              <option value="Delayed">Delayed (&gt;48h)</option>
               <option value="Completed">Completed</option>
             </select>
           </div>
