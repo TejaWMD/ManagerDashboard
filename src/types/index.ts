@@ -33,7 +33,7 @@ export interface Complaint {
   status: ComplaintStatus;
 }
 
-const DELAY_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+const DELAY_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 24 hours
 
 export function isComplaintDone(complaint: Complaint): boolean {
   return Boolean(complaint.managerDone && complaint.accountManagerDone);
