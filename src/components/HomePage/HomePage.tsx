@@ -11,26 +11,30 @@ import {
   UserAccount,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
+import { generateWeeklyManagerReportPdf } from '../../lib/pdfReport';
 import './HomePage.css';
 
 interface HomePageProps {
   currentUser: UserAccount;
   complaints: Complaint[];
   onNavigate?: (page: PageView) => void;
+  users?: UserAccount[];
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
   currentUser,
   complaints,
   onNavigate,
+  users,
 }) => {
+  const userList = users && users.length > 0 ? users : AUTHORIZED_USERS;
   const accountManagers = useMemo(
-    () => AUTHORIZED_USERS.filter((u) => u.role === 'account_manager'),
-    []
+    () => userList.filter((u) => u.role === 'account_manager'),
+    [userList]
   );
   const managers = useMemo(
-    () => AUTHORIZED_USERS.filter((u) => u.role === 'manager'),
-    []
+    () => userList.filter((u) => u.role === 'manager'),
+    [userList]
   );
 
   // Live clock so delay / SLA calculations stay accurate in real time
@@ -48,6 +52,25 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [adminTeamTab, setAdminTeamTab] = useState<'managers' | 'account_managers'>(
     'managers'
   );
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+
+  const handleDownloadPdfReport = () => {
+    try {
+      setIsGeneratingPdf(true);
+      generateWeeklyManagerReportPdf({
+        complaints,
+        managers,
+        adminUser: currentUser,
+        nowMs,
+      });
+    } catch (err) {
+      console.error('Failed to generate weekly PDF report:', err);
+    } finally {
+      setTimeout(() => {
+        setIsGeneratingPdf(false);
+      }, 600);
+    }
+  };
 
   const selectedAmObj = accountManagers.find(
     (am) => am.id === selectedAccountManagerId
@@ -233,6 +256,58 @@ export const HomePage: React.FC<HomePageProps> = ({
 
         {/* Filters preserved as required */}
         <div className="hero-banner-actions">
+          {currentUser.role === 'admin' && (
+            <button
+              type="button"
+              className="admin-report-btn"
+              onClick={handleDownloadPdfReport}
+              disabled={isGeneratingPdf}
+              title="Download 1-page Weekly Manager Summary Report as PDF"
+            >
+              {isGeneratingPdf ? (
+                <>
+                  <svg
+                    className="admin-report-spinner"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="9"
+                      strokeDasharray="28"
+                      strokeDashoffset="10"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <span>Generating PDF...</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="admin-report-btn-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <polyline points="9 15 12 18 15 15" />
+                  </svg>
+                  <span>Weekly Report (PDF)</span>
+                </>
+              )}
+            </button>
+          )}
+
           {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
             <div className="hero-filter-item">
               <label htmlFor="home-am-select" className="hero-filter-label">

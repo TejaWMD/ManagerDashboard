@@ -523,6 +523,7 @@ export const App: React.FC = () => {
             <HomePage
               currentUser={currentUser}
               complaints={complaints}
+              users={allUsers}
               onNavigate={setActivePage}
             />
           ) : (

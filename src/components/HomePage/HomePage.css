@@ -88,6 +88,62 @@
   flex-wrap: wrap;
 }
 
+/* Admin Weekly PDF Report Button */
+.admin-report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.38rem 0.9rem;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
+  white-space: nowrap;
+}
+
+.admin-report-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.48);
+}
+
+.admin-report-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.admin-report-btn:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+.admin-report-btn-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.admin-report-spinner {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  animation: admin-report-spin 0.8s linear infinite;
+}
+
+@keyframes admin-report-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .hero-filter-item {
   display: flex;
   align-items: center;
