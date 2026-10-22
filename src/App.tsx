@@ -78,6 +78,8 @@ export const App: React.FC = () => {
   const [dbError, setDbError] = useState<string | null>(null);
   const [savingComplaintId, setSavingComplaintId] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string>('');
 
   // Keep fresh references for realtime subscription closures
   const currentUserRef = useRef<UserAccount | null>(currentUser);
@@ -142,6 +144,29 @@ export const App: React.FC = () => {
     }
     setIsLoadingDb(false);
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        loadComplaints(),
+        fetchUsersFromDb().then((users) => {
+          if (users && users.length > 0) {
+            setAllUsers(users);
+          }
+        }),
+      ]);
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      setLastRefreshedAt(`${hh}:${mm}:${ss}`);
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 450);
+    }
+  }, [loadComplaints]);
 
   useEffect(() => {
     loadComplaints();
@@ -552,6 +577,9 @@ export const App: React.FC = () => {
         onToggleTvMode={() => setTvMode((prev) => !prev)}
         openComplaintsCount={openComplaintsCount}
         onOpenNotifications={() => setIsNotifModalOpen(true)}
+        onRefresh={handleRefresh}
+        isRefreshing={isRefreshing || isLoadingDb}
+        lastRefreshedAt={lastRefreshedAt}
       />
 
       <div className="app-body-column">

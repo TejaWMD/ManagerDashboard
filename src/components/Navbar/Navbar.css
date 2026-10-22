@@ -262,6 +262,81 @@
   color: #ffffff;
 }
 
+/* Refresh Button & Responsive States */
+.sidebar-refresh-btn {
+  position: relative;
+  border-color: rgba(56, 189, 248, 0.15);
+  background: rgba(56, 189, 248, 0.04);
+}
+
+.sidebar-refresh-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+.sidebar-refresh-btn:hover:not(:disabled) .sidebar-refresh-icon {
+  transform: rotate(45deg);
+}
+
+.sidebar-refresh-btn--loading {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+.sidebar-refresh-icon {
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sidebar-refresh-icon--spinning {
+  animation: sidebarSpin 0.75s linear infinite !important;
+}
+
+@keyframes sidebarSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* TV Wall Mode Navigation Overrides */
+.app-shell--tv-mode .sidebar {
+  width: 275px;
+  padding: 1.4rem 1.15rem;
+}
+
+.app-shell--tv-mode .sidebar--collapsed {
+  width: 90px;
+  padding: 1.4rem 0.75rem;
+}
+
+.app-shell--tv-mode .sidebar-app-name {
+  font-size: 1.15rem;
+}
+
+.app-shell--tv-mode .sidebar-role-pill {
+  font-size: 0.78rem;
+}
+
+.app-shell--tv-mode .sidebar-link-btn {
+  padding: 0.85rem 1.05rem;
+  font-size: 1rem;
+  gap: 0.95rem;
+  border-radius: 12px;
+}
+
+.app-shell--tv-mode .sidebar-nav-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.app-shell--tv-mode .sidebar-badge-count {
+  font-size: 0.8rem;
+  padding: 0.16rem 0.58rem;
+}
+
 /* Mobile Top-Bar Navigation */
 @media (max-width: 768px) {
   .sidebar,

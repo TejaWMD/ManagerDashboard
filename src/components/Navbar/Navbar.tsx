@@ -11,6 +11,9 @@ interface NavbarProps {
   onToggleTvMode: () => void;
   openComplaintsCount: number;
   onOpenNotifications?: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+  lastRefreshedAt?: string;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,10 +21,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   activePage,
   onNavigate,
   onLogout,
-  // tvMode,
-  // onToggleTvMode,
+  tvMode,
+  onToggleTvMode,
   openComplaintsCount,
   onOpenNotifications,
+  onRefresh,
+  isRefreshing = false,
+  lastRefreshedAt,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
@@ -140,13 +146,54 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
+        {onRefresh && (
+          <button
+            type="button"
+            className={`sidebar-link-btn sidebar-refresh-btn ${
+              isRefreshing ? 'sidebar-refresh-btn--loading' : ''
+            }`}
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            title={
+              isRefreshing
+                ? 'Syncing portal data...'
+                : lastRefreshedAt
+                ? `Refresh data (Last updated ${lastRefreshedAt})`
+                : 'Refresh portal data'
+            }
+            aria-label="Refresh portal data"
+          >
+            <svg
+              className={`sidebar-nav-icon sidebar-refresh-icon ${
+                isRefreshing ? 'sidebar-refresh-icon--spinning' : ''
+              }`}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="23 4 23 10 17 10" />
+              <polyline points="1 20 1 14 7 14" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+            {!isCollapsed && (
+              <span className="sidebar-link-text">
+                {isRefreshing ? 'Syncing...' : 'Refresh'}
+              </span>
+            )}
+          </button>
+        )}
+
         {/* <button
           type="button"
           className={`sidebar-link-btn sidebar-tv-btn ${
             tvMode ? 'sidebar-tv-btn--active' : ''
           }`}
           onClick={onToggleTvMode}
-          title="TV View"
+          title={tvMode ? 'Exit TV Wall View' : 'Switch to TV Wall View'}
+          aria-label={tvMode ? 'Exit TV Wall View' : 'Switch to TV Wall View'}
         >
           <svg
             className="sidebar-nav-icon"
