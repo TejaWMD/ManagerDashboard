@@ -21,7 +21,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.85rem;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.08);
   position: relative;
@@ -43,6 +43,7 @@
   align-items: center;
   gap: 0.85rem;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .hero-brand-dot {
@@ -86,6 +87,37 @@
   align-items: center;
   gap: 0.65rem;
   flex-wrap: wrap;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.header-company-logo-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: #ffffff;
+  border-radius: 11px;
+  padding: 2.5px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  margin-left: 0.4rem;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  overflow: hidden;
+}
+
+.header-company-logo-badge:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(56, 189, 248, 0.4);
+}
+
+.header-company-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  display: block;
 }
 
 /* Admin Weekly PDF Report Button */
@@ -935,6 +967,34 @@
   }
 }
 
+/* Laptop & Medium Screen Optimization */
+@media (min-width: 769px) and (max-width: 1180px) {
+  .hero-banner {
+    padding: 0.65rem 1rem;
+    gap: 0.65rem;
+  }
+
+  .hero-title {
+    font-size: 1.12rem;
+  }
+
+  .admin-manager-select {
+    max-width: 135px;
+    padding: 0.32rem 0.5rem;
+    font-size: 0.74rem;
+  }
+
+  .admin-report-btn {
+    padding: 0.34rem 0.7rem;
+    font-size: 0.74rem;
+  }
+
+  .header-company-logo-badge {
+    width: 40px;
+    height: 40px;
+  }
+}
+
 /* Mobile & Responsive Layout for Tablets and Smartphones */
 @media (max-width: 768px) {
   .homepage-container {
@@ -948,15 +1008,36 @@
   }
 
   .hero-banner {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 0.8rem 1rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "left logo"
+      "actions actions";
+    padding: 0.75rem 0.95rem;
     gap: 0.75rem;
     border-radius: 12px;
+    align-items: center;
   }
 
   .hero-banner-left {
+    grid-area: left;
     gap: 0.65rem;
+    min-width: 0;
+  }
+
+  .header-company-logo-badge {
+    grid-area: logo;
+    justify-self: end;
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    padding: 2px;
+    margin-left: 0;
+  }
+
+  .header-company-logo-img {
+    border-radius: 7px;
   }
 
   .hero-title {
@@ -970,10 +1051,12 @@
   }
 
   .hero-banner-actions {
+    grid-area: actions;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
     gap: 0.5rem;
     width: 100%;
+    margin-left: 0;
   }
 
   .hero-filter-item {
@@ -1197,8 +1280,18 @@
     gap: 0.7rem;
   }
 
+  .hero-banner {
+    padding: 0.65rem 0.8rem;
+    gap: 0.65rem;
+  }
+
   .hero-title {
     font-size: 1.05rem;
+  }
+
+  .header-company-logo-badge {
+    width: 34px;
+    height: 34px;
   }
 
   .kpi-grid {

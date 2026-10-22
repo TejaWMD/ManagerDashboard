@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PageView, UserAccount } from '../../types';
+import wmdLogo from '../../assets/wmd-logo.jpg';
 import './Navbar.css';
 
 interface NavbarProps {
@@ -38,7 +39,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     >
       <div className="sidebar-top">
         <div className="sidebar-brand">
-          {/* <div className="sidebar-logo">WM</div> */}
+          <div className="sidebar-logo">
+            <img src={wmdLogo} alt="WMD" className="sidebar-logo-img" />
+          </div>
           {!isCollapsed && (
             <div className="sidebar-brand-text">
               <span className="sidebar-app-name">WMD Query Portal</span>

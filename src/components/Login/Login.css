@@ -28,18 +28,67 @@
 
 .login-header {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin-bottom: 1.4rem;
+  gap: 0.65rem;
+  margin-bottom: 1.35rem;
   text-align: center;
+}
+
+.login-logo-container {
+  width: 82px;
+  height: 82px;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 10px 25px -4px rgba(15, 23, 42, 0.12),
+    0 4px 6px -2px rgba(15, 23, 42, 0.05),
+    0 0 0 1px rgba(15, 23, 42, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+
+.login-logo-container:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 28px -4px rgba(15, 23, 42, 0.18),
+    0 0 0 1px rgba(79, 70, 229, 0.25);
+}
+
+.login-company-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 14px;
+  display: block;
+}
+
+.login-title-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
 }
 
 .login-title {
   font-size: 1.5rem;
   font-weight: 800;
   color: #0f172a;
-  margin: 0 auto;
+  margin: 0;
   letter-spacing: -0.02em;
+}
+
+.login-portal-subtitle {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #64748b;
+  margin: 0;
+  letter-spacing: 0.01em;
 }
 
 .role-selector-tabs {
@@ -190,14 +239,34 @@
   }
 
   .login-card {
-    padding: 1.5rem 1.2rem;
+    padding: 1.4rem 1.15rem;
     border-radius: 16px;
     max-height: none;
     margin: auto 0;
   }
 
+  .login-header {
+    gap: 0.45rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .login-logo-container {
+    width: 68px;
+    height: 68px;
+    border-radius: 15px;
+    padding: 3px;
+  }
+
+  .login-company-logo {
+    border-radius: 12px;
+  }
+
   .login-title {
     font-size: 1.35rem;
+  }
+
+  .login-portal-subtitle {
+    font-size: 0.78rem;
   }
 
   .role-selector-tabs {

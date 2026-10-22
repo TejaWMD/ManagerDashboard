@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserAccount, UserRole } from '../../types';
 import { authenticateUser } from '../../data/users';
+import wmdLogo from '../../assets/wmd-logo.jpg';
 import './Login.css';
 
 interface LoginProps {
@@ -41,8 +42,17 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     <div className="login-page">
       <div className="login-card">
         <div className="login-header">
-          {/* <div className="login-logo-mark">WMD</div> */}
-          <h1 className="login-title">Sign In</h1>
+          <div className="login-logo-container">
+            <img
+              src={wmdLogo}
+              alt="WMD Company Logo"
+              className="login-company-logo"
+            />
+          </div>
+          <div className="login-title-group">
+            <h1 className="login-title">Sign In</h1>
+            <p className="login-portal-subtitle">WMD Query Portal</p>
+          </div>
         </div>
 
         <div className="role-selector-tabs" role="tablist">

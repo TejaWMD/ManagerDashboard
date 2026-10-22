@@ -10,6 +10,7 @@ import {
   UserAccount,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
+import wmdLogo from '../../assets/wmd-logo.jpg';
 import './ComplaintPage.css';
 
 interface ComplaintPageProps {
@@ -360,6 +361,15 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               + Add Complaint
             </button>
           )}
+        </div>
+
+        {/* Company Logo at Top Right */}
+        <div className="header-company-logo-badge" title="WMD">
+          <img
+            src={wmdLogo}
+            alt="WMD Company Logo"
+            className="header-company-logo-img"
+          />
         </div>
       </header>
 

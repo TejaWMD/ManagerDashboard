@@ -12,6 +12,7 @@ import {
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
 import { generateWeeklyManagerReportPdf } from '../../lib/pdfReport';
+import wmdLogo from '../../assets/wmd-logo.jpg';
 import './HomePage.css';
 
 interface HomePageProps {
@@ -352,6 +353,14 @@ export const HomePage: React.FC<HomePageProps> = ({
               </select>
             </div>
           )}
+        </div>
+
+        <div className="header-company-logo-badge" title="WMD">
+          <img
+            src={wmdLogo}
+            alt="WMD Company Logo"
+            className="header-company-logo-img"
+          />
         </div>
       </header>
 
