@@ -26,11 +26,14 @@ import {
   registerServiceWorker,
   showWebNotification,
 } from './lib/notifications';
+import { dispatchComplaintPushNotification } from './lib/pushDispatcher';
+import { checkAndNotifyDelayedComplaints } from './lib/slaDelayChecker';
 import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
 import { HomePage } from './components/HomePage/HomePage';
 import { ComplaintPage } from './components/ComplaintPage/ComplaintPage';
 import { NotificationModal } from './components/NotificationModal/NotificationModal';
+import { NotificationBanner } from './components/NotificationBanner/NotificationBanner';
 import sqlSchemaText from '../supabase_schema.sql?raw';
 import './App.css';
 
@@ -91,6 +94,20 @@ export const App: React.FC = () => {
       }
     });
   }, []);
+
+  // Monitor for SLA delay breaches and dispatch push notifications
+  useEffect(() => {
+    if (complaints.length === 0) return;
+    checkAndNotifyDelayedComplaints(complaints);
+
+    const delayTimer = window.setInterval(() => {
+      if (complaintsRef.current.length > 0) {
+        checkAndNotifyDelayedComplaints(complaintsRef.current);
+      }
+    }, 60 * 1000); // Check every minute
+
+    return () => window.clearInterval(delayTimer);
+  }, [complaints.length]);
 
   const loadComplaints = useCallback(async () => {
     setIsLoadingDb(true);
@@ -329,6 +346,13 @@ export const App: React.FC = () => {
         persistComplaintsCache(next);
         return next;
       });
+
+      // Dispatch desktop background push notification to assigned Manager & Admin
+      dispatchComplaintPushNotification({
+        event: 'NEW_COMPLAINT',
+        complaint: data,
+        actor: currentUser,
+      });
     }
   };
 
@@ -440,6 +464,55 @@ export const App: React.FC = () => {
         persistComplaintsCache(next);
         return next;
       });
+
+      // Dispatch desktop background push notifications to involved users & admin
+      if (
+        updates.managerDone !== undefined &&
+        updates.managerDone !== existing.managerDone &&
+        updates.managerDone
+      ) {
+        dispatchComplaintPushNotification({
+          event: 'MANAGER_DONE',
+          complaint: data,
+          actor: currentUser,
+          isDone: true,
+        });
+      } else if (
+        updates.accountManagerDone !== undefined &&
+        updates.accountManagerDone !== existing.accountManagerDone &&
+        updates.accountManagerDone
+      ) {
+        dispatchComplaintPushNotification({
+          event: 'AM_DONE',
+          complaint: data,
+          actor: currentUser,
+          isDone: true,
+        });
+      }
+
+      if (
+        updates.managerRemark !== undefined &&
+        updates.managerRemark.trim() !== existing.managerRemark.trim() &&
+        updates.managerRemark.trim()
+      ) {
+        dispatchComplaintPushNotification({
+          event: 'MANAGER_REMARK',
+          complaint: data,
+          actor: currentUser,
+          remarkText: updates.managerRemark,
+        });
+      } else if (
+        updates.accountManagerRemark !== undefined &&
+        updates.accountManagerRemark.trim() !== existing.accountManagerRemark.trim() &&
+        updates.accountManagerRemark.trim()
+      ) {
+        dispatchComplaintPushNotification({
+          event: 'AM_REMARK',
+          complaint: data,
+          actor: currentUser,
+          remarkText: updates.accountManagerRemark,
+        });
+      }
     }
   };
 
@@ -518,6 +591,8 @@ export const App: React.FC = () => {
           </div>
         )}
 
+        <NotificationBanner currentUser={currentUser} />
+
         <main className="app-main-content">
           {activePage === 'home' ? (
             <HomePage
@@ -541,6 +616,7 @@ export const App: React.FC = () => {
       <NotificationModal
         isOpen={isNotifModalOpen}
         onClose={() => setIsNotifModalOpen(false)}
+        currentUser={currentUser}
       />
     </div>
   );

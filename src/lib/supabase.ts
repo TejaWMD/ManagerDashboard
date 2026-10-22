@@ -64,6 +64,7 @@ export interface ComplaintRow {
   completed_at?: string | null;
   completed_at_ms?: number | null;
   is_delayed?: boolean | null;
+  delay_notified?: boolean | null;
 }
 
 export function mapRowToComplaint(row: ComplaintRow): Complaint {
@@ -126,6 +127,7 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
     accountManagerRemark: row.account_manager_remark || '',
     accountManagerDone,
     status,
+    delayNotified: Boolean(row.delay_notified),
   };
 }
 

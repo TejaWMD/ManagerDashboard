@@ -35,6 +35,7 @@ export interface Complaint {
   accountManagerRemark: string;
   accountManagerDone: boolean;
   status: ComplaintStatus;
+  delayNotified?: boolean;
 }
 
 export const DELAY_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours (172,800,000 ms)

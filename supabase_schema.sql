@@ -1,7 +1,6 @@
 -- ============================================================================
--- WM Manager Dashboard - Supabase Relational Schema (Updated with SLA / Delay Tracking)
+-- WM Manager Dashboard - Supabase Relational Schema (Complete with SLA & Web Push)
 -- Connected by: complaint_id, account_manager_id, manager_id, created_at, and completed_at
--- Run this script in your Supabase Dashboard -> SQL Editor -> New Query
 -- ============================================================================
 
 -- 1. Users Table (Account Managers, Managers, Admin)
@@ -20,17 +19,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT NULL;
 
--- Drop callmebot column if present from previous test
-ALTER TABLE public.users
-  DROP COLUMN IF EXISTS callmebot_api_key;
-
--- Drop legacy department column if it exists from an earlier schema version
-ALTER TABLE public.users DROP COLUMN IF EXISTS department;
-
--- Remove old manager account if present and not referenced, or update mgr-1
-DELETE FROM public.users WHERE email = 'wmgteja@gmail.com' AND id != 'mgr-1';
-
--- Seed authorized users with phone numbers so notifications work immediately
+-- Seed authorized users
 INSERT INTO public.users (id, name, email, role, role_label, avatar_initials, phone)
 VALUES
   ('am-1', 'Shakti', 'wmdklshakti@gmail.com', 'account_manager', 'Account Manager', 'SK', '+60194167570'),
@@ -49,7 +38,6 @@ ON CONFLICT (id) DO UPDATE SET
   phone = COALESCE(EXCLUDED.phone, public.users.phone);
 
 -- 2. Complaints Table
--- Keyed by complaint_id and linked to account_manager_id, manager_id, immutable created_at, and completion SLA tracking
 CREATE TABLE IF NOT EXISTS public.complaints (
   complaint_id TEXT PRIMARY KEY,
   account_manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE,
@@ -68,14 +56,16 @@ CREATE TABLE IF NOT EXISTS public.complaints (
   created_at_ms BIGINT NOT NULL,
   completed_at TEXT DEFAULT NULL,
   completed_at_ms BIGINT DEFAULT NULL,
-  is_delayed BOOLEAN NOT NULL DEFAULT FALSE
+  is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
+  delay_notified BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Safely add new columns if upgrading an existing complaints table
 ALTER TABLE public.complaints
   ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS completed_at_ms BIGINT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS is_delayed BOOLEAN NOT NULL DEFAULT FALSE;
+  ADD COLUMN IF NOT EXISTS is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS delay_notified BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Backfill existing completed rows that do not have completed_at_ms yet
 UPDATE public.complaints
@@ -102,16 +92,12 @@ CREATE INDEX IF NOT EXISTS idx_complaints_created_at_ms ON public.complaints(cre
 CREATE INDEX IF NOT EXISTS idx_complaints_status ON public.complaints(status);
 CREATE INDEX IF NOT EXISTS idx_complaints_is_delayed ON public.complaints(is_delayed);
 
--- Trigger to enforce:
--- 1) created_at and created_at_ms NEVER change on UPDATE
--- 2) account_manager_done is automatically reset to FALSE if manager_done is FALSE
--- 3) status is 'Completed' ONLY when BOTH manager_done AND account_manager_done are TRUE
--- 4) completed_at / completed_at_ms and is_delayed (>48h SLA breach) are persisted even after completion
+-- 3. Trigger to enforce complaint rules & delay calculations
 CREATE OR REPLACE FUNCTION public.enforce_complaint_rules()
 RETURNS TRIGGER AS $$
 DECLARE
   now_ms BIGINT := (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT;
-  delay_threshold_ms BIGINT := 172800000; -- 48 hours (172,800,000 ms)
+  delay_threshold_ms BIGINT := 172800000; -- 48 hours
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     NEW.created_at := OLD.created_at;
@@ -133,7 +119,6 @@ BEGIN
       NEW.completed_at_ms := now_ms;
     END IF;
 
-    -- Keep is_delayed = TRUE if it took >48h to complete or was already delayed (>48h) before completion
     IF ((NEW.completed_at_ms - NEW.created_at_ms) > delay_threshold_ms)
        OR (TG_OP = 'UPDATE' AND OLD.is_delayed = TRUE)
        OR (NEW.is_delayed = TRUE) THEN
@@ -163,11 +148,10 @@ BEFORE INSERT OR UPDATE ON public.complaints
 FOR EACH ROW
 EXECUTE FUNCTION public.enforce_complaint_rules();
 
--- 3. Enable Row Level Security & Policies for Anon/Public Client Access
+-- 4. Enable Row Level Security & Policies for Anon/Public Client Access
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.complaints ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Allow read access to users" ON public.users;
 DROP POLICY IF EXISTS "Allow full access to users" ON public.users;
 CREATE POLICY "Allow full access to users"
   ON public.users FOR ALL
@@ -180,7 +164,7 @@ CREATE POLICY "Allow full access to complaints"
   USING (true)
   WITH CHECK (true);
 
--- 4. Enable Realtime for complaints table (with full replica identity for updates/deletes)
+-- 5. Enable Realtime for complaints table
 ALTER TABLE public.complaints REPLICA IDENTITY FULL;
 
 DO $$
@@ -193,7 +177,7 @@ BEGIN
   END IF;
 END $$;
 
--- 5. Push Subscriptions Table (for Web Push notifications across desktop & mobile)
+-- 6. Push Subscriptions Table (for Web Push notifications across desktop & mobile)
 CREATE TABLE IF NOT EXISTS public.push_subscriptions (
   id BIGSERIAL PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
