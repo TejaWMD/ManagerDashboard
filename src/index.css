@@ -1,24 +1,60 @@
 :root {
-  --c-bg: #f1f5f9;
-  --c-surface: #ffffff;
-  --c-surface-alt: #f8fafc;
-  --c-navy: #0f172a;
-  --c-navy-light: #1e293b;
-  --c-text: #0f172a;
-  --c-text-muted: #64748b;
-  --c-border: #e2e8f0;
-  --c-border-strong: #cbd5e1;
+  /* Core Requested Palette */
+  --c-dark: #251a0a;
+  --c-russet: #844918;
+  --c-caramel: #c18036;
+  --c-orange: #d6742b;
+  --c-cream: #efedce;
+  --c-gold: #f2bc6c;
 
-  --c-primary: #4f46e5;
-  --c-primary-light: #eef2ff;
-  --c-teal: #0ea5e9;
-  --c-teal-light: #e0f2fe;
-  --c-emerald: #10b981;
-  --c-emerald-light: #d1fae5;
-  --c-amber: #f59e0b;
-  --c-amber-light: #fef3c7;
-  --c-rose: #f43f5e;
-  --c-rose-light: #ffe4e6;
+  /* Surfaces & Backgrounds */
+  --c-bg: #faf8f0;
+  --c-surface: #ffffff;
+  --c-surface-alt: #f8f6ec;
+  --c-surface-warm: #f4efdb;
+  --c-surface-cream: #efedce;
+
+  /* Text & Contrast */
+  --c-navy: #251a0a;
+  --c-navy-light: #3a2813;
+  --c-text: #251a0a;
+  --c-text-muted: #754117;
+  --c-text-subtle: #995c27;
+
+  /* Borders */
+  --c-border: rgba(193, 128, 54, 0.22);
+  --c-border-strong: rgba(132, 73, 24, 0.4);
+
+  /* Functional mappings for existing components */
+  --c-primary: #d6742b;
+  --c-primary-light: #fdede0;
+  --c-primary-hover: #c46019;
+  --c-teal: #c18036;
+  --c-teal-light: #f9f1e6;
+  --c-emerald: #844918;
+  --c-emerald-light: #faefe6;
+  --c-amber: #f2bc6c;
+  --c-amber-light: #fef7eb;
+  --c-rose: #d6742b;
+  --c-rose-light: #fdede0;
+
+  /* Bubbly Design System Tokens */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 9999px;
+
+  --shadow-bubble-sm: 0 4px 12px rgba(37, 26, 10, 0.05);
+  --shadow-bubble: 0 8px 24px -4px rgba(37, 26, 10, 0.08), 0 3px 8px -2px rgba(37, 26, 10, 0.04);
+  --shadow-bubble-lg: 0 16px 36px -6px rgba(37, 26, 10, 0.12), 0 6px 14px -3px rgba(37, 26, 10, 0.06);
+  --shadow-bubble-glow: 0 8px 25px rgba(214, 116, 43, 0.25);
+  --shadow-bubble-gold: 0 8px 22px rgba(242, 188, 108, 0.35);
+
+  --font-family-base: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --transition-bounce: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 *,
@@ -36,8 +72,7 @@ body,
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, sans-serif;
+  font-family: var(--font-family-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
@@ -51,6 +86,29 @@ select,
 textarea {
   font-family: inherit;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom Bubbly Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(239, 237, 206, 0.5);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(193, 128, 54, 0.38);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(132, 73, 24, 0.6);
 }
 
 @media (max-width: 768px) {

@@ -24,8 +24,8 @@ export function generateWeeklyManagerReportPdf({
   const margin = 14;
   const contentWidth = pageWidth - margin * 2; // 182mm
 
-  // Top decorative accent bar
-  doc.setFillColor(37, 99, 235);
+  // Top decorative accent bar (Vivid Spice Orange)
+  doc.setFillColor(214, 116, 43);
   doc.rect(0, 0, pageWidth, 4, 'F');
 
   // Header Title & Branding
@@ -33,13 +33,13 @@ export function generateWeeklyManagerReportPdf({
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.setTextColor(37, 99, 235);
+  doc.setTextColor(214, 116, 43);
   doc.text('WMD MANAGER PORTAL', margin, currentY);
 
   currentY += 6;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(37, 26, 10);
   doc.text('Manager Performance Report', margin, currentY);
 
   // Top Right Metadata
@@ -81,10 +81,10 @@ export function generateWeeklyManagerReportPdf({
   const cardHeight = 18;
 
   const summaryCards = [
-    { title: 'TOTAL QUERIES', value: totalCount, border: [203, 213, 225], top: [37, 99, 235], text: [15, 23, 42] },
-    { title: 'COMPLETED', value: doneCount, border: [167, 243, 208], top: [16, 185, 129], text: [5, 150, 105] },
-    { title: 'PENDING ACTION', value: pendingCount, border: [253, 230, 138], top: [245, 158, 11], text: [217, 119, 6] },
-    { title: 'DELAYED (>48H)', value: delayedCount, border: [254, 202, 202], top: [239, 68, 68], text: [220, 38, 38] },
+    { title: 'TOTAL QUERIES', value: totalCount, border: [239, 237, 206], top: [132, 73, 24], text: [37, 26, 10] },
+    { title: 'COMPLETED', value: doneCount, border: [239, 237, 206], top: [193, 128, 54], text: [132, 73, 24] },
+    { title: 'PENDING ACTION', value: pendingCount, border: [242, 188, 108], top: [242, 188, 108], text: [132, 73, 24] },
+    { title: 'DELAYED (>48H)', value: delayedCount, border: [253, 237, 224], top: [214, 116, 43], text: [214, 116, 43] },
   ];
 
   summaryCards.forEach((c, idx) => {
