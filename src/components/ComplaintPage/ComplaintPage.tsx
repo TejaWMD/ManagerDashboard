@@ -960,7 +960,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
             </div>
 
             <form className="modal-form" onSubmit={handleConfirmRemarkAndDone}>
-              <div
+              {/* <div
                 style={{
                   background: 'rgba(214, 116, 43, 0.08)',
                   border: '1px solid rgba(214, 116, 43, 0.3)',
@@ -972,7 +972,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 }}
               >
                 <strong>Director Policy:</strong> Managers cannot mark complaints as Done without explaining the resolution or actions taken.
-              </div>
+              </div> */}
 
               <div className="cp-form-group">
                 <label htmlFor="mandatory-remark-input">Solution / Resolution Notes *</label>
