@@ -156,8 +156,9 @@
    TABLE CARD & WRAPPER
    ========================================================================== */
 .complaints-table-card {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
+  max-height: 100%;
   background: #ffffff;
   border-radius: var(--radius-lg);
   border: 1.5px solid rgba(193, 128, 54, 0.2);
@@ -168,18 +169,44 @@
 }
 
 .complaints-table-wrapper {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   width: 100%;
   overflow-y: auto;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(193, 128, 54, 0.45) rgba(239, 237, 206, 0.4);
+}
+
+.complaints-table-wrapper::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.complaints-table-wrapper::-webkit-scrollbar-track {
+  background: rgba(239, 237, 206, 0.45);
+  border-radius: var(--radius-pill);
+}
+
+.complaints-table-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(193, 128, 54, 0.42);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+
+.complaints-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(132, 73, 24, 0.65);
 }
 
 .complaints-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 980px;
+  min-width: 1060px;
 }
 
 .complaints-table thead th {
@@ -197,6 +224,7 @@
   border-bottom: 2px solid rgba(193, 128, 54, 0.25);
   border-right: 1px solid rgba(239, 237, 206, 0.7);
   white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(193, 128, 54, 0.25);
 }
 
 .complaints-table thead th:last-child {
@@ -766,14 +794,16 @@
   .complaint-page-container {
     display: flex;
     flex-direction: column;
-    height: auto;
-    min-height: 100%;
-    max-height: none;
-    gap: 0.85rem;
-    overflow: visible;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    gap: 0.65rem;
+    overflow: hidden;
   }
 
   .complaint-page-header {
+    flex-shrink: 0;
     display: grid;
     grid-template-columns: 1fr auto;
     grid-template-rows: auto auto;
@@ -849,7 +879,9 @@
 
   .complaints-table-card {
     border-radius: var(--radius-md);
-    min-height: 420px;
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 100%;
   }
 
   .complaints-table thead th {
@@ -907,6 +939,6 @@
   }
 
   .complaints-table-card {
-    min-height: 360px;
+    min-height: 0;
   }
 }

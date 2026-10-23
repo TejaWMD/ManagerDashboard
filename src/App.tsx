@@ -624,7 +624,7 @@ export const App: React.FC = () => {
         lastRefreshedAt={lastRefreshedAt}
       />
 
-      <div className="app-body-column">
+      <div className={`app-body-column app-body-column--${activePage}`}>
         {dbTableMissing && (
           <div className="db-setup-banner" role="alert">
             <span>Database tables not initialized.</span>
@@ -663,7 +663,7 @@ export const App: React.FC = () => {
 
         <NotificationBanner currentUser={currentUser} />
 
-        <main className="app-main-content">
+        <main className={`app-main-content app-main-content--${activePage}`}>
           {activePage === 'home' ? (
             <HomePage
               currentUser={currentUser}
