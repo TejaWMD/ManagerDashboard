@@ -57,6 +57,14 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [selectedManagerId, setSelectedManagerId] = useState<string>('ALL');
   const [teamTab, setTeamTab] = useState<'managers' | 'account_managers'>('managers');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [viewingComplaint, setViewingComplaint] = useState<Complaint | null>(null);
+  const activeViewingComplaint = useMemo(() => {
+    if (!viewingComplaint) return null;
+    return (
+      complaints.find((c) => c.complaintId === viewingComplaint.complaintId) ||
+      viewingComplaint
+    );
+  }, [complaints, viewingComplaint]);
 
   // Rolling 7-day weighted KPI (Director Policy)
   const manager7dKpi = useMemo(() => {
@@ -778,7 +786,13 @@ export const HomePage: React.FC<HomePageProps> = ({
               const isMgrChecked = item.managerDone && !item.accountManagerDone;
 
               return (
-                <div key={item.complaintId} className="recent-row-item">
+                <div
+                  key={item.complaintId}
+                  className="recent-row-item"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setViewingComplaint(item)}
+                  title="Click to view complaint details"
+                >
                   <span className="recent-id-badge">{item.complaintId}</span>
                   <div className="recent-people-tags">
                     <span className="recent-person-chip">{item.accountManagerName}</span>
@@ -827,6 +841,176 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
       </section>
+
+      {/* View Complaint Details Pop-up Modal */}
+      {activeViewingComplaint && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setViewingComplaint(null)}
+        >
+          <div
+            className="modal-dialog complaint-view-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="home-view-complaint-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-header-text">
+                <div className="complaint-view-title-row">
+                  <h3 id="home-view-complaint-modal-title">
+                    Complaint {activeViewingComplaint.complaintId}
+                  </h3>
+                  <div className="td-status-pills-wrap">
+                    {isComplaintDone(activeViewingComplaint) ? (
+                      <>
+                        <span className="table-status-pill table-status-pill--completed">
+                          Completed
+                        </span>
+                        {isComplaintDelayed(activeViewingComplaint, nowMs) && (
+                          <span className="table-status-pill table-status-pill--delayed">
+                            Delayed
+                          </span>
+                        )}
+                      </>
+                    ) : activeViewingComplaint.managerDone &&
+                      !activeViewingComplaint.accountManagerDone ? (
+                      <>
+                        <span className="table-status-pill table-status-pill--mgr-done">
+                          Mgr Checked
+                        </span>
+                        {isComplaintDelayed(activeViewingComplaint, nowMs) && (
+                          <span className="table-status-pill table-status-pill--delayed">
+                            Delayed
+                          </span>
+                        )}
+                      </>
+                    ) : isComplaintDelayed(activeViewingComplaint, nowMs) ? (
+                      <span className="table-status-pill table-status-pill--delayed">
+                        Delayed
+                      </span>
+                    ) : (
+                      <span className="table-status-pill table-status-pill--pending">
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="modal-sender-badge">
+                  Created: <strong>{activeViewingComplaint.createdAt}</strong>
+                  {activeViewingComplaint.completedAt && (
+                    <>
+                      {' '}
+                      &bull; Completed:{' '}
+                      <strong>{activeViewingComplaint.completedAt}</strong>
+                    </>
+                  )}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setViewingComplaint(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="complaint-view-body">
+              <div className="complaint-view-meta-grid">
+                <div className="complaint-view-meta-box">
+                  <span className="complaint-view-meta-label">From (Sender)</span>
+                  <div className="person-cell-wrapper">
+                    <span className="complaint-view-meta-value">
+                      {activeViewingComplaint.accountManagerName}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="complaint-view-meta-box">
+                  <span className="complaint-view-meta-label">Assigned Manager</span>
+                  <div className="person-cell-wrapper">
+                    <span className="complaint-view-meta-value">
+                      {activeViewingComplaint.managerName}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="complaint-view-section">
+                <span className="complaint-view-section-label">Complaint Details</span>
+                <div className="complaint-view-content-box">
+                  {activeViewingComplaint.complaintText}
+                </div>
+              </div>
+
+              <div className="complaint-view-remarks-grid">
+                <div className="complaint-view-section">
+                  <div className="complaint-view-section-header">
+                    <span className="complaint-view-section-label">Manager Remark</span>
+                    <span
+                      className={`complaint-view-check-tag ${
+                        activeViewingComplaint.managerDone
+                          ? 'complaint-view-check-tag--done'
+                          : ''
+                      }`}
+                    >
+                      {activeViewingComplaint.managerDone ? '✓ Mgr Done' : 'Unchecked'}
+                    </span>
+                  </div>
+                  <div
+                    className={`complaint-view-remark-box ${
+                      !activeViewingComplaint.managerRemark
+                        ? 'complaint-view-remark-box--empty'
+                        : ''
+                    }`}
+                  >
+                    {activeViewingComplaint.managerRemark || 'No manager remark yet.'}
+                  </div>
+                </div>
+
+                <div className="complaint-view-section">
+                  <div className="complaint-view-section-header">
+                    <span className="complaint-view-section-label">Sender Remark</span>
+                    <span
+                      className={`complaint-view-check-tag ${
+                        activeViewingComplaint.accountManagerDone
+                          ? 'complaint-view-check-tag--done'
+                          : ''
+                      }`}
+                    >
+                      {activeViewingComplaint.accountManagerDone
+                        ? '✓ Sender Done'
+                        : 'Unchecked'}
+                    </span>
+                  </div>
+                  <div
+                    className={`complaint-view-remark-box ${
+                      !activeViewingComplaint.accountManagerRemark
+                        ? 'complaint-view-remark-box--empty'
+                        : ''
+                    }`}
+                  >
+                    {activeViewingComplaint.accountManagerRemark ||
+                      'No sender remark yet.'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => setViewingComplaint(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
