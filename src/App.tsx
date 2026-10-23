@@ -194,15 +194,28 @@ export const App: React.FC = () => {
 
             // Trigger real-time browser/system notification on receiver's device
             if (user && incoming.accountManagerId !== user.id) {
+              const senderObj = AUTHORIZED_USERS.find(
+                (u) => u.id === incoming.accountManagerId
+              );
+              const senderRolePrefix =
+                senderObj?.role === 'manager'
+                  ? 'Manager'
+                  : senderObj?.role === 'account_manager'
+                  ? 'Account Manager'
+                  : '';
+              const senderLabel = senderRolePrefix
+                ? `${senderRolePrefix} ${incoming.accountManagerName}`
+                : incoming.accountManagerName;
+
               if (user.role === 'admin') {
                 showWebNotification(
                   '🚨 New Complaint Created',
-                  `${incoming.accountManagerName} submitted ${incoming.complaintId} to ${incoming.managerName}`
+                  `${senderLabel} submitted ${incoming.complaintId} to Manager ${incoming.managerName}`
                 );
               } else if (user.id === incoming.managerId) {
                 showWebNotification(
                   '🚨 New Complaint Assigned',
-                  `${incoming.accountManagerName} assigned ${incoming.complaintId} to you`
+                  `${senderLabel} assigned ${incoming.complaintId} to you`
                 );
               }
             }
@@ -220,11 +233,24 @@ export const App: React.FC = () => {
 
             // Trigger real-time browser/system notifications for relevant receivers
             if (prevItem && user) {
+              const senderObj = AUTHORIZED_USERS.find(
+                (u) => u.id === updated.accountManagerId
+              );
+              const senderRolePrefix =
+                senderObj?.role === 'manager'
+                  ? 'Manager'
+                  : senderObj?.role === 'account_manager'
+                  ? 'Account Manager'
+                  : '';
+              const senderLabel = senderRolePrefix
+                ? `${senderRolePrefix} ${updated.accountManagerName}`
+                : updated.accountManagerName;
+
               if (updated.status === 'Completed' && prevItem.status !== 'Completed') {
                 if (user.id === updated.managerId || user.role === 'admin') {
                   showWebNotification(
                     '🎉 Complaint Completed',
-                    `${updated.complaintId} marked Completed by ${updated.accountManagerName}!`
+                    `${updated.complaintId} marked Completed by ${senderLabel}!`
                   );
                 }
               } else if (updated.managerDone !== prevItem.managerDone) {
@@ -244,8 +270,8 @@ export const App: React.FC = () => {
               } else if (updated.accountManagerRemark !== prevItem.accountManagerRemark) {
                 if (user.id === updated.managerId || user.role === 'admin') {
                   showWebNotification(
-                    '💬 AM Added Remark',
-                    `AM ${updated.accountManagerName} on ${updated.complaintId}: "${updated.accountManagerRemark}"`
+                    `💬 ${senderRolePrefix || 'Sender'} Added Remark`,
+                    `${senderLabel} on ${updated.complaintId}: "${updated.accountManagerRemark}"`
                   );
                 }
               }
@@ -561,7 +587,10 @@ export const App: React.FC = () => {
       return belongsToAccountManager(c, currentUser);
     }
     if (currentUser.role === 'manager') {
-      return belongsToManager(c, currentUser);
+      return (
+        belongsToManager(c, currentUser) ||
+        belongsToAccountManager(c, currentUser)
+      );
     }
     return true;
   }).length;

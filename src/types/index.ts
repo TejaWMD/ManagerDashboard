@@ -162,3 +162,20 @@ export function belongsToManager(
     complaint.managerEmail.toLowerCase() === manager.email.toLowerCase()
   );
 }
+
+export function isComplaintRelevantToUser(
+  complaint: Complaint,
+  user: Pick<UserAccount, 'id' | 'email' | 'role'>
+): boolean {
+  if (user.role === 'admin') return true;
+  if (user.role === 'account_manager') {
+    return belongsToAccountManager(complaint, user);
+  }
+  if (user.role === 'manager') {
+    return (
+      belongsToManager(complaint, user) ||
+      belongsToAccountManager(complaint, user)
+    );
+  }
+  return true;
+}

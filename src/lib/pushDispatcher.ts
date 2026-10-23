@@ -94,11 +94,18 @@ export function formatNotificationContent(
   actor: UserAccount,
   remarkText?: string
 ): { title: string; body: string } {
+  const actorRoleLabel =
+    actor.role === 'manager'
+      ? 'Manager'
+      : actor.role === 'account_manager'
+      ? 'Account Manager'
+      : 'Admin';
+
   switch (event) {
     case 'NEW_COMPLAINT':
       return {
         title: `🚨 New Complaint: ${complaint.complaintId}`,
-        body: `${actor.name} assigned ${complaint.complaintId} to ${complaint.managerName}: "${complaint.complaintText.slice(0, 80)}"`,
+        body: `${actorRoleLabel} ${actor.name} assigned ${complaint.complaintId} to ${complaint.managerName}: "${complaint.complaintText.slice(0, 80)}"`,
       };
 
     case 'MANAGER_REMARK':
@@ -110,19 +117,19 @@ export function formatNotificationContent(
     case 'MANAGER_DONE':
       return {
         title: `✅ Manager Checked Done: ${complaint.complaintId}`,
-        body: `Manager ${actor.name} marked ${complaint.complaintId} as Done. Pending AM verification.`,
+        body: `Manager ${actor.name} marked ${complaint.complaintId} as Done. Pending sender verification.`,
       };
 
     case 'AM_REMARK':
       return {
-        title: `💬 AM Remark: ${complaint.complaintId}`,
-        body: `AM ${actor.name}: "${(remarkText || complaint.accountManagerRemark).slice(0, 90)}"`,
+        title: `💬 ${actorRoleLabel} Remark: ${complaint.complaintId}`,
+        body: `${actorRoleLabel} ${actor.name}: "${(remarkText || complaint.accountManagerRemark).slice(0, 90)}"`,
       };
 
     case 'AM_DONE':
       return {
         title: `🎉 Complaint Completed: ${complaint.complaintId}`,
-        body: `AM ${actor.name} verified and marked Done. ${complaint.complaintId} is now Completed!`,
+        body: `${actorRoleLabel} ${actor.name} verified and marked Done. ${complaint.complaintId} is now Completed!`,
       };
 
     case 'COMPLAINT_DELAYED':

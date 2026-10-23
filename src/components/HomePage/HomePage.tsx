@@ -29,6 +29,10 @@ export const HomePage: React.FC<HomePageProps> = ({
   users,
 }) => {
   const userList = users && users.length > 0 ? users : AUTHORIZED_USERS;
+  const senders = useMemo(
+    () => userList.filter((u) => u.role === 'account_manager' || u.role === 'manager'),
+    [userList]
+  );
   const accountManagers = useMemo(
     () => userList.filter((u) => u.role === 'account_manager'),
     [userList]
@@ -73,7 +77,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
-  const selectedAmObj = accountManagers.find(
+  const selectedAmObj = senders.find(
     (am) => am.id === selectedAccountManagerId
   );
   const selectedManagerObj = managers.find((m) => m.id === selectedManagerId);
@@ -312,19 +316,19 @@ export const HomePage: React.FC<HomePageProps> = ({
           {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
             <div className="hero-filter-item">
               <label htmlFor="home-am-select" className="hero-filter-label">
-                Account Mgr
+                From
               </label>
               <select
                 id="home-am-select"
-                aria-label="Filter by Account Manager"
+                aria-label="Filter by Sender"
                 className="admin-manager-select"
                 value={selectedAccountManagerId}
                 onChange={(e) => setSelectedAccountManagerId(e.target.value)}
               >
-                <option value="ALL">All Account Managers</option>
-                {accountManagers.map((am) => (
-                  <option key={am.id} value={am.id}>
-                    {am.name}
+                <option value="ALL">All Senders</option>
+                {senders.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.role === 'manager' ? 'Mgr' : 'AM'})
                   </option>
                 ))}
               </select>

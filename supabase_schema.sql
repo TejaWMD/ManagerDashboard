@@ -38,12 +38,16 @@ ON CONFLICT (id) DO UPDATE SET
   phone = COALESCE(EXCLUDED.phone, public.users.phone);
 
 -- 2. Complaints Table
+-- Note: Both Account Managers and Managers can submit complaints.
+-- All complaints must be addressed to a Manager (manager_id).
+-- The creator/sender is stored in account_manager_id (which references public.users(id)).
+-- Because public.users contains both managers and account managers, NO schema migration is needed!
 CREATE TABLE IF NOT EXISTS public.complaints (
   complaint_id TEXT PRIMARY KEY,
-  account_manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE,
+  account_manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE, -- Sender/Creator (AM or Manager)
   account_manager_name TEXT NOT NULL,
   account_manager_email TEXT NOT NULL,
-  manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE,
+  manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE, -- Assigned Manager (must be manager)
   manager_name TEXT NOT NULL,
   manager_email TEXT NOT NULL,
   complaint_text TEXT NOT NULL,

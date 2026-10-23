@@ -46,6 +46,8 @@ type StatusFilterValue =
   | 'Delayed'
   | 'Completed';
 
+type ManagerViewScope = 'ALL' | 'RECEIVED' | 'SENT';
+
 export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   currentUser,
   complaints,
@@ -53,14 +55,30 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   onCreateComplaint,
   onUpdateComplaint,
 }) => {
-  const accountManagers = useMemo(
-    () => AUTHORIZED_USERS.filter((u) => u.role === 'account_manager'),
+  // All potential senders (Account Managers + Managers)
+  const senders = useMemo(
+    () =>
+      AUTHORIZED_USERS.filter(
+        (u) => u.role === 'account_manager' || u.role === 'manager'
+      ),
     []
   );
+
+  // All managers (complaints can ONLY be sent to managers)
   const managers = useMemo(
     () => AUTHORIZED_USERS.filter((u) => u.role === 'manager'),
     []
   );
+
+  // Available target managers when creating a new complaint
+  // If currentUser is a manager, prioritize other managers so they send complaints among themselves
+  const targetManagersForCreation = useMemo(() => {
+    if (currentUser.role === 'manager') {
+      const otherManagers = managers.filter((m) => m.id !== currentUser.id);
+      return otherManagers.length > 0 ? otherManagers : managers;
+    }
+    return managers;
+  }, [currentUser, managers]);
 
   // Live clock so Delayed status updates automatically
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
@@ -72,7 +90,8 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   }, []);
 
   // Header filter states
-  const [filterAccountManagerId, setFilterAccountManagerId] = useState<string>('ALL');
+  const [managerViewType, setManagerViewType] = useState<ManagerViewScope>('ALL');
+  const [filterSenderId, setFilterSenderId] = useState<string>('ALL');
   const [filterManagerId, setFilterManagerId] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<StatusFilterValue>('ALL');
   const [timestampOrder, setTimestampOrder] = useState<'desc' | 'asc'>('desc');
@@ -80,14 +99,22 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   // Create modal states
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [selectedManagerId, setSelectedManagerId] = useState<string>(
-    managers[0]?.id || ''
+    targetManagersForCreation[0]?.id || ''
   );
   const [complaintInput, setComplaintInput] = useState<string>('');
   const [isSubmittingNew, setIsSubmittingNew] = useState<boolean>(false);
 
+  // Keep target manager selection in sync when modal opens
+  const handleOpenCreateModal = () => {
+    if (targetManagersForCreation.length > 0) {
+      setSelectedManagerId(targetManagersForCreation[0].id);
+    }
+    setShowCreateModal(true);
+  };
+
   // Inline editing states
-  const [editingAmRemarkId, setEditingAmRemarkId] = useState<string | null>(null);
-  const [amRemarkDraft, setAmRemarkDraft] = useState<string>('');
+  const [editingSenderRemarkId, setEditingSenderRemarkId] = useState<string | null>(null);
+  const [senderRemarkDraft, setSenderRemarkDraft] = useState<string>('');
 
   const [editingComplaintTextId, setEditingComplaintTextId] = useState<string | null>(null);
   const [complaintTextDraft, setComplaintTextDraft] = useState<string>('');
@@ -96,13 +123,19 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
   // 1. Role-scoped complaints
+  // Account Managers see complaints they created.
+  // Managers see complaints assigned to them AND complaints they sent among themselves.
+  // Admin sees all complaints.
   const roleScopedComplaints = useMemo(() => {
     return complaints.filter((c) => {
       if (currentUser.role === 'account_manager') {
         return belongsToAccountManager(c, currentUser);
       }
       if (currentUser.role === 'manager') {
-        return belongsToManager(c, currentUser);
+        return (
+          belongsToManager(c, currentUser) ||
+          belongsToAccountManager(c, currentUser)
+        );
       }
       return true;
     });
@@ -110,40 +143,42 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
   // 2. Apply header filters & automatic status + timestamp sorting
   const sortedAndFilteredComplaints = useMemo(() => {
-    const selectedAmObj = accountManagers.find((am) => am.id === filterAccountManagerId);
+    const selectedSenderObj = senders.find((s) => s.id === filterSenderId);
     const selectedMgrObj = managers.find((m) => m.id === filterManagerId);
 
     const filtered = roleScopedComplaints.filter((c) => {
-      // Account Manager filter (available to Manager & Admin)
-      if (
-        (currentUser.role === 'manager' || currentUser.role === 'admin') &&
-        filterAccountManagerId !== 'ALL' &&
-        selectedAmObj
-      ) {
-        if (!belongsToAccountManager(c, selectedAmObj)) {
+      // Manager view scope: All, Received, or Sent
+      if (currentUser.role === 'manager' && managerViewType !== 'ALL') {
+        if (managerViewType === 'RECEIVED' && !belongsToManager(c, currentUser)) {
+          return false;
+        }
+        if (managerViewType === 'SENT' && !belongsToAccountManager(c, currentUser)) {
           return false;
         }
       }
 
-      // Manager filter (available to Account Manager & Admin)
-      if (
-        (currentUser.role === 'account_manager' || currentUser.role === 'admin') &&
-        filterManagerId !== 'ALL' &&
-        selectedMgrObj
-      ) {
+      // Sender filter (From)
+      if (filterSenderId !== 'ALL' && selectedSenderObj) {
+        if (!belongsToAccountManager(c, selectedSenderObj)) {
+          return false;
+        }
+      }
+
+      // Assigned Manager filter (To)
+      if (filterManagerId !== 'ALL' && selectedMgrObj) {
         if (!belongsToManager(c, selectedMgrObj)) {
           return false;
         }
       }
 
-      // Status filter (available to all roles)
+      // Status filter
       if (filterStatus !== 'ALL') {
         const done = isComplaintDone(c);
         const delayed = isComplaintDelayed(c, nowMs);
-        const pendingUnder24h = isComplaintPending(c, nowMs);
+        const pendingUnder48h = isComplaintPending(c, nowMs);
 
         if (filterStatus === 'Completed' && !done) return false;
-        if (filterStatus === 'Pending' && !pendingUnder24h) return false;
+        if (filterStatus === 'Pending' && !pendingUnder48h) return false;
         if (filterStatus === 'Delayed' && !delayed) return false;
         if (filterStatus === 'Unchecked' && (c.managerDone || c.accountManagerDone)) {
           return false;
@@ -160,23 +195,27 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   }, [
     roleScopedComplaints,
     currentUser.role,
-    filterAccountManagerId,
+    managerViewType,
+    filterSenderId,
     filterManagerId,
     filterStatus,
-    accountManagers,
+    senders,
     managers,
     timestampOrder,
     nowMs,
+    currentUser,
   ]);
 
   const hasActiveFilters =
-    filterAccountManagerId !== 'ALL' ||
+    managerViewType !== 'ALL' ||
+    filterSenderId !== 'ALL' ||
     filterManagerId !== 'ALL' ||
     filterStatus !== 'ALL' ||
     timestampOrder !== 'desc';
 
   const handleResetFilters = () => {
-    setFilterAccountManagerId('ALL');
+    setManagerViewType('ALL');
+    setFilterSenderId('ALL');
     setFilterManagerId('ALL');
     setFilterStatus('ALL');
     setTimestampOrder('desc');
@@ -205,17 +244,17 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     }
   };
 
-  const startEditAmRemark = (item: Complaint) => {
-    setEditingAmRemarkId(item.complaintId);
-    setAmRemarkDraft(item.accountManagerRemark);
+  const startEditSenderRemark = (item: Complaint) => {
+    setEditingSenderRemarkId(item.complaintId);
+    setSenderRemarkDraft(item.accountManagerRemark);
   };
 
-  const saveAmRemark = async (complaintId: string) => {
+  const saveSenderRemark = async (complaintId: string) => {
     await onUpdateComplaint(complaintId, {
-      accountManagerRemark: amRemarkDraft.trim(),
+      accountManagerRemark: senderRemarkDraft.trim(),
     });
-    setEditingAmRemarkId(null);
-    setAmRemarkDraft('');
+    setEditingSenderRemarkId(null);
+    setSenderRemarkDraft('');
   };
 
   const startEditComplaintText = (item: Complaint) => {
@@ -246,25 +285,45 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   };
 
   const handleToggleManagerDone = async (item: Complaint) => {
-    if (currentUser.role !== 'manager') return;
+    // Only assigned manager or admin can toggle Manager Done
+    const isAssigned = item.managerId === currentUser.id;
+    if (!isAssigned && currentUser.role !== 'admin') return;
+
     const nextManagerDone = !item.managerDone;
     await onUpdateComplaint(item.complaintId, {
       managerDone: nextManagerDone,
-      // If manager unchecks their box, also reset accountManagerDone so AM only checks when fully completed
+      // If manager unchecks their box, also reset sender verification so sender only checks when resolved
       ...(!nextManagerDone && item.accountManagerDone
         ? { accountManagerDone: false }
         : {}),
     });
   };
 
-  const handleToggleAccountManagerDone = async (item: Complaint) => {
-    if (currentUser.role !== 'account_manager') return;
-    // Account manager will only check the box once the complaint is completed by manager
+  const handleToggleSenderDone = async (item: Complaint) => {
+    // Only the creator/sender or admin can toggle Sender Done
+    const isSender = item.accountManagerId === currentUser.id;
+    if (!isSender && currentUser.role !== 'admin') return;
+
+    // Sender will only check the box once the complaint is completed by assigned manager
     if (!item.accountManagerDone && !item.managerDone) return;
+
     await onUpdateComplaint(item.complaintId, {
       accountManagerDone: !item.accountManagerDone,
     });
   };
+
+  // Helper to get role badge for sender
+  const getSenderRoleBadge = (senderId: string) => {
+    const userMatch = AUTHORIZED_USERS.find((u) => u.id === senderId);
+    if (!userMatch) return null;
+    return userMatch.role === 'manager' ? 'Mgr' : userMatch.role === 'account_manager' ? 'AM' : 'Admin';
+  };
+
+  // Can current user add a complaint? (AMs, Managers, and Admins)
+  const canAddComplaint =
+    currentUser.role === 'account_manager' ||
+    currentUser.role === 'manager' ||
+    currentUser.role === 'admin';
 
   return (
     <div className="complaint-page-container">
@@ -277,51 +336,69 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         </div>
 
         <div className="complaint-header-controls">
-          {/* Account Manager Filter: shown for Managers & Admin */}
+          {/* Manager View Scope Filter: All, Received, Sent */}
+          {currentUser.role === 'manager' && (
+            <div className="header-filter-group">
+              <label htmlFor="filter-view-scope" className="header-filter-label">
+                View
+              </label>
+              <select
+                id="filter-view-scope"
+                className="header-filter-select"
+                value={managerViewType}
+                onChange={(e) => setManagerViewType(e.target.value as ManagerViewScope)}
+                title="Filter complaints by role: Received (Assigned to you) or Sent (Sent by you)"
+              >
+                <option value="ALL">All Complaints</option>
+                <option value="RECEIVED">Received (Assigned)</option>
+                <option value="SENT">Sent (By Me)</option>
+              </select>
+            </div>
+          )}
+
+          {/* Sender Filter: shown for Managers & Admin */}
           {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
             <div className="header-filter-group">
-              <label htmlFor="filter-am" className="header-filter-label">
-                Account Mgr
+              <label htmlFor="filter-sender" className="header-filter-label">
+                From
               </label>
               <select
-                id="filter-am"
+                id="filter-sender"
                 className="header-filter-select"
-                value={filterAccountManagerId}
-                onChange={(e) => setFilterAccountManagerId(e.target.value)}
+                value={filterSenderId}
+                onChange={(e) => setFilterSenderId(e.target.value)}
               >
-                <option value="ALL">All Account Managers</option>
-                {accountManagers.map((am) => (
-                  <option key={am.id} value={am.id}>
-                    {am.name}
+                <option value="ALL">All Senders</option>
+                {senders.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.role === 'manager' ? 'Mgr' : 'AM'})
                   </option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* Manager Filter: shown for Account Managers & Admin */}
-          {(currentUser.role === 'account_manager' || currentUser.role === 'admin') && (
-            <div className="header-filter-group">
-              <label htmlFor="filter-mgr" className="header-filter-label">
-                Manager
-              </label>
-              <select
-                id="filter-mgr"
-                className="header-filter-select"
-                value={filterManagerId}
-                onChange={(e) => setFilterManagerId(e.target.value)}
-              >
-                <option value="ALL">All Managers</option>
-                {managers.map((mgr) => (
-                  <option key={mgr.id} value={mgr.id}>
-                    {mgr.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Assigned Manager Filter: shown for all roles */}
+          <div className="header-filter-group">
+            <label htmlFor="filter-mgr" className="header-filter-label">
+              Manager
+            </label>
+            <select
+              id="filter-mgr"
+              className="header-filter-select"
+              value={filterManagerId}
+              onChange={(e) => setFilterManagerId(e.target.value)}
+            >
+              <option value="ALL">All Managers</option>
+              {managers.map((mgr) => (
+                <option key={mgr.id} value={mgr.id}>
+                  {mgr.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          {/* Status Filter: shown for all roles */}
+          {/* Status Filter */}
           <div className="header-filter-group">
             <label htmlFor="filter-status" className="header-filter-label">
               Status
@@ -352,11 +429,13 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
             </button>
           )}
 
-          {currentUser.role === 'account_manager' && (
+          {/* Add Complaint Button: available for Managers & Account Managers */}
+          {canAddComplaint && (
             <button
               type="button"
               className="header-add-btn"
-              onClick={() => setShowCreateModal(true)}
+              onClick={handleOpenCreateModal}
+              title="Submit a new complaint to a manager"
             >
               + Add Complaint
             </button>
@@ -391,16 +470,13 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   </span>
                 </th>
                 <th>ID</th>
-                {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
-                  <th>Account Manager</th>
-                )}
-                {(currentUser.role === 'account_manager' ||
-                  currentUser.role === 'admin') && <th>Manager</th>}
+                <th>From (Sender)</th>
+                <th>Assigned Mgr</th>
                 <th>Complaint</th>
                 <th>Manager Remark</th>
-                <th className="th-center">Manager Done</th>
-                <th>AM Remark</th>
-                <th className="th-center">AM Done</th>
+                <th className="th-center">Mgr Done</th>
+                <th>Sender Remark</th>
+                <th className="th-center">Sender Done</th>
                 <th className="th-center">Status</th>
               </tr>
             </thead>
@@ -411,12 +487,23 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 const managerOnlyChecked = item.managerDone && !item.accountManagerDone;
                 const isRowSaving = savingComplaintId === item.complaintId;
 
-                const amCannotCheckYet =
+                const isSender = currentUser.id === item.accountManagerId;
+                const isAssignedManager = currentUser.id === item.managerId;
+                const isAdmin = currentUser.role === 'admin';
+
+                const canEditComplaintText = isSender || isAdmin;
+                const canEditMgrRemark = isAssignedManager || isAdmin;
+                const canToggleMgrDone = (isAssignedManager || isAdmin) && !isRowSaving;
+                const canEditSenderRemark = isSender || isAdmin;
+
+                const senderCannotCheckYet =
                   !item.managerDone && !item.accountManagerDone;
-                const isAmCheckboxDisabled =
-                  currentUser.role !== 'account_manager' ||
+                const isSenderCheckboxDisabled =
+                  !(isSender || isAdmin) ||
                   isRowSaving ||
-                  amCannotCheckYet;
+                  senderCannotCheckYet;
+
+                const senderRoleBadge = getSenderRoleBadge(item.accountManagerId);
 
                 const rowStateClass = completed
                   ? 'row-completed'
@@ -432,18 +519,36 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       <span className="complaint-id-badge">{item.complaintId}</span>
                     </td>
 
-                    {(currentUser.role === 'manager' ||
-                      currentUser.role === 'admin') && (
-                      <td className="td-person">{item.accountManagerName}</td>
-                    )}
+                    {/* Sender Cell */}
+                    <td className="td-person">
+                      <div className="person-cell-wrapper">
+                        <span>{item.accountManagerName}</span>
+                        {senderRoleBadge && (
+                          <span
+                            className={`person-role-tag person-role-tag--${senderRoleBadge.toLowerCase()}`}
+                          >
+                            {senderRoleBadge}
+                          </span>
+                        )}
+                        {isSender && (
+                          <span className="person-self-tag">(You)</span>
+                        )}
+                      </div>
+                    </td>
 
-                    {(currentUser.role === 'account_manager' ||
-                      currentUser.role === 'admin') && (
-                      <td className="td-person">{item.managerName}</td>
-                    )}
+                    {/* Assigned Manager Cell */}
+                    <td className="td-person">
+                      <div className="person-cell-wrapper">
+                        <span>{item.managerName}</span>
+                        {isAssignedManager && (
+                          <span className="person-self-tag">(You)</span>
+                        )}
+                      </div>
+                    </td>
 
+                    {/* Complaint Text */}
                     <td className="td-complaint-text">
-                      {currentUser.role === 'account_manager' &&
+                      {canEditComplaintText &&
                       editingComplaintTextId === item.complaintId ? (
                         <div className="inline-edit-box">
                           <textarea
@@ -473,7 +578,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       ) : (
                         <div className="remark-display-row">
                           <p className="complaint-body-text">{item.complaintText}</p>
-                          {currentUser.role === 'account_manager' && (
+                          {canEditComplaintText && (
                             <button
                               type="button"
                               className="btn-inline-edit"
@@ -486,15 +591,16 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       )}
                     </td>
 
+                    {/* Manager Remark */}
                     <td className="td-remark">
-                      {currentUser.role === 'manager' ? (
+                      {canEditMgrRemark ? (
                         editingMgrRemarkId === item.complaintId ? (
                           <div className="inline-edit-box">
                             <textarea
                               rows={2}
                               value={mgrRemarkDraft}
                               onChange={(e) => setMgrRemarkDraft(e.target.value)}
-                              placeholder="Remark..."
+                              placeholder="Manager remark..."
                             />
                             <div className="inline-edit-actions">
                               <button
@@ -545,49 +651,54 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       )}
                     </td>
 
+                    {/* Manager Done Checkbox */}
                     <td className="td-check-cell">
                       <label
                         className={`check-button-label ${
                           item.managerDone ? 'check-button-label--checked' : ''
                         } ${
-                          currentUser.role !== 'manager'
-                            ? 'check-button-label--readonly'
-                            : ''
+                          !canToggleMgrDone ? 'check-button-label--readonly' : ''
                         }`}
+                        title={
+                          !isAssignedManager && !isAdmin
+                            ? `Only assigned manager (${item.managerName}) can mark Manager Done`
+                            : undefined
+                        }
                       >
                         <input
                           type="checkbox"
                           checked={item.managerDone}
-                          disabled={currentUser.role !== 'manager' || isRowSaving}
+                          disabled={!canToggleMgrDone}
                           onChange={() => handleToggleManagerDone(item)}
                         />
                         <span>Done</span>
                       </label>
                     </td>
 
+                    {/* Sender Remark (accountManagerRemark) */}
                     <td className="td-remark">
-                      {currentUser.role === 'account_manager' ? (
-                        editingAmRemarkId === item.complaintId ? (
+                      {canEditSenderRemark ? (
+                        editingSenderRemarkId === item.complaintId ? (
                           <div className="inline-edit-box">
                             <textarea
                               rows={2}
-                              value={amRemarkDraft}
-                              onChange={(e) => setAmRemarkDraft(e.target.value)}
-                              placeholder="Remark..."
+                              value={senderRemarkDraft}
+                              onChange={(e) => setSenderRemarkDraft(e.target.value)}
+                              placeholder="Sender remark..."
                             />
                             <div className="inline-edit-actions">
                               <button
                                 type="button"
                                 className="btn-inline-save"
                                 disabled={isRowSaving}
-                                onClick={() => saveAmRemark(item.complaintId)}
+                                onClick={() => saveSenderRemark(item.complaintId)}
                               >
                                 Save
                               </button>
                               <button
                                 type="button"
                                 className="btn-inline-cancel"
-                                onClick={() => setEditingAmRemarkId(null)}
+                                onClick={() => setEditingSenderRemarkId(null)}
                               >
                                 Cancel
                               </button>
@@ -607,7 +718,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                             <button
                               type="button"
                               className="btn-inline-edit"
-                              onClick={() => startEditAmRemark(item)}
+                              onClick={() => startEditSenderRemark(item)}
                             >
                               Edit
                             </button>
@@ -626,29 +737,33 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       )}
                     </td>
 
+                    {/* Sender Done Checkbox (accountManagerDone) */}
                     <td className="td-check-cell">
                       <label
                         className={`check-button-label ${
                           item.accountManagerDone ? 'check-button-label--checked' : ''
                         } ${
-                          isAmCheckboxDisabled ? 'check-button-label--readonly' : ''
+                          isSenderCheckboxDisabled ? 'check-button-label--readonly' : ''
                         }`}
                         title={
-                          amCannotCheckYet
-                            ? 'Manager must check Done before Account Manager can mark as completed'
+                          !(isSender || isAdmin)
+                            ? `Only sender (${item.accountManagerName}) can mark verified completion`
+                            : senderCannotCheckYet
+                            ? 'Assigned Manager must mark Done before you can verify & complete'
                             : undefined
                         }
                       >
                         <input
                           type="checkbox"
                           checked={item.accountManagerDone}
-                          disabled={isAmCheckboxDisabled}
-                          onChange={() => handleToggleAccountManagerDone(item)}
+                          disabled={isSenderCheckboxDisabled}
+                          onChange={() => handleToggleSenderDone(item)}
                         />
                         <span>Done</span>
                       </label>
                     </td>
 
+                    {/* Status Cell */}
                     <td className="td-status-cell">
                       <div className="td-status-pills-wrap">
                         {completed ? (
@@ -690,10 +805,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
               {sortedAndFilteredComplaints.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={currentUser.role === 'admin' ? 10 : 9}
-                    className="empty-complaints-cell"
-                  >
+                  <td colSpan={10} className="empty-complaints-cell">
                     No complaints match the selected filters.
                   </td>
                 </tr>
@@ -703,7 +815,8 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         </div>
       </section>
 
-      {currentUser.role === 'account_manager' && showCreateModal && (
+      {/* New Complaint Modal - available to Managers and Account Managers */}
+      {showCreateModal && (
         <div
           className="modal-backdrop"
           onClick={() => setShowCreateModal(false)}
@@ -716,7 +829,12 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
             aria-labelledby="create-complaint-modal-title"
           >
             <div className="modal-header">
-              <h3 id="create-complaint-modal-title">New Complaint</h3>
+              <div className="modal-header-text">
+                <h3 id="create-complaint-modal-title">New Complaint</h3>
+                <span className="modal-sender-badge">
+                  From: <strong>{currentUser.name}</strong> ({currentUser.roleLabel})
+                </span>
+              </div>
               <button
                 type="button"
                 className="modal-close-btn"
@@ -729,27 +847,30 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
             <form className="modal-form" onSubmit={handleCreateSubmit}>
               <div className="cp-form-group">
-                <label htmlFor="select-manager">Manager</label>
+                <label htmlFor="select-manager">Send Complaint To (Manager)</label>
                 <select
                   id="select-manager"
                   value={selectedManagerId}
                   onChange={(e) => setSelectedManagerId(e.target.value)}
                   required
                 >
-                  {managers.map((mgr) => (
+                  {targetManagersForCreation.map((mgr) => (
                     <option key={mgr.id} value={mgr.id}>
                       {mgr.name} ({mgr.email})
                     </option>
                   ))}
                 </select>
+                {/* <span className="form-helper-text">
+                  Anyone submitting a complaint can only send it to managers.
+                </span> */}
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="write-complaint">Complaint</label>
+                <label htmlFor="write-complaint">Complaint Details</label>
                 <textarea
                   id="write-complaint"
-                  rows={4}
-                  placeholder="Write complaint..."
+                  rows={8}
+                  placeholder="Describe the complaint in detail..."
                   value={complaintInput}
                   onChange={(e) => setComplaintInput(e.target.value)}
                   required
@@ -769,7 +890,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   className="btn-primary"
                   disabled={isSubmittingNew}
                 >
-                  {isSubmittingNew ? '...' : 'Submit'}
+                  {isSubmittingNew ? 'Submitting...' : 'Submit Complaint'}
                 </button>
               </div>
             </form>
