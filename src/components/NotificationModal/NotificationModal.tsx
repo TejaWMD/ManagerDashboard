@@ -156,9 +156,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             <span className="notif-icon">🔔</span>
             <div>
               <h3>Browser Notification Settings</h3>
-              <p className="notif-subtitle">
+              {/* <p className="notif-subtitle">
                 Receive instant desktop alerts even when tabs are closed
-              </p>
+              </p> */}
             </div>
           </div>
           <button
@@ -195,9 +195,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               </span>
             </div>
             <p className="notif-desc">
-              When enabled, your device will receive native system banners and an audible
-              chime whenever a complaint is assigned, a remark is submitted, a box is checked,
-              or SLA delays occur.
+              When enabled, your device will receive notifications whenever a complaint is assigned, a remark is submitted, a box is checked
             </p>
 
             <div className="notif-btn-row">
@@ -212,7 +210,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 </button>
               ) : (
                 <>
-                  <button
+                  {/* <button
                     type="button"
                     className="notif-btn notif-btn--secondary"
                     onClick={handleTestWebPush}
@@ -226,7 +224,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                     disabled={loading}
                   >
                     Disable on this device
-                  </button>
+                  </button> */}
                 </>
               )}
             </div>
@@ -244,9 +242,9 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               )}
               {currentUser.role === 'manager' && (
                 <>
-                  <li>Notified when an account manager submits a complaint for you</li>
-                  <li>Notified when the account manager submits a remark</li>
-                  <li>Notified when the account manager checks Done</li>
+                  <li>Notified when a sender submits a complaint for you</li>
+                  <li>Notified when the sender submits a remark</li>
+                  <li>Notified when the sender checks Done</li>
                   <li>Notified when a complaint is delayed without manager action</li>
                 </>
               )}
