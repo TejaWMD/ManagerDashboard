@@ -420,6 +420,18 @@
   gap: 0.4rem;
 }
 
+.inline-edit-box input[type='text'],
+.inline-edit-title-input {
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid rgba(193, 128, 54, 0.35);
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--c-dark);
+  background: #ffffff;
+}
+
 .inline-edit-box textarea {
   width: 100%;
   padding: 0.5rem 0.7rem;
@@ -431,6 +443,8 @@
   resize: vertical;
 }
 
+.inline-edit-box input[type='text']:focus,
+.inline-edit-title-input:focus,
 .inline-edit-box textarea:focus {
   outline: none;
   border-color: var(--c-orange);
@@ -691,6 +705,7 @@
 }
 
 .cp-form-group select,
+.cp-form-group input[type='text'],
 .cp-form-group textarea {
   padding: 0.85rem 1.05rem; /* Increased from 0.7rem 0.9rem */
   border-radius: var(--radius-sm);
@@ -708,6 +723,7 @@
 }
 
 .cp-form-group select:focus,
+.cp-form-group input[type='text']:focus,
 .cp-form-group textarea:focus {
   outline: none;
   border-color: var(--c-orange);
@@ -894,6 +910,42 @@
 .complaint-view-remark-box--empty {
   color: var(--c-text-subtle);
   font-style: italic;
+}
+
+.complaint-view-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.complaint-view-field-block--desc {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed rgba(193, 128, 54, 0.28);
+}
+
+.complaint-view-sub-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-text-muted);
+}
+
+.complaint-view-item-title {
+  font-size: 0.94rem;
+  font-weight: 800;
+  color: var(--c-dark);
+  line-height: 1.4;
+}
+
+.complaint-view-item-desc {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--c-dark);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .complaint-view-check-tag {

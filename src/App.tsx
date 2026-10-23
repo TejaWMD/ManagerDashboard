@@ -261,18 +261,30 @@ export const App: React.FC = () => {
                     `Manager ${updated.managerName} ${updated.managerDone ? 'marked Done on' : 'unmarked'} ${updated.complaintId}`
                   );
                 }
-              } else if (updated.managerRemark !== prevItem.managerRemark) {
+              } else if (
+                updated.managerRemarkTitle !== prevItem.managerRemarkTitle ||
+                updated.managerRemark !== prevItem.managerRemark
+              ) {
                 if (user.id === updated.accountManagerId || user.role === 'admin') {
+                  const mgrRemarkSummary =
+                    updated.managerRemarkTitle || updated.managerRemark;
                   showWebNotification(
                     '💬 Manager Added Remark',
-                    `Manager ${updated.managerName} on ${updated.complaintId}: "${updated.managerRemark}"`
+                    `Manager ${updated.managerName} on ${updated.complaintId}: "${mgrRemarkSummary}"`
                   );
                 }
-              } else if (updated.accountManagerRemark !== prevItem.accountManagerRemark) {
+              } else if (
+                updated.accountManagerRemarkTitle !==
+                  prevItem.accountManagerRemarkTitle ||
+                updated.accountManagerRemark !== prevItem.accountManagerRemark
+              ) {
                 if (user.id === updated.managerId || user.role === 'admin') {
+                  const amRemarkSummary =
+                    updated.accountManagerRemarkTitle ||
+                    updated.accountManagerRemark;
                   showWebNotification(
                     `💬 ${senderRolePrefix || 'Sender'} Added Remark`,
-                    `${senderLabel} on ${updated.complaintId}: "${updated.accountManagerRemark}"`
+                    `${senderLabel} on ${updated.complaintId}: "${amRemarkSummary}"`
                   );
                 }
               }
@@ -345,6 +357,7 @@ export const App: React.FC = () => {
     managerId: string;
     managerEmail: string;
     managerName: string;
+    complaintTitle: string;
     complaintText: string;
   }) => {
     if (!currentUser) return;
@@ -365,9 +378,12 @@ export const App: React.FC = () => {
       managerId: payload.managerId,
       managerEmail: payload.managerEmail,
       managerName: payload.managerName,
+      complaintTitle: payload.complaintTitle,
       complaintText: payload.complaintText,
+      managerRemarkTitle: '',
       managerRemark: '',
       managerDone: false,
+      accountManagerRemarkTitle: '',
       accountManagerRemark: '',
       accountManagerDone: false,
       status: 'Pending',
@@ -413,9 +429,12 @@ export const App: React.FC = () => {
     updates: Partial<
       Pick<
         Complaint,
+        | 'complaintTitle'
         | 'complaintText'
+        | 'managerRemarkTitle'
         | 'managerRemark'
         | 'managerDone'
+        | 'accountManagerRemarkTitle'
         | 'accountManagerRemark'
         | 'accountManagerDone'
       >
@@ -555,26 +574,42 @@ export const App: React.FC = () => {
       }
 
       if (
-        updates.managerRemark !== undefined &&
-        updates.managerRemark.trim() !== existing.managerRemark.trim() &&
-        updates.managerRemark.trim()
+        (updates.managerRemarkTitle !== undefined ||
+          updates.managerRemark !== undefined) &&
+        ((updates.managerRemarkTitle ?? existing.managerRemarkTitle).trim() !==
+          (existing.managerRemarkTitle || '').trim() ||
+          (updates.managerRemark ?? existing.managerRemark).trim() !==
+            (existing.managerRemark || '').trim()) &&
+        ((updates.managerRemarkTitle ?? '').trim() ||
+          (updates.managerRemark ?? '').trim())
       ) {
         dispatchComplaintPushNotification({
           event: 'MANAGER_REMARK',
           complaint: data,
           actor: currentUser,
-          remarkText: updates.managerRemark,
+          remarkText:
+            (updates.managerRemarkTitle ?? '').trim() ||
+            (updates.managerRemark ?? '').trim(),
         });
       } else if (
-        updates.accountManagerRemark !== undefined &&
-        updates.accountManagerRemark.trim() !== existing.accountManagerRemark.trim() &&
-        updates.accountManagerRemark.trim()
+        (updates.accountManagerRemarkTitle !== undefined ||
+          updates.accountManagerRemark !== undefined) &&
+        ((
+          updates.accountManagerRemarkTitle ??
+          existing.accountManagerRemarkTitle
+        ).trim() !== (existing.accountManagerRemarkTitle || '').trim() ||
+          (updates.accountManagerRemark ?? existing.accountManagerRemark).trim() !==
+            (existing.accountManagerRemark || '').trim()) &&
+        ((updates.accountManagerRemarkTitle ?? '').trim() ||
+          (updates.accountManagerRemark ?? '').trim())
       ) {
         dispatchComplaintPushNotification({
           event: 'AM_REMARK',
           complaint: data,
           actor: currentUser,
-          remarkText: updates.accountManagerRemark,
+          remarkText:
+            (updates.accountManagerRemarkTitle ?? '').trim() ||
+            (updates.accountManagerRemark ?? '').trim(),
         });
       }
     }

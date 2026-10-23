@@ -29,11 +29,14 @@ export interface Complaint {
   managerId: string; // Foreign Key -> UserAccount.id (e.g., 'mgr-1')
   managerEmail: string;
   managerName: string;
+  complaintTitle: string;
   complaintText: string;
+  managerRemarkTitle: string;
   managerRemark: string;
   managerDone: boolean;
   managerDoneAt?: string | null; // Timestamp when assigned manager marked Done
   managerDoneAtMs?: number | null; // Epoch ms when assigned manager marked Done (for SLA tracking)
+  accountManagerRemarkTitle: string;
   accountManagerRemark: string;
   accountManagerDone: boolean;
   status: ComplaintStatus;

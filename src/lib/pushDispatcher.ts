@@ -105,13 +105,13 @@ export function formatNotificationContent(
     case 'NEW_COMPLAINT':
       return {
         title: `🚨 New Complaint: ${complaint.complaintId}`,
-        body: `${actorRoleLabel} ${actor.name} assigned ${complaint.complaintId} to ${complaint.managerName}: "${complaint.complaintText.slice(0, 80)}"`,
+        body: `${actorRoleLabel} ${actor.name} assigned ${complaint.complaintId} to ${complaint.managerName}: "${(complaint.complaintTitle || complaint.complaintText).slice(0, 80)}"`,
       };
 
     case 'MANAGER_REMARK':
       return {
         title: `💬 Manager Remark: ${complaint.complaintId}`,
-        body: `Manager ${actor.name}: "${(remarkText || complaint.managerRemark).slice(0, 90)}"`,
+        body: `Manager ${actor.name}: "${(remarkText || complaint.managerRemarkTitle || complaint.managerRemark).slice(0, 90)}"`,
       };
 
     case 'MANAGER_DONE':
@@ -123,7 +123,7 @@ export function formatNotificationContent(
     case 'AM_REMARK':
       return {
         title: `💬 ${actorRoleLabel} Remark: ${complaint.complaintId}`,
-        body: `${actorRoleLabel} ${actor.name}: "${(remarkText || complaint.accountManagerRemark).slice(0, 90)}"`,
+        body: `${actorRoleLabel} ${actor.name}: "${(remarkText || complaint.accountManagerRemarkTitle || complaint.accountManagerRemark).slice(0, 90)}"`,
       };
 
     case 'AM_DONE':

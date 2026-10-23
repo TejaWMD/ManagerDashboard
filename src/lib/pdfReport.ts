@@ -257,7 +257,8 @@ export function generateWeeklyManagerReportPdf({
 
     delayedComplaints.slice(0, 3).forEach((dc, dIdx) => {
       const rowY = currentY + 11 + dIdx * 4;
-      const snippet = dc.complaintText.length > 50 ? `${dc.complaintText.slice(0, 47)}...` : dc.complaintText;
+      const summaryText = dc.complaintTitle || dc.complaintText;
+      const snippet = summaryText.length > 50 ? `${summaryText.slice(0, 47)}...` : summaryText;
       doc.text(`• Query #${dc.complaintId || dc.id} (${dc.managerName || 'Unassigned'}): ${snippet}`, margin + 5, rowY);
     });
   }

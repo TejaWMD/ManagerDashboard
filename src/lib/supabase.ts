@@ -55,11 +55,14 @@ export interface ComplaintRow {
   manager_id: string;
   manager_name: string;
   manager_email: string;
+  complaint_title?: string | null;
   complaint_text: string;
+  manager_remark_title?: string | null;
   manager_remark: string;
   manager_done: boolean;
   manager_done_at?: string | null;
   manager_done_at_ms?: number | null;
+  account_manager_remark_title?: string | null;
   account_manager_remark: string;
   account_manager_done: boolean;
   status: ComplaintStatus;
@@ -69,6 +72,54 @@ export interface ComplaintRow {
   completed_at_ms?: number | null;
   is_delayed?: boolean | null;
   delay_notified?: boolean | null;
+}
+
+const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
+
+// Tracks whether the Supabase table has the dedicated *_title columns
+let titleColumnsSupported: boolean | null = null;
+
+export function packTitleAndDescription(
+  title?: string | null,
+  description?: string | null
+): string {
+  const cleanTitle = (title ?? '').trim();
+  const cleanDesc = (description ?? '').trim();
+  if (!cleanTitle && !cleanDesc) return '';
+  return `${cleanTitle}${TITLE_DESC_SEPARATOR}${cleanDesc}`;
+}
+
+export function unpackTitleAndDescription(
+  rawText?: string | null,
+  explicitTitle?: string | null
+): { title: string; description: string } {
+  const raw = rawText ?? '';
+  const hasExplicitTitle =
+    explicitTitle !== undefined &&
+    explicitTitle !== null &&
+    explicitTitle.trim() !== '';
+
+  if (raw.includes(TITLE_DESC_SEPARATOR)) {
+    const [packedTitle, ...rest] = raw.split(TITLE_DESC_SEPARATOR);
+    const unpackedDesc = rest.join(TITLE_DESC_SEPARATOR);
+    return {
+      title: hasExplicitTitle ? explicitTitle!.trim() : packedTitle.trim(),
+      description: unpackedDesc.trim(),
+    };
+  }
+
+  const trimmedRaw = raw.trim();
+  if (hasExplicitTitle) {
+    return {
+      title: explicitTitle!.trim(),
+      description: trimmedRaw,
+    };
+  }
+
+  return {
+    title: trimmedRaw,
+    description: trimmedRaw,
+  };
 }
 
 export function mapRowToComplaint(row: ComplaintRow): Complaint {
@@ -126,6 +177,19 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
       : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)
     : Boolean(createdAtMs > 0 && Date.now() - createdAtMs > DELAY_THRESHOLD_MS);
 
+  const unpackedComplaint = unpackTitleAndDescription(
+    row.complaint_text,
+    row.complaint_title
+  );
+  const unpackedMgrRemark = unpackTitleAndDescription(
+    row.manager_remark,
+    row.manager_remark_title
+  );
+  const unpackedAmRemark = unpackTitleAndDescription(
+    row.account_manager_remark,
+    row.account_manager_remark_title
+  );
+
   return {
     id: row.complaint_id,
     complaintId: row.complaint_id,
@@ -140,12 +204,15 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
     managerId: row.manager_id,
     managerName: row.manager_name,
     managerEmail: row.manager_email,
-    complaintText: row.complaint_text,
-    managerRemark: row.manager_remark || '',
+    complaintTitle: unpackedComplaint.title,
+    complaintText: unpackedComplaint.description,
+    managerRemarkTitle: unpackedMgrRemark.title,
+    managerRemark: unpackedMgrRemark.description,
     managerDone,
     managerDoneAt,
     managerDoneAtMs,
-    accountManagerRemark: row.account_manager_remark || '',
+    accountManagerRemarkTitle: unpackedAmRemark.title,
+    accountManagerRemark: unpackedAmRemark.description,
     accountManagerDone,
     status,
     delayNotified: Boolean(row.delay_notified),
@@ -166,10 +233,19 @@ export function mapComplaintToBaseRow(complaint: Complaint): ComplaintRow {
     manager_id: complaint.managerId,
     manager_name: complaint.managerName,
     manager_email: complaint.managerEmail,
-    complaint_text: complaint.complaintText,
-    manager_remark: complaint.managerRemark || '',
+    complaint_text: packTitleAndDescription(
+      complaint.complaintTitle,
+      complaint.complaintText
+    ),
+    manager_remark: packTitleAndDescription(
+      complaint.managerRemarkTitle,
+      complaint.managerRemark
+    ),
     manager_done: managerDone,
-    account_manager_remark: complaint.accountManagerRemark || '',
+    account_manager_remark: packTitleAndDescription(
+      complaint.accountManagerRemarkTitle,
+      complaint.accountManagerRemark
+    ),
     account_manager_done: accountManagerDone,
     status,
     created_at: complaint.createdAt,
@@ -265,12 +341,26 @@ export async function fetchComplaintsFromDb(): Promise<{
     };
   }
 
-  const mapped = ((data || []) as ComplaintRow[]).map(mapRowToComplaint);
+  const rows = (data || []) as ComplaintRow[];
+  if (rows.length > 0 && rows[0] && typeof rows[0] === 'object') {
+    titleColumnsSupported = 'complaint_title' in rows[0];
+  }
+
+  const mapped = rows.map(mapRowToComplaint);
   return {
     data: mapped,
     tableMissing: false,
     error: null,
   };
+}
+
+function isMissingTitleColumnError(message?: string): boolean {
+  if (!message) return false;
+  return (
+    message.includes('complaint_title') ||
+    message.includes('manager_remark_title') ||
+    message.includes('account_manager_remark_title')
+  );
 }
 
 function isMissingExtendedColumnError(message?: string): boolean {
@@ -315,11 +405,34 @@ export async function insertComplaintInDb(complaint: Complaint): Promise<{
     is_delayed: Boolean(complaint.isDelayed),
   };
 
+  const rowToInsert: ComplaintRow =
+    titleColumnsSupported !== false
+      ? {
+          ...extendedRow,
+          complaint_title: (complaint.complaintTitle || '').trim(),
+          manager_remark_title: (complaint.managerRemarkTitle || '').trim(),
+          account_manager_remark_title: (
+            complaint.accountManagerRemarkTitle || ''
+          ).trim(),
+        }
+      : extendedRow;
+
   let { data, error } = await supabase
     .from('complaints')
-    .insert([extendedRow])
+    .insert([rowToInsert])
     .select('*')
     .single();
+
+  if (error && isMissingTitleColumnError(error.message)) {
+    titleColumnsSupported = false;
+    const retryWithoutTitles = await supabase
+      .from('complaints')
+      .insert([extendedRow])
+      .select('*')
+      .single();
+    data = retryWithoutTitles.data;
+    error = retryWithoutTitles.error;
+  }
 
   // Fallback if user hasn't run ALTER TABLE for completed_at / is_delayed yet
   if (error && isMissingExtendedColumnError(error.message)) {
@@ -335,7 +448,7 @@ export async function insertComplaintInDb(complaint: Complaint): Promise<{
   // Handle duplicate complaint_id collision automatically by fetching max ID from DB
   if (error && (error.code === '23505' || error.message?.includes('duplicate key'))) {
     const nextId = await computeNextComplaintIdFromDb();
-    const retryRow = { ...baseRow, complaint_id: nextId };
+    const retryRow = { ...extendedRow, complaint_id: nextId };
     const retryDuplicate = await supabase
       .from('complaints')
       .insert([retryRow])
@@ -358,11 +471,14 @@ export async function insertComplaintInDb(complaint: Complaint): Promise<{
 export async function updateComplaintInDb(
   complaintId: string,
   updates: {
+    complaintTitle?: string;
     complaintText?: string;
+    managerRemarkTitle?: string;
     managerRemark?: string;
     managerDone?: boolean;
     managerDoneAt?: string | null;
     managerDoneAtMs?: number | null;
+    accountManagerRemarkTitle?: string;
     accountManagerRemark?: string;
     accountManagerDone?: boolean;
     status: ComplaintStatus;
@@ -378,17 +494,29 @@ export async function updateComplaintInDb(
     status: updates.status,
   };
 
-  if (updates.complaintText !== undefined) {
-    baseUpdates.complaint_text = updates.complaintText;
+  if (updates.complaintTitle !== undefined || updates.complaintText !== undefined) {
+    baseUpdates.complaint_text = packTitleAndDescription(
+      updates.complaintTitle,
+      updates.complaintText
+    );
   }
-  if (updates.managerRemark !== undefined) {
-    baseUpdates.manager_remark = updates.managerRemark;
+  if (updates.managerRemarkTitle !== undefined || updates.managerRemark !== undefined) {
+    baseUpdates.manager_remark = packTitleAndDescription(
+      updates.managerRemarkTitle,
+      updates.managerRemark
+    );
   }
   if (updates.managerDone !== undefined) {
     baseUpdates.manager_done = updates.managerDone;
   }
-  if (updates.accountManagerRemark !== undefined) {
-    baseUpdates.account_manager_remark = updates.accountManagerRemark;
+  if (
+    updates.accountManagerRemarkTitle !== undefined ||
+    updates.accountManagerRemark !== undefined
+  ) {
+    baseUpdates.account_manager_remark = packTitleAndDescription(
+      updates.accountManagerRemarkTitle,
+      updates.accountManagerRemark
+    );
   }
   if (updates.accountManagerDone !== undefined) {
     baseUpdates.account_manager_done = updates.accountManagerDone;
@@ -413,6 +541,25 @@ export async function updateComplaintInDb(
     extendedUpdates.is_delayed = updates.isDelayed;
   }
 
+  const updatesWithTitles: Record<string, unknown> =
+    titleColumnsSupported !== false
+      ? {
+          ...extendedUpdates,
+          ...(updates.complaintTitle !== undefined
+            ? { complaint_title: updates.complaintTitle.trim() }
+            : {}),
+          ...(updates.managerRemarkTitle !== undefined
+            ? { manager_remark_title: updates.managerRemarkTitle.trim() }
+            : {}),
+          ...(updates.accountManagerRemarkTitle !== undefined
+            ? {
+                account_manager_remark_title:
+                  updates.accountManagerRemarkTitle.trim(),
+              }
+            : {}),
+        }
+      : extendedUpdates;
+
   // Persist locally as well so delayed-on-completion and manager-done tracking work even before SQL migration is run
   if (
     updates.completedAt !== undefined ||
@@ -434,10 +581,22 @@ export async function updateComplaintInDb(
   // so the original creation timestamp is strictly preserved.
   let { data, error } = await supabase
     .from('complaints')
-    .update(extendedUpdates)
+    .update(updatesWithTitles)
     .eq('complaint_id', complaintId)
     .select('*')
     .single();
+
+  if (error && isMissingTitleColumnError(error.message)) {
+    titleColumnsSupported = false;
+    const retryWithoutTitles = await supabase
+      .from('complaints')
+      .update(extendedUpdates)
+      .eq('complaint_id', complaintId)
+      .select('*')
+      .single();
+    data = retryWithoutTitles.data;
+    error = retryWithoutTitles.error;
+  }
 
   if (error && isMissingExtendedColumnError(error.message)) {
     const retryBase = await supabase

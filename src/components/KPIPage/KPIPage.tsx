@@ -379,7 +379,9 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                         {c.accountManagerName} &rarr; <strong>{c.managerName}</strong>
                       </span>
                       <span className="queue-remark-snippet">
-                        {c.managerRemark ? `"${c.managerRemark}"` : c.complaintText}
+                        {c.managerRemarkTitle || c.managerRemark
+                          ? `"${c.managerRemarkTitle || c.managerRemark}"`
+                          : c.complaintTitle || c.complaintText}
                       </span>
                     </div>
 
@@ -505,7 +507,19 @@ export const KPIPage: React.FC<KPIPageProps> = ({
               <div className="complaint-view-section">
                 <span className="complaint-view-section-label">Complaint Details</span>
                 <div className="complaint-view-content-box">
-                  {activeViewingComplaint.complaintText}
+                  <div className="complaint-view-field-block">
+                    <span className="complaint-view-sub-label">Title</span>
+                    <div className="complaint-view-item-title">
+                      {activeViewingComplaint.complaintTitle ||
+                        activeViewingComplaint.complaintText}
+                    </div>
+                  </div>
+                  <div className="complaint-view-field-block complaint-view-field-block--desc">
+                    <span className="complaint-view-sub-label">Description</span>
+                    <div className="complaint-view-item-desc">
+                      {activeViewingComplaint.complaintText || '—'}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -525,12 +539,32 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   </div>
                   <div
                     className={`complaint-view-remark-box ${
+                      !activeViewingComplaint.managerRemarkTitle &&
                       !activeViewingComplaint.managerRemark
                         ? 'complaint-view-remark-box--empty'
                         : ''
                     }`}
                   >
-                    {activeViewingComplaint.managerRemark || 'No manager remark yet.'}
+                    {activeViewingComplaint.managerRemarkTitle ||
+                    activeViewingComplaint.managerRemark ? (
+                      <>
+                        <div className="complaint-view-field-block">
+                          <span className="complaint-view-sub-label">Title</span>
+                          <div className="complaint-view-item-title">
+                            {activeViewingComplaint.managerRemarkTitle ||
+                              activeViewingComplaint.managerRemark}
+                          </div>
+                        </div>
+                        <div className="complaint-view-field-block complaint-view-field-block--desc">
+                          <span className="complaint-view-sub-label">Description</span>
+                          <div className="complaint-view-item-desc">
+                            {activeViewingComplaint.managerRemark || '—'}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      'No manager remark yet.'
+                    )}
                   </div>
                 </div>
 
@@ -551,13 +585,32 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   </div>
                   <div
                     className={`complaint-view-remark-box ${
+                      !activeViewingComplaint.accountManagerRemarkTitle &&
                       !activeViewingComplaint.accountManagerRemark
                         ? 'complaint-view-remark-box--empty'
                         : ''
                     }`}
                   >
-                    {activeViewingComplaint.accountManagerRemark ||
-                      'No sender remark yet.'}
+                    {activeViewingComplaint.accountManagerRemarkTitle ||
+                    activeViewingComplaint.accountManagerRemark ? (
+                      <>
+                        <div className="complaint-view-field-block">
+                          <span className="complaint-view-sub-label">Title</span>
+                          <div className="complaint-view-item-title">
+                            {activeViewingComplaint.accountManagerRemarkTitle ||
+                              activeViewingComplaint.accountManagerRemark}
+                          </div>
+                        </div>
+                        <div className="complaint-view-field-block complaint-view-field-block--desc">
+                          <span className="complaint-view-sub-label">Description</span>
+                          <div className="complaint-view-item-desc">
+                            {activeViewingComplaint.accountManagerRemark || '—'}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      'No sender remark yet.'
+                    )}
                   </div>
                 </div>
               </div>

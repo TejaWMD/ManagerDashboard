@@ -21,6 +21,7 @@ interface ComplaintPageProps {
     managerId: string;
     managerEmail: string;
     managerName: string;
+    complaintTitle: string;
     complaintText: string;
   }) => Promise<void>;
   onUpdateComplaint: (
@@ -28,9 +29,12 @@ interface ComplaintPageProps {
     updates: Partial<
       Pick<
         Complaint,
+        | 'complaintTitle'
         | 'complaintText'
+        | 'managerRemarkTitle'
         | 'managerRemark'
         | 'managerDone'
+        | 'accountManagerRemarkTitle'
         | 'accountManagerRemark'
         | 'accountManagerDone'
       >
@@ -101,6 +105,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   const [selectedManagerId, setSelectedManagerId] = useState<string>(
     targetManagersForCreation[0]?.id || ''
   );
+  const [complaintTitleInput, setComplaintTitleInput] = useState<string>('');
   const [complaintInput, setComplaintInput] = useState<string>('');
   const [isSubmittingNew, setIsSubmittingNew] = useState<boolean>(false);
 
@@ -114,16 +119,20 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
   // Inline editing states
   const [editingSenderRemarkId, setEditingSenderRemarkId] = useState<string | null>(null);
+  const [senderRemarkTitleDraft, setSenderRemarkTitleDraft] = useState<string>('');
   const [senderRemarkDraft, setSenderRemarkDraft] = useState<string>('');
 
   const [editingComplaintTextId, setEditingComplaintTextId] = useState<string | null>(null);
+  const [complaintTitleDraft, setComplaintTitleDraft] = useState<string>('');
   const [complaintTextDraft, setComplaintTextDraft] = useState<string>('');
 
   const [editingMgrRemarkId, setEditingMgrRemarkId] = useState<string | null>(null);
+  const [mgrRemarkTitleDraft, setMgrRemarkTitleDraft] = useState<string>('');
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
   // Mandatory Solution Remark Modal state (Director Policy Requirement)
   const [remarkModalComplaint, setRemarkModalComplaint] = useState<Complaint | null>(null);
+  const [mandatoryRemarkTitleDraft, setMandatoryRemarkTitleDraft] = useState<string>('');
   const [mandatoryRemarkDraft, setMandatoryRemarkDraft] = useState<string>('');
   const [remarkError, setRemarkError] = useState<string>('');
 
@@ -238,7 +247,14 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedManagerId || !complaintInput.trim() || isSubmittingNew) return;
+    if (
+      !selectedManagerId ||
+      !complaintTitleInput.trim() ||
+      !complaintInput.trim() ||
+      isSubmittingNew
+    ) {
+      return;
+    }
 
     const targetManager = managers.find((m) => m.id === selectedManagerId);
     if (!targetManager) return;
@@ -249,9 +265,11 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         managerId: targetManager.id,
         managerEmail: targetManager.email,
         managerName: targetManager.name,
+        complaintTitle: complaintTitleInput.trim(),
         complaintText: complaintInput.trim(),
       });
 
+      setComplaintTitleInput('');
       setComplaintInput('');
       setShowCreateModal(false);
     } finally {
@@ -261,41 +279,52 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
   const startEditSenderRemark = (item: Complaint) => {
     setEditingSenderRemarkId(item.complaintId);
-    setSenderRemarkDraft(item.accountManagerRemark);
+    setSenderRemarkTitleDraft(item.accountManagerRemarkTitle || '');
+    setSenderRemarkDraft(item.accountManagerRemark || '');
   };
 
   const saveSenderRemark = async (complaintId: string) => {
     await onUpdateComplaint(complaintId, {
+      accountManagerRemarkTitle: senderRemarkTitleDraft.trim(),
       accountManagerRemark: senderRemarkDraft.trim(),
     });
     setEditingSenderRemarkId(null);
+    setSenderRemarkTitleDraft('');
     setSenderRemarkDraft('');
   };
 
   const startEditComplaintText = (item: Complaint) => {
     setEditingComplaintTextId(item.complaintId);
-    setComplaintTextDraft(item.complaintText);
+    setComplaintTitleDraft(item.complaintTitle || item.complaintText || '');
+    setComplaintTextDraft(item.complaintText || '');
   };
 
   const saveComplaintText = async (complaintId: string) => {
-    if (!complaintTextDraft.trim()) return;
+    const trimmedTitle = complaintTitleDraft.trim();
+    const trimmedDesc = complaintTextDraft.trim();
+    if (!trimmedTitle && !trimmedDesc) return;
     await onUpdateComplaint(complaintId, {
-      complaintText: complaintTextDraft.trim(),
+      complaintTitle: trimmedTitle || trimmedDesc,
+      complaintText: trimmedDesc,
     });
     setEditingComplaintTextId(null);
+    setComplaintTitleDraft('');
     setComplaintTextDraft('');
   };
 
   const startEditMgrRemark = (item: Complaint) => {
     setEditingMgrRemarkId(item.complaintId);
-    setMgrRemarkDraft(item.managerRemark);
+    setMgrRemarkTitleDraft(item.managerRemarkTitle || '');
+    setMgrRemarkDraft(item.managerRemark || '');
   };
 
   const saveMgrRemark = async (complaintId: string) => {
     await onUpdateComplaint(complaintId, {
+      managerRemarkTitle: mgrRemarkTitleDraft.trim(),
       managerRemark: mgrRemarkDraft.trim(),
     });
     setEditingMgrRemarkId(null);
+    setMgrRemarkTitleDraft('');
     setMgrRemarkDraft('');
   };
 
@@ -307,8 +336,13 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     const nextManagerDone = !item.managerDone;
 
     // Director policy: Mandatory Solution Remark before marking Done
-    if (nextManagerDone && (!item.managerRemark || !item.managerRemark.trim())) {
+    const hasExistingMgrRemark = Boolean(
+      (item.managerRemarkTitle && item.managerRemarkTitle.trim()) ||
+        (item.managerRemark && item.managerRemark.trim())
+    );
+    if (nextManagerDone && !hasExistingMgrRemark) {
       setRemarkModalComplaint(item);
+      setMandatoryRemarkTitleDraft('');
       setMandatoryRemarkDraft('');
       setRemarkError('');
       return;
@@ -326,16 +360,19 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   const handleConfirmRemarkAndDone = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!remarkModalComplaint) return;
-    const trimmed = mandatoryRemarkDraft.trim();
-    if (!trimmed) {
-      setRemarkError('A solution remark or reference is required by director policy before marking Done.');
+    const trimmedTitle = mandatoryRemarkTitleDraft.trim();
+    const trimmedDesc = mandatoryRemarkDraft.trim();
+    if (!trimmedTitle && !trimmedDesc) {
+      setRemarkError('A solution remark title and description are required before marking Done.');
       return;
     }
     await onUpdateComplaint(remarkModalComplaint.complaintId, {
-      managerRemark: trimmed,
+      managerRemarkTitle: trimmedTitle || trimmedDesc,
+      managerRemark: trimmedDesc,
       managerDone: true,
     });
     setRemarkModalComplaint(null);
+    setMandatoryRemarkTitleDraft('');
     setMandatoryRemarkDraft('');
     setRemarkError('');
   };
@@ -612,11 +649,18 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       {canEditComplaintText &&
                       editingComplaintTextId === item.complaintId ? (
                         <div className="inline-edit-box">
+                          <input
+                            type="text"
+                            className="inline-edit-title-input"
+                            value={complaintTitleDraft}
+                            onChange={(e) => setComplaintTitleDraft(e.target.value)}
+                            placeholder="Complaint title..."
+                          />
                           <textarea
                             rows={2}
                             value={complaintTextDraft}
                             onChange={(e) => setComplaintTextDraft(e.target.value)}
-                            placeholder="Edit complaint..."
+                            placeholder="Complaint description..."
                           />
                           <div className="inline-edit-actions">
                             <button
@@ -642,7 +686,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                             className="complaint-body-text complaint-body-text--clickable"
                             onClick={() => setViewingComplaint(item)}
                           >
-                            {item.complaintText}
+                            {item.complaintTitle || item.complaintText}
                           </p>
                           {canEditComplaintText && (
                             <button
@@ -662,11 +706,18 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       {canEditMgrRemark ? (
                         editingMgrRemarkId === item.complaintId ? (
                           <div className="inline-edit-box">
+                            <input
+                              type="text"
+                              className="inline-edit-title-input"
+                              value={mgrRemarkTitleDraft}
+                              onChange={(e) => setMgrRemarkTitleDraft(e.target.value)}
+                              placeholder="Remark title..."
+                            />
                             <textarea
                               rows={2}
                               value={mgrRemarkDraft}
                               onChange={(e) => setMgrRemarkDraft(e.target.value)}
-                              placeholder="Manager remark..."
+                              placeholder="Remark description..."
                             />
                             <div className="inline-edit-actions">
                               <button
@@ -690,12 +741,13 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                           <div className="remark-display-row">
                             <span
                               className={
-                                item.managerRemark
-                                  ? 'remark-value'
+                                item.managerRemarkTitle || item.managerRemark
+                                  ? 'remark-value complaint-body-text--clickable'
                                   : 'remark-placeholder'
                               }
+                              onClick={() => setViewingComplaint(item)}
                             >
-                              {item.managerRemark || '—'}
+                              {item.managerRemarkTitle || item.managerRemark || '—'}
                             </span>
                             <button
                               type="button"
@@ -709,10 +761,13 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       ) : (
                         <span
                           className={
-                            item.managerRemark ? 'remark-value' : 'remark-placeholder'
+                            item.managerRemarkTitle || item.managerRemark
+                              ? 'remark-value complaint-body-text--clickable'
+                              : 'remark-placeholder'
                           }
+                          onClick={() => setViewingComplaint(item)}
                         >
-                          {item.managerRemark || '—'}
+                          {item.managerRemarkTitle || item.managerRemark || '—'}
                         </span>
                       )}
                     </td>
@@ -746,11 +801,18 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       {canEditSenderRemark ? (
                         editingSenderRemarkId === item.complaintId ? (
                           <div className="inline-edit-box">
+                            <input
+                              type="text"
+                              className="inline-edit-title-input"
+                              value={senderRemarkTitleDraft}
+                              onChange={(e) => setSenderRemarkTitleDraft(e.target.value)}
+                              placeholder="Remark title..."
+                            />
                             <textarea
                               rows={2}
                               value={senderRemarkDraft}
                               onChange={(e) => setSenderRemarkDraft(e.target.value)}
-                              placeholder="Sender remark..."
+                              placeholder="Remark description..."
                             />
                             <div className="inline-edit-actions">
                               <button
@@ -774,12 +836,15 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                           <div className="remark-display-row">
                             <span
                               className={
-                                item.accountManagerRemark
-                                  ? 'remark-value'
+                                item.accountManagerRemarkTitle || item.accountManagerRemark
+                                  ? 'remark-value complaint-body-text--clickable'
                                   : 'remark-placeholder'
                               }
+                              onClick={() => setViewingComplaint(item)}
                             >
-                              {item.accountManagerRemark || '—'}
+                              {item.accountManagerRemarkTitle ||
+                                item.accountManagerRemark ||
+                                '—'}
                             </span>
                             <button
                               type="button"
@@ -793,12 +858,15 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       ) : (
                         <span
                           className={
-                            item.accountManagerRemark
-                              ? 'remark-value'
+                            item.accountManagerRemarkTitle || item.accountManagerRemark
+                              ? 'remark-value complaint-body-text--clickable'
                               : 'remark-placeholder'
                           }
+                          onClick={() => setViewingComplaint(item)}
                         >
-                          {item.accountManagerRemark || '—'}
+                          {item.accountManagerRemarkTitle ||
+                            item.accountManagerRemark ||
+                            '—'}
                         </span>
                       )}
                     </td>
@@ -932,10 +1000,22 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="write-complaint">Complaint Details</label>
+                <label htmlFor="complaint-title-input">Complaint Title</label>
+                <input
+                  id="complaint-title-input"
+                  type="text"
+                  placeholder="Enter a short title for the complaint..."
+                  value={complaintTitleInput}
+                  onChange={(e) => setComplaintTitleInput(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="cp-form-group">
+                <label htmlFor="write-complaint">Complaint Description</label>
                 <textarea
                   id="write-complaint"
-                  rows={8}
+                  rows={6}
                   placeholder="Describe the complaint in detail..."
                   value={complaintInput}
                   onChange={(e) => setComplaintInput(e.target.value)}
@@ -1010,7 +1090,23 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               </div> */}
 
               <div className="cp-form-group">
-                <label htmlFor="mandatory-remark-input">Solution / Resolution Notes *</label>
+                <label htmlFor="mandatory-remark-title-input">Remark Title *</label>
+                <input
+                  id="mandatory-remark-title-input"
+                  type="text"
+                  placeholder="Enter a short title for the solution remark..."
+                  value={mandatoryRemarkTitleDraft}
+                  onChange={(e) => {
+                    setMandatoryRemarkTitleDraft(e.target.value);
+                    if (remarkError) setRemarkError('');
+                  }}
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div className="cp-form-group">
+                <label htmlFor="mandatory-remark-input">Solution / Resolution Description *</label>
                 <textarea
                   id="mandatory-remark-input"
                   rows={4}
@@ -1020,7 +1116,6 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                     setMandatoryRemarkDraft(e.target.value);
                     if (remarkError) setRemarkError('');
                   }}
-                  autoFocus
                   required
                 />
                 {remarkError && (
@@ -1155,7 +1250,19 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               <div className="complaint-view-section">
                 <span className="complaint-view-section-label">Complaint Details</span>
                 <div className="complaint-view-content-box">
-                  {activeViewingComplaint.complaintText}
+                  <div className="complaint-view-field-block">
+                    <span className="complaint-view-sub-label">Title</span>
+                    <div className="complaint-view-item-title">
+                      {activeViewingComplaint.complaintTitle ||
+                        activeViewingComplaint.complaintText}
+                    </div>
+                  </div>
+                  <div className="complaint-view-field-block complaint-view-field-block--desc">
+                    <span className="complaint-view-sub-label">Description</span>
+                    <div className="complaint-view-item-desc">
+                      {activeViewingComplaint.complaintText || '—'}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1175,12 +1282,32 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   </div>
                   <div
                     className={`complaint-view-remark-box ${
+                      !activeViewingComplaint.managerRemarkTitle &&
                       !activeViewingComplaint.managerRemark
                         ? 'complaint-view-remark-box--empty'
                         : ''
                     }`}
                   >
-                    {activeViewingComplaint.managerRemark || 'No manager remark yet.'}
+                    {activeViewingComplaint.managerRemarkTitle ||
+                    activeViewingComplaint.managerRemark ? (
+                      <>
+                        <div className="complaint-view-field-block">
+                          <span className="complaint-view-sub-label">Title</span>
+                          <div className="complaint-view-item-title">
+                            {activeViewingComplaint.managerRemarkTitle ||
+                              activeViewingComplaint.managerRemark}
+                          </div>
+                        </div>
+                        <div className="complaint-view-field-block complaint-view-field-block--desc">
+                          <span className="complaint-view-sub-label">Description</span>
+                          <div className="complaint-view-item-desc">
+                            {activeViewingComplaint.managerRemark || '—'}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      'No manager remark yet.'
+                    )}
                   </div>
                 </div>
 
@@ -1201,13 +1328,32 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   </div>
                   <div
                     className={`complaint-view-remark-box ${
+                      !activeViewingComplaint.accountManagerRemarkTitle &&
                       !activeViewingComplaint.accountManagerRemark
                         ? 'complaint-view-remark-box--empty'
                         : ''
                     }`}
                   >
-                    {activeViewingComplaint.accountManagerRemark ||
-                      'No sender remark yet.'}
+                    {activeViewingComplaint.accountManagerRemarkTitle ||
+                    activeViewingComplaint.accountManagerRemark ? (
+                      <>
+                        <div className="complaint-view-field-block">
+                          <span className="complaint-view-sub-label">Title</span>
+                          <div className="complaint-view-item-title">
+                            {activeViewingComplaint.accountManagerRemarkTitle ||
+                              activeViewingComplaint.accountManagerRemark}
+                          </div>
+                        </div>
+                        <div className="complaint-view-field-block complaint-view-field-block--desc">
+                          <span className="complaint-view-sub-label">Description</span>
+                          <div className="complaint-view-item-desc">
+                            {activeViewingComplaint.accountManagerRemark || '—'}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      'No sender remark yet.'
+                    )}
                   </div>
                 </div>
               </div>

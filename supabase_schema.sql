@@ -50,11 +50,14 @@ CREATE TABLE IF NOT EXISTS public.complaints (
   manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE, -- Assigned Manager (must be manager)
   manager_name TEXT NOT NULL,
   manager_email TEXT NOT NULL,
+  complaint_title TEXT NOT NULL DEFAULT '',
   complaint_text TEXT NOT NULL,
+  manager_remark_title TEXT NOT NULL DEFAULT '',
   manager_remark TEXT NOT NULL DEFAULT '',
   manager_done BOOLEAN NOT NULL DEFAULT FALSE,
   manager_done_at TEXT DEFAULT NULL,
   manager_done_at_ms BIGINT DEFAULT NULL,
+  account_manager_remark_title TEXT NOT NULL DEFAULT '',
   account_manager_remark TEXT NOT NULL DEFAULT '',
   account_manager_done BOOLEAN NOT NULL DEFAULT FALSE,
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Completed')),
@@ -68,6 +71,9 @@ CREATE TABLE IF NOT EXISTS public.complaints (
 
 -- Safely add new columns if upgrading an existing complaints table
 ALTER TABLE public.complaints
+  ADD COLUMN IF NOT EXISTS complaint_title TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS manager_remark_title TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS account_manager_remark_title TEXT NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS completed_at_ms BIGINT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS manager_done_at TEXT DEFAULT NULL,
