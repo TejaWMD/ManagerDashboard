@@ -522,15 +522,15 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 const isAssignedManager = currentUser.id === item.managerId;
                 const isAdmin = currentUser.role === 'admin';
 
-                const canEditComplaintText = isSender || isAdmin;
-                const canEditMgrRemark = isAssignedManager || isAdmin;
-                const canToggleMgrDone = (isAssignedManager || isAdmin) && !isRowSaving;
-                const canEditSenderRemark = isSender || isAdmin;
+                const canEditComplaintText = isSender;
+                const canEditMgrRemark = isAssignedManager;
+                const canToggleMgrDone = (isAssignedManager) && !isRowSaving;
+                const canEditSenderRemark = isSender;
 
                 const senderCannotCheckYet =
                   !item.managerDone && !item.accountManagerDone;
                 const isSenderCheckboxDisabled =
-                  !(isSender || isAdmin) ||
+                  !(isSender) ||
                   isRowSaving ||
                   senderCannotCheckYet;
 
@@ -691,7 +691,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                           !canToggleMgrDone ? 'check-button-label--readonly' : ''
                         }`}
                         title={
-                          !isAssignedManager && !isAdmin
+                          !isAssignedManager
                             ? `Only assigned manager (${item.managerName}) can mark Manager Done`
                             : undefined
                         }
@@ -777,7 +777,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                           isSenderCheckboxDisabled ? 'check-button-label--readonly' : ''
                         }`}
                         title={
-                          !(isSender || isAdmin)
+                          !(isSender)
                             ? `Only sender (${item.accountManagerName}) can mark verified completion`
                             : senderCannotCheckYet
                             ? 'Assigned Manager must mark Done before you can verify & complete'
