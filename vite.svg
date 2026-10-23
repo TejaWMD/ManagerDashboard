@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="wmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="url(#wmGrad)" />
+  <path d="M24 10a8 8 0 0 0-8 8v6.2l-2.4 3.6A1.5 1.5 0 0 0 14.8 30h18.4a1.5 1.5 0 0 0 1.2-2.2L32 24.2V18a8 8 0 0 0-8-8zm-3 22a3 3 0 0 0 6 0h-6z" fill="#ffffff" />
+</svg>
