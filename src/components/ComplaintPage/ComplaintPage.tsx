@@ -122,6 +122,11 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   const [editingMgrRemarkId, setEditingMgrRemarkId] = useState<string | null>(null);
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
+  // Mandatory Solution Remark Modal state (Director Policy Requirement)
+  const [remarkModalComplaint, setRemarkModalComplaint] = useState<Complaint | null>(null);
+  const [mandatoryRemarkDraft, setMandatoryRemarkDraft] = useState<string>('');
+  const [remarkError, setRemarkError] = useState<string>('');
+
   // 1. Role-scoped complaints
   // Account Managers see complaints they created.
   // Managers see complaints assigned to them AND complaints they sent among themselves.
@@ -290,6 +295,15 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     if (!isAssigned && currentUser.role !== 'admin') return;
 
     const nextManagerDone = !item.managerDone;
+
+    // Director policy: Mandatory Solution Remark before marking Done
+    if (nextManagerDone && (!item.managerRemark || !item.managerRemark.trim())) {
+      setRemarkModalComplaint(item);
+      setMandatoryRemarkDraft('');
+      setRemarkError('');
+      return;
+    }
+
     await onUpdateComplaint(item.complaintId, {
       managerDone: nextManagerDone,
       // If manager unchecks their box, also reset sender verification so sender only checks when resolved
@@ -297,6 +311,23 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         ? { accountManagerDone: false }
         : {}),
     });
+  };
+
+  const handleConfirmRemarkAndDone = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!remarkModalComplaint) return;
+    const trimmed = mandatoryRemarkDraft.trim();
+    if (!trimmed) {
+      setRemarkError('A solution remark or reference is required by director policy before marking Done.');
+      return;
+    }
+    await onUpdateComplaint(remarkModalComplaint.complaintId, {
+      managerRemark: trimmed,
+      managerDone: true,
+    });
+    setRemarkModalComplaint(null);
+    setMandatoryRemarkDraft('');
+    setRemarkError('');
   };
 
   const handleToggleSenderDone = async (item: Complaint) => {
@@ -891,6 +922,89 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   disabled={isSubmittingNew}
                 >
                   {isSubmittingNew ? 'Submitting...' : 'Submit Complaint'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Mandatory Solution Remark Modal (Director Policy) */}
+      {remarkModalComplaint && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setRemarkModalComplaint(null)}
+        >
+          <div
+            className="modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mandatory-remark-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-header-text">
+                <h3 id="mandatory-remark-modal-title">Solution Remark Required</h3>
+                <span className="modal-sender-badge">
+                  Complaint: <strong>{remarkModalComplaint.complaintId}</strong> &bull; Assigned to: <strong>{remarkModalComplaint.managerName}</strong>
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setRemarkModalComplaint(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form className="modal-form" onSubmit={handleConfirmRemarkAndDone}>
+              <div
+                style={{
+                  background: 'rgba(214, 116, 43, 0.08)',
+                  border: '1px solid rgba(214, 116, 43, 0.3)',
+                  borderRadius: '8px',
+                  padding: '0.75rem 1rem',
+                  fontSize: '0.86rem',
+                  color: 'var(--c-russet, #844918)',
+                  lineHeight: '1.45',
+                }}
+              >
+                <strong>Director Policy:</strong> Managers cannot mark complaints as Done without explaining the resolution or actions taken.
+              </div>
+
+              <div className="cp-form-group">
+                <label htmlFor="mandatory-remark-input">Solution / Resolution Notes *</label>
+                <textarea
+                  id="mandatory-remark-input"
+                  rows={4}
+                  placeholder="Explain what steps were taken to fix this issue or reference ticket details..."
+                  value={mandatoryRemarkDraft}
+                  onChange={(e) => {
+                    setMandatoryRemarkDraft(e.target.value);
+                    if (remarkError) setRemarkError('');
+                  }}
+                  autoFocus
+                  required
+                />
+                {remarkError && (
+                  <span style={{ color: '#dc2626', fontSize: '0.82rem', fontWeight: 600 }}>
+                    {remarkError}
+                  </span>
+                )}
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setRemarkModalComplaint(null)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Save Remark &amp; Mark Done
                 </button>
               </div>
             </form>

@@ -32,6 +32,7 @@ import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
 import { HomePage } from './components/HomePage/HomePage';
 import { ComplaintPage } from './components/ComplaintPage/ComplaintPage';
+import { KPIPage } from './components/KPIPage/KPIPage';
 import { NotificationModal } from './components/NotificationModal/NotificationModal';
 import { NotificationBanner } from './components/NotificationBanner/NotificationBanner';
 import sqlSchemaText from '../supabase_schema.sql?raw';
@@ -433,6 +434,14 @@ export const App: React.FC = () => {
         ? updates.managerDone
         : existing.managerDone;
 
+    // Anti-cheat dedicated manager resolution timestamp
+    const nextManagerDoneAt = nextManagerDone
+      ? existing.managerDoneAt || formatTimestamp(now)
+      : null;
+    const nextManagerDoneAtMs = nextManagerDone
+      ? existing.managerDoneAtMs || nowMs
+      : null;
+
     // Account Manager cannot stay done if Manager Done is unchecked
     const nextAccountManagerDone = !nextManagerDone
       ? false
@@ -450,7 +459,7 @@ export const App: React.FC = () => {
       ? existing.completedAtMs || nowMs
       : null;
 
-    // Once delayed (>24h), it stays delayed even when both Manager Done & AM Done are checked
+    // Once delayed (>48h), it stays delayed even when both Manager Done & AM Done are checked
     const wasAlreadyDelayed = isComplaintDelayed(existing, nowMs);
     const nextIsDelayed = nextIsCompleted
       ? Boolean(
@@ -465,6 +474,8 @@ export const App: React.FC = () => {
       ...existing,
       ...updates,
       managerDone: nextManagerDone,
+      managerDoneAt: nextManagerDoneAt,
+      managerDoneAtMs: nextManagerDoneAtMs,
       accountManagerDone: nextAccountManagerDone,
       status: nextStatus,
       createdAt: existing.createdAt,
@@ -487,6 +498,8 @@ export const App: React.FC = () => {
     const { data, error } = await updateComplaintInDb(complaintId, {
       ...updates,
       managerDone: nextManagerDone,
+      managerDoneAt: nextManagerDoneAt,
+      managerDoneAtMs: nextManagerDoneAtMs,
       accountManagerDone: nextAccountManagerDone,
       status: nextStatus,
       completedAt: nextCompletedAt,
@@ -653,6 +666,13 @@ export const App: React.FC = () => {
         <main className="app-main-content">
           {activePage === 'home' ? (
             <HomePage
+              currentUser={currentUser}
+              complaints={complaints}
+              users={allUsers}
+              onNavigate={setActivePage}
+            />
+          ) : activePage === 'kpi' ? (
+            <KPIPage
               currentUser={currentUser}
               complaints={complaints}
               users={allUsers}

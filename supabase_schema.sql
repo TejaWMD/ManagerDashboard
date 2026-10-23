@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS public.complaints (
   complaint_text TEXT NOT NULL,
   manager_remark TEXT NOT NULL DEFAULT '',
   manager_done BOOLEAN NOT NULL DEFAULT FALSE,
+  manager_done_at TEXT DEFAULT NULL,
+  manager_done_at_ms BIGINT DEFAULT NULL,
   account_manager_remark TEXT NOT NULL DEFAULT '',
   account_manager_done BOOLEAN NOT NULL DEFAULT FALSE,
   status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Completed')),
@@ -68,8 +70,18 @@ CREATE TABLE IF NOT EXISTS public.complaints (
 ALTER TABLE public.complaints
   ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS completed_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS manager_done_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS manager_done_at_ms BIGINT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS delay_notified BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Backfill existing manager_done rows that do not have manager_done_at_ms yet
+UPDATE public.complaints
+SET
+  manager_done_at = COALESCE(completed_at, created_at),
+  manager_done_at_ms = COALESCE(completed_at_ms, created_at_ms)
+WHERE manager_done = TRUE
+  AND manager_done_at_ms IS NULL;
 
 -- Backfill existing completed rows that do not have completed_at_ms yet
 UPDATE public.complaints
@@ -110,6 +122,16 @@ BEGIN
 
   IF NEW.manager_done = FALSE THEN
     NEW.account_manager_done := FALSE;
+    NEW.manager_done_at := NULL;
+    NEW.manager_done_at_ms := NULL;
+  ELSE
+    IF TG_OP = 'UPDATE' AND OLD.manager_done_at_ms IS NOT NULL THEN
+      NEW.manager_done_at := OLD.manager_done_at;
+      NEW.manager_done_at_ms := OLD.manager_done_at_ms;
+    ELSIF NEW.manager_done_at_ms IS NULL THEN
+      NEW.manager_done_at := TO_CHAR(NOW() AT TIME ZONE 'Asia/Kuala_Lumpur', 'YYYY-MM-DD HH24:MI:SS');
+      NEW.manager_done_at_ms := now_ms;
+    END IF;
   END IF;
 
   IF NEW.manager_done = TRUE AND NEW.account_manager_done = TRUE THEN

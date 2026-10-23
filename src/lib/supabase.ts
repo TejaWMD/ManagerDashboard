@@ -17,6 +17,8 @@ const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v2';
 interface LocalCompletionMeta {
   completedAt: string | null;
   completedAtMs: number | null;
+  managerDoneAt?: string | null;
+  managerDoneAtMs?: number | null;
   isDelayed: boolean;
 }
 
@@ -56,6 +58,8 @@ export interface ComplaintRow {
   complaint_text: string;
   manager_remark: string;
   manager_done: boolean;
+  manager_done_at?: string | null;
+  manager_done_at_ms?: number | null;
   account_manager_remark: string;
   account_manager_done: boolean;
   status: ComplaintStatus;
@@ -85,6 +89,21 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
       : 0;
 
   const localMeta = readLocalCompletionMetaMap()[row.complaint_id];
+
+  const dbManagerDoneAtMs =
+    row.manager_done_at_ms !== null && row.manager_done_at_ms !== undefined
+      ? Number(row.manager_done_at_ms)
+      : null;
+
+  const managerDoneAtMs = managerDone
+    ? dbManagerDoneAtMs && !Number.isNaN(dbManagerDoneAtMs) && dbManagerDoneAtMs > 0
+      ? dbManagerDoneAtMs
+      : localMeta?.managerDoneAtMs ?? null
+    : null;
+
+  const managerDoneAt = managerDone
+    ? row.manager_done_at || localMeta?.managerDoneAt || null
+    : null;
 
   const dbCompletedAtMs =
     row.completed_at_ms !== null && row.completed_at_ms !== undefined
@@ -124,6 +143,8 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
     complaintText: row.complaint_text,
     managerRemark: row.manager_remark || '',
     managerDone,
+    managerDoneAt,
+    managerDoneAtMs,
     accountManagerRemark: row.account_manager_remark || '',
     accountManagerDone,
     status,
@@ -257,7 +278,9 @@ function isMissingExtendedColumnError(message?: string): boolean {
   return (
     message.includes('completed_at') ||
     message.includes('completed_at_ms') ||
-    message.includes('is_delayed')
+    message.includes('is_delayed') ||
+    message.includes('manager_done_at') ||
+    message.includes('manager_done_at_ms')
   );
 }
 
@@ -287,6 +310,8 @@ export async function insertComplaintInDb(complaint: Complaint): Promise<{
     ...baseRow,
     completed_at: complaint.completedAt ?? null,
     completed_at_ms: complaint.completedAtMs ?? null,
+    manager_done_at: complaint.managerDoneAt ?? null,
+    manager_done_at_ms: complaint.managerDoneAtMs ?? null,
     is_delayed: Boolean(complaint.isDelayed),
   };
 
@@ -336,6 +361,8 @@ export async function updateComplaintInDb(
     complaintText?: string;
     managerRemark?: string;
     managerDone?: boolean;
+    managerDoneAt?: string | null;
+    managerDoneAtMs?: number | null;
     accountManagerRemark?: string;
     accountManagerDone?: boolean;
     status: ComplaintStatus;
@@ -370,6 +397,12 @@ export async function updateComplaintInDb(
   const extendedUpdates: Record<string, unknown> = {
     ...baseUpdates,
   };
+  if (updates.managerDoneAt !== undefined) {
+    extendedUpdates.manager_done_at = updates.managerDoneAt;
+  }
+  if (updates.managerDoneAtMs !== undefined) {
+    extendedUpdates.manager_done_at_ms = updates.managerDoneAtMs;
+  }
   if (updates.completedAt !== undefined) {
     extendedUpdates.completed_at = updates.completedAt;
   }
@@ -380,15 +413,19 @@ export async function updateComplaintInDb(
     extendedUpdates.is_delayed = updates.isDelayed;
   }
 
-  // Persist locally as well so delayed-on-completion works even before SQL migration is run
+  // Persist locally as well so delayed-on-completion and manager-done tracking work even before SQL migration is run
   if (
     updates.completedAt !== undefined ||
     updates.completedAtMs !== undefined ||
+    updates.managerDoneAt !== undefined ||
+    updates.managerDoneAtMs !== undefined ||
     updates.isDelayed !== undefined
   ) {
     saveLocalCompletionMeta(complaintId, {
       completedAt: updates.completedAt ?? null,
       completedAtMs: updates.completedAtMs ?? null,
+      managerDoneAt: updates.managerDoneAt ?? null,
+      managerDoneAtMs: updates.managerDoneAtMs ?? null,
       isDelayed: Boolean(updates.isDelayed),
     });
   }

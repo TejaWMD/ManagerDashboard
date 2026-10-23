@@ -1,6 +1,6 @@
 export type UserRole = 'account_manager' | 'manager' | 'admin';
 
-export type PageView = 'home' | 'complaints';
+export type PageView = 'home' | 'complaints' | 'kpi';
 
 export interface UserAccount {
   id: string;
@@ -32,6 +32,8 @@ export interface Complaint {
   complaintText: string;
   managerRemark: string;
   managerDone: boolean;
+  managerDoneAt?: string | null; // Timestamp when assigned manager marked Done
+  managerDoneAtMs?: number | null; // Epoch ms when assigned manager marked Done (for SLA tracking)
   accountManagerRemark: string;
   accountManagerDone: boolean;
   status: ComplaintStatus;
@@ -178,4 +180,37 @@ export function isComplaintRelevantToUser(
     );
   }
   return true;
+}
+
+// -----------------------------------------------------------------------------
+// Manager KPI Weighted Scoring Types
+// -----------------------------------------------------------------------------
+export type ComplaintKpiStatus =
+  | 'ON_TIME' // Completed on-time (<= 48h): +1.0 pt
+  | 'LATE' // Completed late (> 48h): +0.5 pt
+  | 'OVERDUE' // Open and overdue (> 48h): 0.0 pt
+  | 'IN_PROGRESS'; // Open and within 48h: Excluded from evaluation
+
+export interface EvaluatedComplaintDetail {
+  complaint: Complaint;
+  status: ComplaintKpiStatus;
+  points: number; // 1.0, 0.5, 0.0
+  isEvaluated: boolean; // false if in-progress (<48h)
+  managerTurnaroundHours: number | null; // Hours from creation to manager done
+  senderVerificationHours: number | null; // Hours from manager done to sender confirmation
+}
+
+export interface ManagerKpiStats {
+  manager: UserAccount;
+  kpiScore: number; // 0 - 100 percentage
+  earnedPoints: number;
+  totalEvaluated: number; // count of evaluated complaints (onTime + late + overdue)
+  totalAssigned: number; // total complaints received in window
+  onTimeCount: number; // +1.0
+  lateCount: number; // +0.5
+  overdueCount: number; // 0.0
+  inProgressCount: number; // excluded (<48h)
+  avgManagerTurnaroundHours: number | null;
+  avgSenderVerificationHours: number | null;
+  evaluatedComplaints: EvaluatedComplaintDetail[];
 }
