@@ -1,9 +1,9 @@
 import {
   belongsToManager,
-  Complaint,
+  Query,
   DELAY_THRESHOLD_MS,
-  EvaluatedComplaintDetail,
-  getComplaintTimestampMs,
+  EvaluatedQueryDetail,
+  getQueryTimestampMs,
   ManagerKpiStats,
   UserAccount,
 } from '../types';
@@ -16,48 +16,48 @@ export interface CalculateKpiOptions {
 }
 
 /**
- * Evaluates a single complaint for weighted KPI points based on Director requirements:
+ * Evaluates a single query for weighted KPI points based on Director requirements:
  * - Completed On-Time (<= 48h): +1.0 pt
  * - Completed Late (> 48h):     +0.5 pt
- * - Open & Overdue (> 48h):     0.0 pt (included in evaluated complaints)
+ * - Open & Overdue (> 48h):     0.0 pt (included in evaluated queries)
  * - Open & In-Progress (< 48h): Excluded from evaluation until 48h threshold passes
  */
-export function evaluateComplaintKpi(
-  complaint: Complaint,
+export function evaluateQueryKpi(
+  query: Query,
   nowMs: number = Date.now()
-): EvaluatedComplaintDetail {
-  const createdMs = getComplaintTimestampMs(complaint);
-  const managerDone = Boolean(complaint.managerDone);
+): EvaluatedQueryDetail {
+  const createdMs = getQueryTimestampMs(query);
+  const managerDone = Boolean(query.managerDone);
 
   if (managerDone) {
     // Determine when manager finished their work (Anti-cheat timestamp)
-    let managerDoneMs = complaint.managerDoneAtMs;
-    if (!managerDoneMs && complaint.completedAtMs) {
-      managerDoneMs = complaint.completedAtMs;
+    let managerDoneMs = query.managerDoneAtMs;
+    if (!managerDoneMs && query.completedAtMs) {
+      managerDoneMs = query.completedAtMs;
     }
     if (!managerDoneMs) {
-      managerDoneMs = complaint.isDelayed
+      managerDoneMs = query.isDelayed
         ? createdMs + DELAY_THRESHOLD_MS + 1
         : createdMs;
     }
 
     const turnaroundMs = Math.max(0, managerDoneMs - createdMs);
     const turnaroundHours = Math.round((turnaroundMs / (1000 * 60 * 60)) * 10) / 10;
-    const isOnTime = turnaroundMs <= DELAY_THRESHOLD_MS && !complaint.isDelayed;
+    const isOnTime = turnaroundMs <= DELAY_THRESHOLD_MS && !query.isDelayed;
 
     // Sender verification latency: completedAtMs - managerDoneAtMs
     let senderVerificationHours: number | null = null;
     if (
-      complaint.accountManagerDone &&
-      complaint.completedAtMs &&
-      complaint.completedAtMs >= managerDoneMs
+      query.accountManagerDone &&
+      query.completedAtMs &&
+      query.completedAtMs >= managerDoneMs
     ) {
-      const verifyMs = complaint.completedAtMs - managerDoneMs;
+      const verifyMs = query.completedAtMs - managerDoneMs;
       senderVerificationHours = Math.round((verifyMs / (1000 * 60 * 60)) * 10) / 10;
     }
 
     return {
-      complaint,
+      query,
       status: isOnTime ? 'ON_TIME' : 'LATE',
       points: isOnTime ? 1.0 : 0.5,
       isEvaluated: true,
@@ -68,11 +68,11 @@ export function evaluateComplaintKpi(
 
   // Manager is NOT done yet
   const elapsedMs = Math.max(0, nowMs - createdMs);
-  const isPast48h = elapsedMs > DELAY_THRESHOLD_MS || complaint.isDelayed === true;
+  const isPast48h = elapsedMs > DELAY_THRESHOLD_MS || query.isDelayed === true;
 
   if (isPast48h) {
     return {
-      complaint,
+      query,
       status: 'OVERDUE',
       points: 0.0,
       isEvaluated: true,
@@ -83,7 +83,7 @@ export function evaluateComplaintKpi(
 
   // In Progress (< 48h): Excluded from penalty until 48h passes
   return {
-    complaint,
+    query,
     status: 'IN_PROGRESS',
     points: 0.0,
     isEvaluated: false,
@@ -93,22 +93,22 @@ export function evaluateComplaintKpi(
 }
 
 /**
- * Filter complaints according to rolling time window.
+ * Filter queries according to rolling time window.
  * Default is 7-day rolling window as requested.
- * Anti-cheat safeguard: Open overdue complaints are NEVER excluded even if they age past 7 days!
+ * Anti-cheat safeguard: Open overdue queries are NEVER excluded even if they age past 7 days!
  */
-export function filterComplaintsByWindow(
-  complaints: Complaint[],
+export function filterQueriesByWindow(
+  queries: Query[],
   window: KpiTimeWindow = '7d',
   nowMs: number = Date.now()
-): Complaint[] {
-  if (window === 'all') return complaints;
+): Query[] {
+  if (window === 'all') return queries;
 
   const days = window === '7d' ? 7 : window === '14d' ? 14 : 30;
   const windowThresholdMs = nowMs - days * 24 * 60 * 60 * 1000;
 
-  return complaints.filter((c) => {
-    const createdMs = getComplaintTimestampMs(c);
+  return queries.filter((c) => {
+    const createdMs = getQueryTimestampMs(c);
     // Included if created within rolling window
     if (createdMs >= windowThresholdMs) return true;
 
@@ -123,20 +123,20 @@ export function filterComplaintsByWindow(
  * Calculates weighted KPI statistics for a single manager.
  */
 export function calculateManagerKpi(
-  complaints: Complaint[],
+  queries: Query[],
   manager: UserAccount,
   options: CalculateKpiOptions = {}
 ): ManagerKpiStats {
   const { window = '7d', nowMs = Date.now() } = options;
 
   // 1. Scoped to this manager
-  const assigned = complaints.filter((c) => belongsToManager(c, manager));
+  const assigned = queries.filter((c) => belongsToManager(c, manager));
 
   // 2. Filter by rolling window
-  const windowComplaints = filterComplaintsByWindow(assigned, window, nowMs);
+  const windowQueries = filterQueriesByWindow(assigned, window, nowMs);
 
-  // 3. Evaluate each complaint
-  const evaluatedList = windowComplaints.map((c) => evaluateComplaintKpi(c, nowMs));
+  // 3. Evaluate each query
+  const evaluatedList = windowQueries.map((c) => evaluateQueryKpi(c, nowMs));
 
   let onTimeCount = 0;
   let lateCount = 0;
@@ -176,7 +176,7 @@ export function calculateManagerKpi(
   }
 
   const totalEvaluated = onTimeCount + lateCount + overdueCount;
-  // If no evaluated complaints (e.g. 0 complaints or only in-progress), default to 100%
+  // If no evaluated queries (e.g. 0 queries or only in-progress), default to 100%
   const kpiScore =
     totalEvaluated > 0
       ? Math.round((earnedPoints / totalEvaluated) * 100)
@@ -201,14 +201,14 @@ export function calculateManagerKpi(
     kpiScore,
     earnedPoints: Math.round(earnedPoints * 10) / 10,
     totalEvaluated,
-    totalAssigned: windowComplaints.length,
+    totalAssigned: windowQueries.length,
     onTimeCount,
     lateCount,
     overdueCount,
     inProgressCount,
     avgManagerTurnaroundHours,
     avgSenderVerificationHours,
-    evaluatedComplaints: evaluatedList,
+    evaluatedQueries: evaluatedList,
   };
 }
 
@@ -216,14 +216,14 @@ export function calculateManagerKpi(
  * Calculates weighted KPI statistics for all managers, sorted by score descending.
  */
 export function calculateAllManagersKpi(
-  complaints: Complaint[],
+  queries: Query[],
   managers: UserAccount[],
   options: CalculateKpiOptions = {}
 ): {
   stats: ManagerKpiStats[];
   teamAverageKpi: number;
 } {
-  const stats = managers.map((mgr) => calculateManagerKpi(complaints, mgr, options));
+  const stats = managers.map((mgr) => calculateManagerKpi(queries, mgr, options));
 
   // Sort by KPI Score (highest first), then earned points, then on-time count
   stats.sort((a, b) => {

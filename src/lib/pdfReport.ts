@@ -1,15 +1,15 @@
 import jsPDF from 'jspdf';
-import { Complaint, isComplaintDelayed, isComplaintDone, UserAccount } from '../types';
+import { Query, isQueryDelayed, isQueryDone, UserAccount } from '../types';
 
 export interface GenerateWeeklyReportOptions {
-  complaints: Complaint[];
+  queries: Query[];
   managers: UserAccount[];
   adminUser: UserAccount;
   nowMs?: number;
 }
 
 export function generateWeeklyManagerReportPdf({
-  complaints,
+  queries,
   managers,
   adminUser,
   nowMs = Date.now(),
@@ -69,10 +69,10 @@ export function generateWeeklyManagerReportPdf({
   doc.line(margin, currentY, pageWidth - margin, currentY);
 
   // Overall Counts
-  const totalCount = complaints.length;
-  const doneCount = complaints.filter((c) => isComplaintDone(c)).length;
-  const pendingCount = complaints.filter((c) => !isComplaintDone(c)).length;
-  const delayedCount = complaints.filter((c) => isComplaintDelayed(c, nowMs)).length;
+  const totalCount = queries.length;
+  const doneCount = queries.filter((c) => isQueryDone(c)).length;
+  const pendingCount = queries.filter((c) => !isQueryDone(c)).length;
+  const delayedCount = queries.filter((c) => isQueryDelayed(c, nowMs)).length;
 
   // 1. Top Executive Summary Metric Cards
   currentY += 5;
@@ -118,17 +118,17 @@ export function generateWeeklyManagerReportPdf({
 
   // Prepare Manager Stats
   const managerStats = managers.map((mgr) => {
-    const mgrComplaints = complaints.filter(
+    const mgrQueries = queries.filter(
       (c) =>
         (c.managerId && c.managerId === mgr.id) ||
         (c.managerEmail && c.managerEmail.toLowerCase() === mgr.email.toLowerCase()) ||
         (c.managerName && c.managerName.toLowerCase() === mgr.name.toLowerCase())
     );
 
-    const mTotal = mgrComplaints.length;
-    const mDone = mgrComplaints.filter((c) => isComplaintDone(c)).length;
-    const mPending = mgrComplaints.filter((c) => !isComplaintDone(c)).length;
-    const mDelayed = mgrComplaints.filter((c) => isComplaintDelayed(c, nowMs)).length;
+    const mTotal = mgrQueries.length;
+    const mDone = mgrQueries.filter((c) => isQueryDone(c)).length;
+    const mPending = mgrQueries.filter((c) => !isQueryDone(c)).length;
+    const mDelayed = mgrQueries.filter((c) => isQueryDelayed(c, nowMs)).length;
     const mRate = mTotal > 0 ? Math.round((mDone / mTotal) * 100) : 0;
 
     return { name: mgr.name, email: mgr.email, total: mTotal, done: mDone, pending: mPending, delayed: mDelayed, rate: mRate };
@@ -240,8 +240,8 @@ export function generateWeeklyManagerReportPdf({
   currentY += totalRows * (mCardHeight + gridGap) + 4;
 
   // 4. Overdue Queries Priority Watchlist (Only drawn if overdue queries exist)
-  const delayedComplaints = complaints.filter((c) => isComplaintDelayed(c, nowMs));
-  if (delayedComplaints.length > 0 && currentY < 240) {
+  const delayedQueries = queries.filter((c) => isQueryDelayed(c, nowMs));
+  if (delayedQueries.length > 0 && currentY < 240) {
     doc.setFillColor(254, 242, 242);
     doc.setDrawColor(254, 202, 202);
     doc.roundedRect(margin, currentY, contentWidth, 24, 2, 2, 'FD');
@@ -255,11 +255,11 @@ export function generateWeeklyManagerReportPdf({
     doc.setFontSize(7.2);
     doc.setTextColor(71, 85, 105);
 
-    delayedComplaints.slice(0, 3).forEach((dc, dIdx) => {
+    delayedQueries.slice(0, 3).forEach((dc, dIdx) => {
       const rowY = currentY + 11 + dIdx * 4;
-      const summaryText = dc.complaintTitle || dc.complaintText;
+      const summaryText = dc.queryTitle || dc.queryText;
       const snippet = summaryText.length > 50 ? `${summaryText.slice(0, 47)}...` : summaryText;
-      doc.text(`• Query #${dc.complaintId || dc.id} (${dc.managerName || 'Unassigned'}): ${snippet}`, margin + 5, rowY);
+      doc.text(`• Query #${dc.queryId || dc.id} (${dc.managerName || 'Unassigned'}): ${snippet}`, margin + 5, rowY);
     });
   }
 

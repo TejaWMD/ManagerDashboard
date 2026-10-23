@@ -2,35 +2,35 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   belongsToAccountManager,
   belongsToManager,
-  Complaint,
-  isComplaintDelayed,
-  isComplaintDone,
-  isComplaintPending,
-  sortComplaintsByStatusAndTimestamp,
+  Query,
+  isQueryDelayed,
+  isQueryDone,
+  isQueryPending,
+  sortQueriesByStatusAndTimestamp,
   UserAccount,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
 import wmdLogo from '../../assets/wmd-logo.jpg';
-import './ComplaintPage.css';
+import './QueryPage.css';
 
-interface ComplaintPageProps {
+interface QueryPageProps {
   currentUser: UserAccount;
-  complaints: Complaint[];
-  savingComplaintId: string | null;
-  onCreateComplaint: (payload: {
+  queries: Query[];
+  savingQueryId: string | null;
+  onCreateQuery: (payload: {
     managerId: string;
     managerEmail: string;
     managerName: string;
-    complaintTitle: string;
-    complaintText: string;
+    queryTitle: string;
+    queryText: string;
   }) => Promise<void>;
-  onUpdateComplaint: (
-    complaintId: string,
+  onUpdateQuery: (
+    queryId: string,
     updates: Partial<
       Pick<
-        Complaint,
-        | 'complaintTitle'
-        | 'complaintText'
+        Query,
+        | 'queryTitle'
+        | 'queryText'
         | 'managerRemarkTitle'
         | 'managerRemark'
         | 'managerDone'
@@ -52,12 +52,12 @@ type StatusFilterValue =
 
 type ManagerViewScope = 'ALL' | 'RECEIVED' | 'SENT';
 
-export const ComplaintPage: React.FC<ComplaintPageProps> = ({
+export const QueryPage: React.FC<QueryPageProps> = ({
   currentUser,
-  complaints,
-  savingComplaintId,
-  onCreateComplaint,
-  onUpdateComplaint,
+  queries,
+  savingQueryId,
+  onCreateQuery,
+  onUpdateQuery,
 }) => {
   // All potential senders (Account Managers + Managers)
   const senders = useMemo(
@@ -68,14 +68,14 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     []
   );
 
-  // All managers (complaints can ONLY be sent to managers)
+  // All managers (queries can ONLY be sent to managers)
   const managers = useMemo(
     () => AUTHORIZED_USERS.filter((u) => u.role === 'manager'),
     []
   );
 
-  // Available target managers when creating a new complaint
-  // If currentUser is a manager, prioritize other managers so they send complaints among themselves
+  // Available target managers when creating a new query
+  // If currentUser is a manager, prioritize other managers so they send queries among themselves
   const targetManagersForCreation = useMemo(() => {
     if (currentUser.role === 'manager') {
       const otherManagers = managers.filter((m) => m.id !== currentUser.id);
@@ -105,8 +105,8 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   const [selectedManagerId, setSelectedManagerId] = useState<string>(
     targetManagersForCreation[0]?.id || ''
   );
-  const [complaintTitleInput, setComplaintTitleInput] = useState<string>('');
-  const [complaintInput, setComplaintInput] = useState<string>('');
+  const [queryTitleInput, setQueryTitleInput] = useState<string>('');
+  const [queryInput, setQueryInput] = useState<string>('');
   const [isSubmittingNew, setIsSubmittingNew] = useState<boolean>(false);
 
   // Keep target manager selection in sync when modal opens
@@ -122,36 +122,36 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
   const [senderRemarkTitleDraft, setSenderRemarkTitleDraft] = useState<string>('');
   const [senderRemarkDraft, setSenderRemarkDraft] = useState<string>('');
 
-  const [editingComplaintTextId, setEditingComplaintTextId] = useState<string | null>(null);
-  const [complaintTitleDraft, setComplaintTitleDraft] = useState<string>('');
-  const [complaintTextDraft, setComplaintTextDraft] = useState<string>('');
+  const [editingQueryTextId, setEditingQueryTextId] = useState<string | null>(null);
+  const [queryTitleDraft, setQueryTitleDraft] = useState<string>('');
+  const [queryTextDraft, setQueryTextDraft] = useState<string>('');
 
   const [editingMgrRemarkId, setEditingMgrRemarkId] = useState<string | null>(null);
   const [mgrRemarkTitleDraft, setMgrRemarkTitleDraft] = useState<string>('');
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
   // Mandatory Solution Remark Modal state (Director Policy Requirement)
-  const [remarkModalComplaint, setRemarkModalComplaint] = useState<Complaint | null>(null);
+  const [remarkModalQuery, setRemarkModalQuery] = useState<Query | null>(null);
   const [mandatoryRemarkTitleDraft, setMandatoryRemarkTitleDraft] = useState<string>('');
   const [mandatoryRemarkDraft, setMandatoryRemarkDraft] = useState<string>('');
   const [remarkError, setRemarkError] = useState<string>('');
 
-  // View Complaint Details Pop-up Modal state (for all users)
-  const [viewingComplaint, setViewingComplaint] = useState<Complaint | null>(null);
-  const activeViewingComplaint = useMemo(() => {
-    if (!viewingComplaint) return null;
+  // View Query Details Pop-up Modal state (for all users)
+  const [viewingQuery, setViewingQuery] = useState<Query | null>(null);
+  const activeViewingQuery = useMemo(() => {
+    if (!viewingQuery) return null;
     return (
-      complaints.find((c) => c.complaintId === viewingComplaint.complaintId) ||
-      viewingComplaint
+      queries.find((c) => c.queryId === viewingQuery.queryId) ||
+      viewingQuery
     );
-  }, [complaints, viewingComplaint]);
+  }, [queries, viewingQuery]);
 
-  // 1. Role-scoped complaints
-  // Account Managers see complaints they created.
-  // Managers see complaints assigned to them AND complaints they sent among themselves.
-  // Admin sees all complaints.
-  const roleScopedComplaints = useMemo(() => {
-    return complaints.filter((c) => {
+  // 1. Role-scoped queries
+  // Account Managers see queries they created.
+  // Managers see queries assigned to them AND queries they sent among themselves.
+  // Admin sees all queries.
+  const roleScopedQueries = useMemo(() => {
+    return queries.filter((c) => {
       if (currentUser.role === 'account_manager') {
         return belongsToAccountManager(c, currentUser);
       }
@@ -163,14 +163,14 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
       }
       return true;
     });
-  }, [complaints, currentUser]);
+  }, [queries, currentUser]);
 
   // 2. Apply header filters & automatic status + timestamp sorting
-  const sortedAndFilteredComplaints = useMemo(() => {
+  const sortedAndFilteredQueries = useMemo(() => {
     const selectedSenderObj = senders.find((s) => s.id === filterSenderId);
     const selectedMgrObj = managers.find((m) => m.id === filterManagerId);
 
-    const filtered = roleScopedComplaints.filter((c) => {
+    const filtered = roleScopedQueries.filter((c) => {
       // Manager view scope: All, Received, or Sent
       if (currentUser.role === 'manager' && managerViewType !== 'ALL') {
         if (managerViewType === 'RECEIVED' && !belongsToManager(c, currentUser)) {
@@ -197,9 +197,9 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
       // Status filter
       if (filterStatus !== 'ALL') {
-        const done = isComplaintDone(c);
-        const delayed = isComplaintDelayed(c, nowMs);
-        const pendingUnder48h = isComplaintPending(c, nowMs);
+        const done = isQueryDone(c);
+        const delayed = isQueryDelayed(c, nowMs);
+        const pendingUnder48h = isQueryPending(c, nowMs);
 
         if (filterStatus === 'Completed' && !done) return false;
         if (filterStatus === 'Pending' && !pendingUnder48h) return false;
@@ -215,9 +215,9 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
       return true;
     });
 
-    return sortComplaintsByStatusAndTimestamp(filtered, timestampOrder);
+    return sortQueriesByStatusAndTimestamp(filtered, timestampOrder);
   }, [
-    roleScopedComplaints,
+    roleScopedQueries,
     currentUser.role,
     managerViewType,
     filterSenderId,
@@ -249,8 +249,8 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     e.preventDefault();
     if (
       !selectedManagerId ||
-      !complaintTitleInput.trim() ||
-      !complaintInput.trim() ||
+      !queryTitleInput.trim() ||
+      !queryInput.trim() ||
       isSubmittingNew
     ) {
       return;
@@ -261,30 +261,30 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
     setIsSubmittingNew(true);
     try {
-      await onCreateComplaint({
+      await onCreateQuery({
         managerId: targetManager.id,
         managerEmail: targetManager.email,
         managerName: targetManager.name,
-        complaintTitle: complaintTitleInput.trim(),
-        complaintText: complaintInput.trim(),
+        queryTitle: queryTitleInput.trim(),
+        queryText: queryInput.trim(),
       });
 
-      setComplaintTitleInput('');
-      setComplaintInput('');
+      setQueryTitleInput('');
+      setQueryInput('');
       setShowCreateModal(false);
     } finally {
       setIsSubmittingNew(false);
     }
   };
 
-  const startEditSenderRemark = (item: Complaint) => {
-    setEditingSenderRemarkId(item.complaintId);
+  const startEditSenderRemark = (item: Query) => {
+    setEditingSenderRemarkId(item.queryId);
     setSenderRemarkTitleDraft(item.accountManagerRemarkTitle || '');
     setSenderRemarkDraft(item.accountManagerRemark || '');
   };
 
-  const saveSenderRemark = async (complaintId: string) => {
-    await onUpdateComplaint(complaintId, {
+  const saveSenderRemark = async (queryId: string) => {
+    await onUpdateQuery(queryId, {
       accountManagerRemarkTitle: senderRemarkTitleDraft.trim(),
       accountManagerRemark: senderRemarkDraft.trim(),
     });
@@ -293,33 +293,33 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     setSenderRemarkDraft('');
   };
 
-  const startEditComplaintText = (item: Complaint) => {
-    setEditingComplaintTextId(item.complaintId);
-    setComplaintTitleDraft(item.complaintTitle || item.complaintText || '');
-    setComplaintTextDraft(item.complaintText || '');
+  const startEditQueryText = (item: Query) => {
+    setEditingQueryTextId(item.queryId);
+    setQueryTitleDraft(item.queryTitle || item.queryText || '');
+    setQueryTextDraft(item.queryText || '');
   };
 
-  const saveComplaintText = async (complaintId: string) => {
-    const trimmedTitle = complaintTitleDraft.trim();
-    const trimmedDesc = complaintTextDraft.trim();
+  const saveQueryText = async (queryId: string) => {
+    const trimmedTitle = queryTitleDraft.trim();
+    const trimmedDesc = queryTextDraft.trim();
     if (!trimmedTitle && !trimmedDesc) return;
-    await onUpdateComplaint(complaintId, {
-      complaintTitle: trimmedTitle || trimmedDesc,
-      complaintText: trimmedDesc,
+    await onUpdateQuery(queryId, {
+      queryTitle: trimmedTitle || trimmedDesc,
+      queryText: trimmedDesc,
     });
-    setEditingComplaintTextId(null);
-    setComplaintTitleDraft('');
-    setComplaintTextDraft('');
+    setEditingQueryTextId(null);
+    setQueryTitleDraft('');
+    setQueryTextDraft('');
   };
 
-  const startEditMgrRemark = (item: Complaint) => {
-    setEditingMgrRemarkId(item.complaintId);
+  const startEditMgrRemark = (item: Query) => {
+    setEditingMgrRemarkId(item.queryId);
     setMgrRemarkTitleDraft(item.managerRemarkTitle || '');
     setMgrRemarkDraft(item.managerRemark || '');
   };
 
-  const saveMgrRemark = async (complaintId: string) => {
-    await onUpdateComplaint(complaintId, {
+  const saveMgrRemark = async (queryId: string) => {
+    await onUpdateQuery(queryId, {
       managerRemarkTitle: mgrRemarkTitleDraft.trim(),
       managerRemark: mgrRemarkDraft.trim(),
     });
@@ -328,7 +328,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     setMgrRemarkDraft('');
   };
 
-  const handleToggleManagerDone = async (item: Complaint) => {
+  const handleToggleManagerDone = async (item: Query) => {
     // Only assigned manager or admin can toggle Manager Done
     const isAssigned = item.managerId === currentUser.id;
     if (!isAssigned && currentUser.role !== 'admin') return;
@@ -341,14 +341,14 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         (item.managerRemark && item.managerRemark.trim())
     );
     if (nextManagerDone && !hasExistingMgrRemark) {
-      setRemarkModalComplaint(item);
+      setRemarkModalQuery(item);
       setMandatoryRemarkTitleDraft('');
       setMandatoryRemarkDraft('');
       setRemarkError('');
       return;
     }
 
-    await onUpdateComplaint(item.complaintId, {
+    await onUpdateQuery(item.queryId, {
       managerDone: nextManagerDone,
       // If manager unchecks their box, also reset sender verification so sender only checks when resolved
       ...(!nextManagerDone && item.accountManagerDone
@@ -359,33 +359,33 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
   const handleConfirmRemarkAndDone = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!remarkModalComplaint) return;
+    if (!remarkModalQuery) return;
     const trimmedTitle = mandatoryRemarkTitleDraft.trim();
     const trimmedDesc = mandatoryRemarkDraft.trim();
     if (!trimmedTitle && !trimmedDesc) {
       setRemarkError('A solution remark title and description are required before marking Done.');
       return;
     }
-    await onUpdateComplaint(remarkModalComplaint.complaintId, {
+    await onUpdateQuery(remarkModalQuery.queryId, {
       managerRemarkTitle: trimmedTitle || trimmedDesc,
       managerRemark: trimmedDesc,
       managerDone: true,
     });
-    setRemarkModalComplaint(null);
+    setRemarkModalQuery(null);
     setMandatoryRemarkTitleDraft('');
     setMandatoryRemarkDraft('');
     setRemarkError('');
   };
 
-  const handleToggleSenderDone = async (item: Complaint) => {
+  const handleToggleSenderDone = async (item: Query) => {
     // Only the creator/sender or admin can toggle Sender Done
     const isSender = item.accountManagerId === currentUser.id;
     if (!isSender && currentUser.role !== 'admin') return;
 
-    // Sender will only check the box once the complaint is completed by assigned manager
+    // Sender will only check the box once the query is completed by assigned manager
     if (!item.accountManagerDone && !item.managerDone) return;
 
-    await onUpdateComplaint(item.complaintId, {
+    await onUpdateQuery(item.queryId, {
       accountManagerDone: !item.accountManagerDone,
     });
   };
@@ -397,23 +397,23 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
     return userMatch.role === 'manager' ? 'Mgr' : userMatch.role === 'account_manager' ? 'AM' : 'Admin';
   };
 
-  // Can current user add a complaint? (AMs, Managers, and Admins)
-  const canAddComplaint =
+  // Can current user add a query? (AMs, Managers, and Admins)
+  const canAddQuery =
     currentUser.role === 'account_manager' ||
     currentUser.role === 'manager' ||
     currentUser.role === 'admin';
 
   return (
-    <div className="complaint-page-container">
-      <header className="complaint-page-header">
-        <div className="complaint-header-title-group">
-          <h1 className="complaint-page-title">Complaints</h1>
-          <span className="complaint-count-pill">
-            {sortedAndFilteredComplaints.length} / {roleScopedComplaints.length}
+    <div className="query-page-container">
+      <header className="query-page-header">
+        <div className="query-header-title-group">
+          <h1 className="query-page-title">Queries</h1>
+          <span className="query-count-pill">
+            {sortedAndFilteredQueries.length} / {roleScopedQueries.length}
           </span>
         </div>
 
-        <div className="complaint-header-controls">
+        <div className="query-header-controls">
           {/* Manager View Scope Filter: All, Received, Sent */}
           {currentUser.role === 'manager' && (
             <div className="header-filter-group">
@@ -425,9 +425,9 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 className="header-filter-select"
                 value={managerViewType}
                 onChange={(e) => setManagerViewType(e.target.value as ManagerViewScope)}
-                title="Filter complaints by role: Received (Assigned to you) or Sent (Sent by you)"
+                title="Filter queries by role: Received (Assigned to you) or Sent (Sent by you)"
               >
-                <option value="ALL">All Complaints</option>
+                <option value="ALL">All Queries</option>
                 <option value="RECEIVED">Received (Assigned)</option>
                 <option value="SENT">Sent (By Me)</option>
               </select>
@@ -507,15 +507,15 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
             </button>
           )}
 
-          {/* Add Complaint Button: available for Managers & Account Managers */}
-          {canAddComplaint && (
+          {/* Add Query Button: available for Managers & Account Managers */}
+          {canAddQuery && (
             <button
               type="button"
               className="header-add-btn"
               onClick={handleOpenCreateModal}
-              title="Submit a new complaint to a manager"
+              title="Submit a new query to a manager"
             >
-              + Add Complaint
+              + Add Query
             </button>
           )}
         </div>
@@ -530,9 +530,9 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         </div>
       </header>
 
-      <section className="complaints-table-card">
-        <div className="complaints-table-wrapper">
-          <table className="complaints-table">
+      <section className="queries-table-card">
+        <div className="queries-table-wrapper">
+          <table className="queries-table">
             <thead>
               <tr>
                 <th
@@ -550,7 +550,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 <th>ID</th>
                 <th>From (Sender)</th>
                 <th>Assigned Mgr</th>
-                <th>Complaint</th>
+                <th>Query</th>
                 <th>Manager Remark</th>
                 <th className="th-center">Mgr Done</th>
                 <th>Sender Remark</th>
@@ -559,17 +559,17 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {sortedAndFilteredComplaints.map((item) => {
-                const completed = isComplaintDone(item);
-                const delayed = isComplaintDelayed(item, nowMs);
+              {sortedAndFilteredQueries.map((item) => {
+                const completed = isQueryDone(item);
+                const delayed = isQueryDelayed(item, nowMs);
                 const managerOnlyChecked = item.managerDone && !item.accountManagerDone;
-                const isRowSaving = savingComplaintId === item.complaintId;
+                const isRowSaving = savingQueryId === item.queryId;
 
                 const isSender = currentUser.id === item.accountManagerId;
                 const isAssignedManager = currentUser.id === item.managerId;
                 const isAdmin = currentUser.role === 'admin';
 
-                const canEditComplaintText = isSender;
+                const canEditQueryText = isSender;
                 const canEditMgrRemark = isAssignedManager;
                 const canToggleMgrDone = (isAssignedManager) && !isRowSaving;
                 const canEditSenderRemark = isSender;
@@ -591,8 +591,8 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
                 return (
                   <tr
-                    key={item.complaintId}
-                    className={`${rowStateClass} complaint-row-clickable`}
+                    key={item.queryId}
+                    className={`${rowStateClass} query-row-clickable`}
                     onClick={(e) => {
                       const target = e.target as HTMLElement;
                       if (
@@ -602,18 +602,18 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       ) {
                         return;
                       }
-                      setViewingComplaint(item);
+                      setViewingQuery(item);
                     }}
-                    title="Click to view complaint details"
+                    title="Click to view query details"
                   >
                     <td className="td-timestamp">{item.createdAt}</td>
 
-                    <td className="td-complaint-id">
+                    <td className="td-query-id">
                       <span
-                        className="complaint-id-badge complaint-id-badge--clickable"
-                        onClick={() => setViewingComplaint(item)}
+                        className="query-id-badge query-id-badge--clickable"
+                        onClick={() => setViewingQuery(item)}
                       >
-                        {item.complaintId}
+                        {item.queryId}
                       </span>
                     </td>
 
@@ -644,37 +644,37 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       </div>
                     </td>
 
-                    {/* Complaint Text */}
-                    <td className="td-complaint-text">
-                      {canEditComplaintText &&
-                      editingComplaintTextId === item.complaintId ? (
+                    {/* Query Text */}
+                    <td className="td-query-text">
+                      {canEditQueryText &&
+                      editingQueryTextId === item.queryId ? (
                         <div className="inline-edit-box">
                           <input
                             type="text"
                             className="inline-edit-title-input"
-                            value={complaintTitleDraft}
-                            onChange={(e) => setComplaintTitleDraft(e.target.value)}
-                            placeholder="Complaint title..."
+                            value={queryTitleDraft}
+                            onChange={(e) => setQueryTitleDraft(e.target.value)}
+                            placeholder="Query title..."
                           />
                           <textarea
                             rows={2}
-                            value={complaintTextDraft}
-                            onChange={(e) => setComplaintTextDraft(e.target.value)}
-                            placeholder="Complaint description..."
+                            value={queryTextDraft}
+                            onChange={(e) => setQueryTextDraft(e.target.value)}
+                            placeholder="Query description..."
                           />
                           <div className="inline-edit-actions">
                             <button
                               type="button"
                               className="btn-inline-save"
                               disabled={isRowSaving}
-                              onClick={() => saveComplaintText(item.complaintId)}
+                              onClick={() => saveQueryText(item.queryId)}
                             >
                               Save
                             </button>
                             <button
                               type="button"
                               className="btn-inline-cancel"
-                              onClick={() => setEditingComplaintTextId(null)}
+                              onClick={() => setEditingQueryTextId(null)}
                             >
                               Cancel
                             </button>
@@ -683,16 +683,16 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                       ) : (
                         <div className="remark-display-row">
                           <p
-                            className="complaint-body-text complaint-body-text--clickable"
-                            onClick={() => setViewingComplaint(item)}
+                            className="query-body-text query-body-text--clickable"
+                            onClick={() => setViewingQuery(item)}
                           >
-                            {item.complaintTitle || item.complaintText}
+                            {item.queryTitle || item.queryText}
                           </p>
-                          {canEditComplaintText && (
+                          {canEditQueryText && (
                             <button
                               type="button"
                               className="btn-inline-edit"
-                              onClick={() => startEditComplaintText(item)}
+                              onClick={() => startEditQueryText(item)}
                             >
                               Edit
                             </button>
@@ -704,7 +704,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                     {/* Manager Remark */}
                     <td className="td-remark">
                       {canEditMgrRemark ? (
-                        editingMgrRemarkId === item.complaintId ? (
+                        editingMgrRemarkId === item.queryId ? (
                           <div className="inline-edit-box">
                             <input
                               type="text"
@@ -724,7 +724,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                                 type="button"
                                 className="btn-inline-save"
                                 disabled={isRowSaving}
-                                onClick={() => saveMgrRemark(item.complaintId)}
+                                onClick={() => saveMgrRemark(item.queryId)}
                               >
                                 Save
                               </button>
@@ -742,10 +742,10 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                             <span
                               className={
                                 item.managerRemarkTitle || item.managerRemark
-                                  ? 'remark-value complaint-body-text--clickable'
+                                  ? 'remark-value query-body-text--clickable'
                                   : 'remark-placeholder'
                               }
-                              onClick={() => setViewingComplaint(item)}
+                              onClick={() => setViewingQuery(item)}
                             >
                               {item.managerRemarkTitle || item.managerRemark || '—'}
                             </span>
@@ -762,10 +762,10 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                         <span
                           className={
                             item.managerRemarkTitle || item.managerRemark
-                              ? 'remark-value complaint-body-text--clickable'
+                              ? 'remark-value query-body-text--clickable'
                               : 'remark-placeholder'
                           }
-                          onClick={() => setViewingComplaint(item)}
+                          onClick={() => setViewingQuery(item)}
                         >
                           {item.managerRemarkTitle || item.managerRemark || '—'}
                         </span>
@@ -799,7 +799,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                     {/* Sender Remark (accountManagerRemark) */}
                     <td className="td-remark">
                       {canEditSenderRemark ? (
-                        editingSenderRemarkId === item.complaintId ? (
+                        editingSenderRemarkId === item.queryId ? (
                           <div className="inline-edit-box">
                             <input
                               type="text"
@@ -819,7 +819,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                                 type="button"
                                 className="btn-inline-save"
                                 disabled={isRowSaving}
-                                onClick={() => saveSenderRemark(item.complaintId)}
+                                onClick={() => saveSenderRemark(item.queryId)}
                               >
                                 Save
                               </button>
@@ -837,10 +837,10 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                             <span
                               className={
                                 item.accountManagerRemarkTitle || item.accountManagerRemark
-                                  ? 'remark-value complaint-body-text--clickable'
+                                  ? 'remark-value query-body-text--clickable'
                                   : 'remark-placeholder'
                               }
-                              onClick={() => setViewingComplaint(item)}
+                              onClick={() => setViewingQuery(item)}
                             >
                               {item.accountManagerRemarkTitle ||
                                 item.accountManagerRemark ||
@@ -859,10 +859,10 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                         <span
                           className={
                             item.accountManagerRemarkTitle || item.accountManagerRemark
-                              ? 'remark-value complaint-body-text--clickable'
+                              ? 'remark-value query-body-text--clickable'
                               : 'remark-placeholder'
                           }
-                          onClick={() => setViewingComplaint(item)}
+                          onClick={() => setViewingQuery(item)}
                         >
                           {item.accountManagerRemarkTitle ||
                             item.accountManagerRemark ||
@@ -937,10 +937,10 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 );
               })}
 
-              {sortedAndFilteredComplaints.length === 0 && (
+              {sortedAndFilteredQueries.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="empty-complaints-cell">
-                    No complaints match the selected filters.
+                  <td colSpan={10} className="empty-queries-cell">
+                    No queries match the selected filters.
                   </td>
                 </tr>
               )}
@@ -949,7 +949,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         </div>
       </section>
 
-      {/* New Complaint Modal - available to Managers and Account Managers */}
+      {/* New Query Modal - available to Managers and Account Managers */}
       {showCreateModal && (
         <div
           className="modal-backdrop"
@@ -960,11 +960,11 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="create-complaint-modal-title"
+            aria-labelledby="create-query-modal-title"
           >
             <div className="modal-header">
               <div className="modal-header-text">
-                <h3 id="create-complaint-modal-title">New Complaint</h3>
+                <h3 id="create-query-modal-title">New Query</h3>
                 <span className="modal-sender-badge">
                   From: <strong>{currentUser.name}</strong> ({currentUser.roleLabel})
                 </span>
@@ -981,7 +981,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
 
             <form className="modal-form" onSubmit={handleCreateSubmit}>
               <div className="cp-form-group">
-                <label htmlFor="select-manager">Send Complaint To (Manager)</label>
+                <label htmlFor="select-manager">Send Query To (Manager)</label>
                 <select
                   id="select-manager"
                   value={selectedManagerId}
@@ -995,30 +995,30 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   ))}
                 </select>
                 {/* <span className="form-helper-text">
-                  Anyone submitting a complaint can only send it to managers.
+                  Anyone submitting a query can only send it to managers.
                 </span> */}
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="complaint-title-input">Complaint Title</label>
+                <label htmlFor="query-title-input">Query Title</label>
                 <input
-                  id="complaint-title-input"
+                  id="query-title-input"
                   type="text"
-                  placeholder="Enter a short title for the complaint..."
-                  value={complaintTitleInput}
-                  onChange={(e) => setComplaintTitleInput(e.target.value)}
+                  placeholder="Enter a short title for the query..."
+                  value={queryTitleInput}
+                  onChange={(e) => setQueryTitleInput(e.target.value)}
                   required
                 />
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="write-complaint">Complaint Description</label>
+                <label htmlFor="write-query">Query Description</label>
                 <textarea
-                  id="write-complaint"
+                  id="write-query"
                   rows={6}
-                  placeholder="Describe the complaint in detail..."
-                  value={complaintInput}
-                  onChange={(e) => setComplaintInput(e.target.value)}
+                  placeholder="Describe the query in detail..."
+                  value={queryInput}
+                  onChange={(e) => setQueryInput(e.target.value)}
                   required
                 />
               </div>
@@ -1036,7 +1036,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   className="btn-primary"
                   disabled={isSubmittingNew}
                 >
-                  {isSubmittingNew ? 'Submitting...' : 'Submit Complaint'}
+                  {isSubmittingNew ? 'Submitting...' : 'Submit Query'}
                 </button>
               </div>
             </form>
@@ -1045,10 +1045,10 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
       )}
 
       {/* Mandatory Solution Remark Modal (Director Policy) */}
-      {remarkModalComplaint && (
+      {remarkModalQuery && (
         <div
           className="modal-backdrop"
-          onClick={() => setRemarkModalComplaint(null)}
+          onClick={() => setRemarkModalQuery(null)}
         >
           <div
             className="modal-dialog"
@@ -1061,13 +1061,13 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               <div className="modal-header-text">
                 <h3 id="mandatory-remark-modal-title">Solution Remark Required</h3>
                 <span className="modal-sender-badge">
-                  Complaint: <strong>{remarkModalComplaint.complaintId}</strong> &bull; Assigned to: <strong>{remarkModalComplaint.managerName}</strong>
+                  Query: <strong>{remarkModalQuery.queryId}</strong> &bull; Assigned to: <strong>{remarkModalQuery.managerName}</strong>
                 </span>
               </div>
               <button
                 type="button"
                 className="modal-close-btn"
-                onClick={() => setRemarkModalComplaint(null)}
+                onClick={() => setRemarkModalQuery(null)}
                 aria-label="Close"
               >
                 ✕
@@ -1086,7 +1086,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   lineHeight: '1.45',
                 }}
               >
-                <strong>Director Policy:</strong> Managers cannot mark complaints as Done without explaining the resolution or actions taken.
+                <strong>Director Policy:</strong> Managers cannot mark queries as Done without explaining the resolution or actions taken.
               </div> */}
 
               <div className="cp-form-group">
@@ -1129,7 +1129,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setRemarkModalComplaint(null)}
+                  onClick={() => setRemarkModalQuery(null)}
                 >
                   Cancel
                 </button>
@@ -1142,50 +1142,50 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
         </div>
       )}
 
-      {/* View Complaint Details Pop-up Modal (for all users) */}
-      {activeViewingComplaint && (
+      {/* View Query Details Pop-up Modal (for all users) */}
+      {activeViewingQuery && (
         <div
           className="modal-backdrop"
-          onClick={() => setViewingComplaint(null)}
+          onClick={() => setViewingQuery(null)}
         >
           <div
-            className="modal-dialog complaint-view-modal"
+            className="modal-dialog query-view-modal"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="view-complaint-modal-title"
+            aria-labelledby="view-query-modal-title"
           >
             <div className="modal-header">
               <div className="modal-header-text">
-                <div className="complaint-view-title-row">
-                  <h3 id="view-complaint-modal-title">
-                    Complaint {activeViewingComplaint.complaintId}
+                <div className="query-view-title-row">
+                  <h3 id="view-query-modal-title">
+                    Query {activeViewingQuery.queryId}
                   </h3>
                   <div className="td-status-pills-wrap">
-                    {isComplaintDone(activeViewingComplaint) ? (
+                    {isQueryDone(activeViewingQuery) ? (
                       <>
                         <span className="table-status-pill table-status-pill--completed">
                           Completed
                         </span>
-                        {isComplaintDelayed(activeViewingComplaint, nowMs) && (
+                        {isQueryDelayed(activeViewingQuery, nowMs) && (
                           <span className="table-status-pill table-status-pill--delayed">
                             Delayed
                           </span>
                         )}
                       </>
-                    ) : activeViewingComplaint.managerDone &&
-                      !activeViewingComplaint.accountManagerDone ? (
+                    ) : activeViewingQuery.managerDone &&
+                      !activeViewingQuery.accountManagerDone ? (
                       <>
                         <span className="table-status-pill table-status-pill--mgr-done">
                           Mgr Checked
                         </span>
-                        {isComplaintDelayed(activeViewingComplaint, nowMs) && (
+                        {isQueryDelayed(activeViewingQuery, nowMs) && (
                           <span className="table-status-pill table-status-pill--delayed">
                             Delayed
                           </span>
                         )}
                       </>
-                    ) : isComplaintDelayed(activeViewingComplaint, nowMs) ? (
+                    ) : isQueryDelayed(activeViewingQuery, nowMs) ? (
                       <span className="table-status-pill table-status-pill--delayed">
                         Delayed
                       </span>
@@ -1197,12 +1197,12 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   </div>
                 </div>
                 <span className="modal-sender-badge">
-                  Created: <strong>{activeViewingComplaint.createdAt}</strong>
-                  {activeViewingComplaint.completedAt && (
+                  Created: <strong>{activeViewingQuery.createdAt}</strong>
+                  {activeViewingQuery.completedAt && (
                     <>
                       {' '}
                       &bull; Completed:{' '}
-                      <strong>{activeViewingComplaint.completedAt}</strong>
+                      <strong>{activeViewingQuery.completedAt}</strong>
                     </>
                   )}
                 </span>
@@ -1210,98 +1210,98 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
               <button
                 type="button"
                 className="modal-close-btn"
-                onClick={() => setViewingComplaint(null)}
+                onClick={() => setViewingQuery(null)}
                 aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
-            <div className="complaint-view-body">
-              <div className="complaint-view-meta-grid">
-                <div className="complaint-view-meta-box">
-                  <span className="complaint-view-meta-label">From (Sender)</span>
+            <div className="query-view-body">
+              <div className="query-view-meta-grid">
+                <div className="query-view-meta-box">
+                  <span className="query-view-meta-label">From (Sender)</span>
                   <div className="person-cell-wrapper">
-                    <span className="complaint-view-meta-value">
-                      {activeViewingComplaint.accountManagerName}
+                    <span className="query-view-meta-value">
+                      {activeViewingQuery.accountManagerName}
                     </span>
-                    {getSenderRoleBadge(activeViewingComplaint.accountManagerId) && (
+                    {getSenderRoleBadge(activeViewingQuery.accountManagerId) && (
                       <span
                         className={`person-role-tag person-role-tag--${getSenderRoleBadge(
-                          activeViewingComplaint.accountManagerId
+                          activeViewingQuery.accountManagerId
                         )!.toLowerCase()}`}
                       >
-                        {getSenderRoleBadge(activeViewingComplaint.accountManagerId)}
+                        {getSenderRoleBadge(activeViewingQuery.accountManagerId)}
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="complaint-view-meta-box">
-                  <span className="complaint-view-meta-label">Assigned Manager</span>
+                <div className="query-view-meta-box">
+                  <span className="query-view-meta-label">Assigned Manager</span>
                   <div className="person-cell-wrapper">
-                    <span className="complaint-view-meta-value">
-                      {activeViewingComplaint.managerName}
+                    <span className="query-view-meta-value">
+                      {activeViewingQuery.managerName}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="complaint-view-section">
-                <span className="complaint-view-section-label">Complaint Details</span>
-                <div className="complaint-view-content-box">
-                  <div className="complaint-view-field-block">
-                    <span className="complaint-view-sub-label">Title</span>
-                    <div className="complaint-view-item-title">
-                      {activeViewingComplaint.complaintTitle ||
-                        activeViewingComplaint.complaintText}
+              <div className="query-view-section">
+                <span className="query-view-section-label">Query Details</span>
+                <div className="query-view-content-box">
+                  <div className="query-view-field-block">
+                    <span className="query-view-sub-label">Title</span>
+                    <div className="query-view-item-title">
+                      {activeViewingQuery.queryTitle ||
+                        activeViewingQuery.queryText}
                     </div>
                   </div>
-                  <div className="complaint-view-field-block complaint-view-field-block--desc">
-                    <span className="complaint-view-sub-label">Description</span>
-                    <div className="complaint-view-item-desc">
-                      {activeViewingComplaint.complaintText || '—'}
+                  <div className="query-view-field-block query-view-field-block--desc">
+                    <span className="query-view-sub-label">Description</span>
+                    <div className="query-view-item-desc">
+                      {activeViewingQuery.queryText || '—'}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="complaint-view-remarks-grid">
-                <div className="complaint-view-section">
-                  <div className="complaint-view-section-header">
-                    <span className="complaint-view-section-label">Manager Remark</span>
+              <div className="query-view-remarks-grid">
+                <div className="query-view-section">
+                  <div className="query-view-section-header">
+                    <span className="query-view-section-label">Manager Remark</span>
                     <span
-                      className={`complaint-view-check-tag ${
-                        activeViewingComplaint.managerDone
-                          ? 'complaint-view-check-tag--done'
+                      className={`query-view-check-tag ${
+                        activeViewingQuery.managerDone
+                          ? 'query-view-check-tag--done'
                           : ''
                       }`}
                     >
-                      {activeViewingComplaint.managerDone ? '✓ Mgr Done' : 'Unchecked'}
+                      {activeViewingQuery.managerDone ? '✓ Mgr Done' : 'Unchecked'}
                     </span>
                   </div>
                   <div
-                    className={`complaint-view-remark-box ${
-                      !activeViewingComplaint.managerRemarkTitle &&
-                      !activeViewingComplaint.managerRemark
-                        ? 'complaint-view-remark-box--empty'
+                    className={`query-view-remark-box ${
+                      !activeViewingQuery.managerRemarkTitle &&
+                      !activeViewingQuery.managerRemark
+                        ? 'query-view-remark-box--empty'
                         : ''
                     }`}
                   >
-                    {activeViewingComplaint.managerRemarkTitle ||
-                    activeViewingComplaint.managerRemark ? (
+                    {activeViewingQuery.managerRemarkTitle ||
+                    activeViewingQuery.managerRemark ? (
                       <>
-                        <div className="complaint-view-field-block">
-                          <span className="complaint-view-sub-label">Title</span>
-                          <div className="complaint-view-item-title">
-                            {activeViewingComplaint.managerRemarkTitle ||
-                              activeViewingComplaint.managerRemark}
+                        <div className="query-view-field-block">
+                          <span className="query-view-sub-label">Title</span>
+                          <div className="query-view-item-title">
+                            {activeViewingQuery.managerRemarkTitle ||
+                              activeViewingQuery.managerRemark}
                           </div>
                         </div>
-                        <div className="complaint-view-field-block complaint-view-field-block--desc">
-                          <span className="complaint-view-sub-label">Description</span>
-                          <div className="complaint-view-item-desc">
-                            {activeViewingComplaint.managerRemark || '—'}
+                        <div className="query-view-field-block query-view-field-block--desc">
+                          <span className="query-view-sub-label">Description</span>
+                          <div className="query-view-item-desc">
+                            {activeViewingQuery.managerRemark || '—'}
                           </div>
                         </div>
                       </>
@@ -1311,43 +1311,43 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                   </div>
                 </div>
 
-                <div className="complaint-view-section">
-                  <div className="complaint-view-section-header">
-                    <span className="complaint-view-section-label">Sender Remark</span>
+                <div className="query-view-section">
+                  <div className="query-view-section-header">
+                    <span className="query-view-section-label">Sender Remark</span>
                     <span
-                      className={`complaint-view-check-tag ${
-                        activeViewingComplaint.accountManagerDone
-                          ? 'complaint-view-check-tag--done'
+                      className={`query-view-check-tag ${
+                        activeViewingQuery.accountManagerDone
+                          ? 'query-view-check-tag--done'
                           : ''
                       }`}
                     >
-                      {activeViewingComplaint.accountManagerDone
+                      {activeViewingQuery.accountManagerDone
                         ? '✓ Sender Done'
                         : 'Unchecked'}
                     </span>
                   </div>
                   <div
-                    className={`complaint-view-remark-box ${
-                      !activeViewingComplaint.accountManagerRemarkTitle &&
-                      !activeViewingComplaint.accountManagerRemark
-                        ? 'complaint-view-remark-box--empty'
+                    className={`query-view-remark-box ${
+                      !activeViewingQuery.accountManagerRemarkTitle &&
+                      !activeViewingQuery.accountManagerRemark
+                        ? 'query-view-remark-box--empty'
                         : ''
                     }`}
                   >
-                    {activeViewingComplaint.accountManagerRemarkTitle ||
-                    activeViewingComplaint.accountManagerRemark ? (
+                    {activeViewingQuery.accountManagerRemarkTitle ||
+                    activeViewingQuery.accountManagerRemark ? (
                       <>
-                        <div className="complaint-view-field-block">
-                          <span className="complaint-view-sub-label">Title</span>
-                          <div className="complaint-view-item-title">
-                            {activeViewingComplaint.accountManagerRemarkTitle ||
-                              activeViewingComplaint.accountManagerRemark}
+                        <div className="query-view-field-block">
+                          <span className="query-view-sub-label">Title</span>
+                          <div className="query-view-item-title">
+                            {activeViewingQuery.accountManagerRemarkTitle ||
+                              activeViewingQuery.accountManagerRemark}
                           </div>
                         </div>
-                        <div className="complaint-view-field-block complaint-view-field-block--desc">
-                          <span className="complaint-view-sub-label">Description</span>
-                          <div className="complaint-view-item-desc">
-                            {activeViewingComplaint.accountManagerRemark || '—'}
+                        <div className="query-view-field-block query-view-field-block--desc">
+                          <span className="query-view-sub-label">Description</span>
+                          <div className="query-view-item-desc">
+                            {activeViewingQuery.accountManagerRemark || '—'}
                           </div>
                         </div>
                       </>
@@ -1362,7 +1362,7 @@ export const ComplaintPage: React.FC<ComplaintPageProps> = ({
                 <button
                   type="button"
                   className="btn-primary"
-                  onClick={() => setViewingComplaint(null)}
+                  onClick={() => setViewingQuery(null)}
                 >
                   Close
                 </button>

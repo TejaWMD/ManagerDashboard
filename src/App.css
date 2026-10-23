@@ -56,11 +56,11 @@
   z-index: 1;
 }
 
-.app-body-column--complaints {
+.app-body-column--queries {
   overflow: hidden;
 }
 
-.app-main-content--complaints {
+.app-main-content--queries {
   height: 100%;
   min-height: 0;
   flex: 1;
@@ -192,13 +192,13 @@
     overflow: visible;
   }
 
-  .app-body-column--complaints {
+  .app-body-column--queries {
     overflow: hidden;
     height: 100%;
     min-height: 0;
   }
 
-  .app-main-content--complaints {
+  .app-main-content--queries {
     flex: 1;
     min-height: 0;
     height: 100%;

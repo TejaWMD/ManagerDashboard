@@ -1,15 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Complaint,
-  isComplaintDelayed,
-  isComplaintDone,
+  Query,
+  isQueryDelayed,
+  isQueryDone,
   UserAccount,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
 import {
   calculateAllManagersKpi,
-  evaluateComplaintKpi,
-  filterComplaintsByWindow,
+  evaluateQueryKpi,
+  filterQueriesByWindow,
   KpiTimeWindow,
 } from '../../lib/kpi';
 import wmdLogo from '../../assets/wmd-logo.jpg';
@@ -17,14 +17,14 @@ import './KPIPage.css';
 
 interface KPIPageProps {
   currentUser: UserAccount;
-  complaints: Complaint[];
+  queries: Query[];
   users?: UserAccount[];
-  onNavigate?: (page: 'home' | 'complaints' | 'kpi') => void;
+  onNavigate?: (page: 'home' | 'queries' | 'kpi') => void;
 }
 
 export const KPIPage: React.FC<KPIPageProps> = ({
   currentUser,
-  complaints,
+  queries,
   users,
   onNavigate,
 }) => {
@@ -36,24 +36,24 @@ export const KPIPage: React.FC<KPIPageProps> = ({
 
   const [timeWindow, setTimeWindow] = useState<KpiTimeWindow>('7d');
   const [selectedManagerId, setSelectedManagerId] = useState<string>('ALL');
-  const [viewingComplaint, setViewingComplaint] = useState<Complaint | null>(null);
-  const activeViewingComplaint = useMemo(() => {
-    if (!viewingComplaint) return null;
+  const [viewingQuery, setViewingQuery] = useState<Query | null>(null);
+  const activeViewingQuery = useMemo(() => {
+    if (!viewingQuery) return null;
     return (
-      complaints.find((c) => c.complaintId === viewingComplaint.complaintId) ||
-      viewingComplaint
+      queries.find((c) => c.queryId === viewingQuery.queryId) ||
+      viewingQuery
     );
-  }, [complaints, viewingComplaint]);
+  }, [queries, viewingQuery]);
 
   const nowMs = useMemo(() => Date.now(), []);
 
   // Compute rolling KPI stats for all 3 managers
   const { stats: managerStats, teamAverageKpi } = useMemo(() => {
-    return calculateAllManagersKpi(complaints, managers, {
+    return calculateAllManagersKpi(queries, managers, {
       window: timeWindow,
       nowMs,
     });
-  }, [complaints, managers, timeWindow, nowMs]);
+  }, [queries, managers, timeWindow, nowMs]);
 
   // Overall totals across the 3 managers in the selected window
   const overallTotals = useMemo(() => {
@@ -66,18 +66,18 @@ export const KPIPage: React.FC<KPIPageProps> = ({
 
   // Recent evaluated tickets for the quick snapshot card (max 4 items so it fits the exact card height)
   const recentEvaluated = useMemo(() => {
-    const inWindow = filterComplaintsByWindow(complaints, timeWindow, nowMs);
+    const inWindow = filterQueriesByWindow(queries, timeWindow, nowMs);
     const evaluated = inWindow
-      .map((c) => evaluateComplaintKpi(c, nowMs))
+      .map((c) => evaluateQueryKpi(c, nowMs))
       .filter((item) => item.isEvaluated);
 
     const filtered =
       selectedManagerId === 'ALL'
         ? evaluated
-        : evaluated.filter((item) => item.complaint.managerId === selectedManagerId);
+        : evaluated.filter((item) => item.query.managerId === selectedManagerId);
 
     return filtered.slice(0, 4);
-  }, [complaints, timeWindow, nowMs, selectedManagerId]);
+  }, [queries, timeWindow, nowMs, selectedManagerId]);
 
   return (
     <div className="kpi-screen-container">
@@ -339,7 +339,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                 <button
                   type="button"
                   className="panel-view-all-btn"
-                  onClick={() => onNavigate('complaints')}
+                  onClick={() => onNavigate('queries')}
                 >
                   View All &rarr;
                 </button>
@@ -347,7 +347,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
             </div>
 
             <div className="recent-queue-list">
-              {recentEvaluated.map(({ complaint: c, status, managerTurnaroundHours }) => {
+              {recentEvaluated.map(({ query: c, status, managerTurnaroundHours }) => {
                 const pointChipClass =
                   status === 'ON_TIME'
                     ? 'pt-chip--ontime'
@@ -364,14 +364,14 @@ export const KPIPage: React.FC<KPIPageProps> = ({
 
                 return (
                   <div
-                    key={c.complaintId}
+                    key={c.queryId}
                     className="queue-row-item"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => setViewingComplaint(c)}
-                    title="Click to view complaint details"
+                    onClick={() => setViewingQuery(c)}
+                    title="Click to view query details"
                   >
                     <div className="queue-id-box">
-                      <span className="queue-id">{c.complaintId}</span>
+                      <span className="queue-id">{c.queryId}</span>
                     </div>
 
                     <div className="queue-detail-box">
@@ -381,7 +381,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                       <span className="queue-remark-snippet">
                         {c.managerRemarkTitle || c.managerRemark
                           ? `"${c.managerRemarkTitle || c.managerRemark}"`
-                          : c.complaintTitle || c.complaintText}
+                          : c.queryTitle || c.queryText}
                       </span>
                     </div>
 
@@ -401,57 +401,57 @@ export const KPIPage: React.FC<KPIPageProps> = ({
               })}
 
               {recentEvaluated.length === 0 && (
-                <div className="queue-empty-msg">No evaluated complaints in this window.</div>
+                <div className="queue-empty-msg">No evaluated queries in this window.</div>
               )}
             </div>
           </div>
         </section>
       </div>
 
-      {/* View Complaint Details Pop-up Modal */}
-      {activeViewingComplaint && (
+      {/* View Query Details Pop-up Modal */}
+      {activeViewingQuery && (
         <div
           className="modal-backdrop"
-          onClick={() => setViewingComplaint(null)}
+          onClick={() => setViewingQuery(null)}
         >
           <div
-            className="modal-dialog complaint-view-modal"
+            className="modal-dialog query-view-modal"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="kpi-view-complaint-modal-title"
+            aria-labelledby="kpi-view-query-modal-title"
           >
             <div className="modal-header">
               <div className="modal-header-text">
-                <div className="complaint-view-title-row">
-                  <h3 id="kpi-view-complaint-modal-title">
-                    Complaint {activeViewingComplaint.complaintId}
+                <div className="query-view-title-row">
+                  <h3 id="kpi-view-query-modal-title">
+                    Query {activeViewingQuery.queryId}
                   </h3>
                   <div className="td-status-pills-wrap">
-                    {isComplaintDone(activeViewingComplaint) ? (
+                    {isQueryDone(activeViewingQuery) ? (
                       <>
                         <span className="table-status-pill table-status-pill--completed">
                           Completed
                         </span>
-                        {isComplaintDelayed(activeViewingComplaint, nowMs) && (
+                        {isQueryDelayed(activeViewingQuery, nowMs) && (
                           <span className="table-status-pill table-status-pill--delayed">
                             Delayed
                           </span>
                         )}
                       </>
-                    ) : activeViewingComplaint.managerDone &&
-                      !activeViewingComplaint.accountManagerDone ? (
+                    ) : activeViewingQuery.managerDone &&
+                      !activeViewingQuery.accountManagerDone ? (
                       <>
                         <span className="table-status-pill table-status-pill--mgr-done">
                           Mgr Checked
                         </span>
-                        {isComplaintDelayed(activeViewingComplaint, nowMs) && (
+                        {isQueryDelayed(activeViewingQuery, nowMs) && (
                           <span className="table-status-pill table-status-pill--delayed">
                             Delayed
                           </span>
                         )}
                       </>
-                    ) : isComplaintDelayed(activeViewingComplaint, nowMs) ? (
+                    ) : isQueryDelayed(activeViewingQuery, nowMs) ? (
                       <span className="table-status-pill table-status-pill--delayed">
                         Delayed
                       </span>
@@ -463,12 +463,12 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   </div>
                 </div>
                 <span className="modal-sender-badge">
-                  Created: <strong>{activeViewingComplaint.createdAt}</strong>
-                  {activeViewingComplaint.completedAt && (
+                  Created: <strong>{activeViewingQuery.createdAt}</strong>
+                  {activeViewingQuery.completedAt && (
                     <>
                       {' '}
                       &bull; Completed:{' '}
-                      <strong>{activeViewingComplaint.completedAt}</strong>
+                      <strong>{activeViewingQuery.completedAt}</strong>
                     </>
                   )}
                 </span>
@@ -476,89 +476,89 @@ export const KPIPage: React.FC<KPIPageProps> = ({
               <button
                 type="button"
                 className="modal-close-btn"
-                onClick={() => setViewingComplaint(null)}
+                onClick={() => setViewingQuery(null)}
                 aria-label="Close"
               >
                 ✕
               </button>
             </div>
 
-            <div className="complaint-view-body">
-              <div className="complaint-view-meta-grid">
-                <div className="complaint-view-meta-box">
-                  <span className="complaint-view-meta-label">From (Sender)</span>
+            <div className="query-view-body">
+              <div className="query-view-meta-grid">
+                <div className="query-view-meta-box">
+                  <span className="query-view-meta-label">From (Sender)</span>
                   <div className="person-cell-wrapper">
-                    <span className="complaint-view-meta-value">
-                      {activeViewingComplaint.accountManagerName}
+                    <span className="query-view-meta-value">
+                      {activeViewingQuery.accountManagerName}
                     </span>
                   </div>
                 </div>
 
-                <div className="complaint-view-meta-box">
-                  <span className="complaint-view-meta-label">Assigned Manager</span>
+                <div className="query-view-meta-box">
+                  <span className="query-view-meta-label">Assigned Manager</span>
                   <div className="person-cell-wrapper">
-                    <span className="complaint-view-meta-value">
-                      {activeViewingComplaint.managerName}
+                    <span className="query-view-meta-value">
+                      {activeViewingQuery.managerName}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="complaint-view-section">
-                <span className="complaint-view-section-label">Complaint Details</span>
-                <div className="complaint-view-content-box">
-                  <div className="complaint-view-field-block">
-                    <span className="complaint-view-sub-label">Title</span>
-                    <div className="complaint-view-item-title">
-                      {activeViewingComplaint.complaintTitle ||
-                        activeViewingComplaint.complaintText}
+              <div className="query-view-section">
+                <span className="query-view-section-label">Query Details</span>
+                <div className="query-view-content-box">
+                  <div className="query-view-field-block">
+                    <span className="query-view-sub-label">Title</span>
+                    <div className="query-view-item-title">
+                      {activeViewingQuery.queryTitle ||
+                        activeViewingQuery.queryText}
                     </div>
                   </div>
-                  <div className="complaint-view-field-block complaint-view-field-block--desc">
-                    <span className="complaint-view-sub-label">Description</span>
-                    <div className="complaint-view-item-desc">
-                      {activeViewingComplaint.complaintText || '—'}
+                  <div className="query-view-field-block query-view-field-block--desc">
+                    <span className="query-view-sub-label">Description</span>
+                    <div className="query-view-item-desc">
+                      {activeViewingQuery.queryText || '—'}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="complaint-view-remarks-grid">
-                <div className="complaint-view-section">
-                  <div className="complaint-view-section-header">
-                    <span className="complaint-view-section-label">Manager Remark</span>
+              <div className="query-view-remarks-grid">
+                <div className="query-view-section">
+                  <div className="query-view-section-header">
+                    <span className="query-view-section-label">Manager Remark</span>
                     <span
-                      className={`complaint-view-check-tag ${
-                        activeViewingComplaint.managerDone
-                          ? 'complaint-view-check-tag--done'
+                      className={`query-view-check-tag ${
+                        activeViewingQuery.managerDone
+                          ? 'query-view-check-tag--done'
                           : ''
                       }`}
                     >
-                      {activeViewingComplaint.managerDone ? '✓ Mgr Done' : 'Unchecked'}
+                      {activeViewingQuery.managerDone ? '✓ Mgr Done' : 'Unchecked'}
                     </span>
                   </div>
                   <div
-                    className={`complaint-view-remark-box ${
-                      !activeViewingComplaint.managerRemarkTitle &&
-                      !activeViewingComplaint.managerRemark
-                        ? 'complaint-view-remark-box--empty'
+                    className={`query-view-remark-box ${
+                      !activeViewingQuery.managerRemarkTitle &&
+                      !activeViewingQuery.managerRemark
+                        ? 'query-view-remark-box--empty'
                         : ''
                     }`}
                   >
-                    {activeViewingComplaint.managerRemarkTitle ||
-                    activeViewingComplaint.managerRemark ? (
+                    {activeViewingQuery.managerRemarkTitle ||
+                    activeViewingQuery.managerRemark ? (
                       <>
-                        <div className="complaint-view-field-block">
-                          <span className="complaint-view-sub-label">Title</span>
-                          <div className="complaint-view-item-title">
-                            {activeViewingComplaint.managerRemarkTitle ||
-                              activeViewingComplaint.managerRemark}
+                        <div className="query-view-field-block">
+                          <span className="query-view-sub-label">Title</span>
+                          <div className="query-view-item-title">
+                            {activeViewingQuery.managerRemarkTitle ||
+                              activeViewingQuery.managerRemark}
                           </div>
                         </div>
-                        <div className="complaint-view-field-block complaint-view-field-block--desc">
-                          <span className="complaint-view-sub-label">Description</span>
-                          <div className="complaint-view-item-desc">
-                            {activeViewingComplaint.managerRemark || '—'}
+                        <div className="query-view-field-block query-view-field-block--desc">
+                          <span className="query-view-sub-label">Description</span>
+                          <div className="query-view-item-desc">
+                            {activeViewingQuery.managerRemark || '—'}
                           </div>
                         </div>
                       </>
@@ -568,43 +568,43 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   </div>
                 </div>
 
-                <div className="complaint-view-section">
-                  <div className="complaint-view-section-header">
-                    <span className="complaint-view-section-label">Sender Remark</span>
+                <div className="query-view-section">
+                  <div className="query-view-section-header">
+                    <span className="query-view-section-label">Sender Remark</span>
                     <span
-                      className={`complaint-view-check-tag ${
-                        activeViewingComplaint.accountManagerDone
-                          ? 'complaint-view-check-tag--done'
+                      className={`query-view-check-tag ${
+                        activeViewingQuery.accountManagerDone
+                          ? 'query-view-check-tag--done'
                           : ''
                       }`}
                     >
-                      {activeViewingComplaint.accountManagerDone
+                      {activeViewingQuery.accountManagerDone
                         ? '✓ Sender Done'
                         : 'Unchecked'}
                     </span>
                   </div>
                   <div
-                    className={`complaint-view-remark-box ${
-                      !activeViewingComplaint.accountManagerRemarkTitle &&
-                      !activeViewingComplaint.accountManagerRemark
-                        ? 'complaint-view-remark-box--empty'
+                    className={`query-view-remark-box ${
+                      !activeViewingQuery.accountManagerRemarkTitle &&
+                      !activeViewingQuery.accountManagerRemark
+                        ? 'query-view-remark-box--empty'
                         : ''
                     }`}
                   >
-                    {activeViewingComplaint.accountManagerRemarkTitle ||
-                    activeViewingComplaint.accountManagerRemark ? (
+                    {activeViewingQuery.accountManagerRemarkTitle ||
+                    activeViewingQuery.accountManagerRemark ? (
                       <>
-                        <div className="complaint-view-field-block">
-                          <span className="complaint-view-sub-label">Title</span>
-                          <div className="complaint-view-item-title">
-                            {activeViewingComplaint.accountManagerRemarkTitle ||
-                              activeViewingComplaint.accountManagerRemark}
+                        <div className="query-view-field-block">
+                          <span className="query-view-sub-label">Title</span>
+                          <div className="query-view-item-title">
+                            {activeViewingQuery.accountManagerRemarkTitle ||
+                              activeViewingQuery.accountManagerRemark}
                           </div>
                         </div>
-                        <div className="complaint-view-field-block complaint-view-field-block--desc">
-                          <span className="complaint-view-sub-label">Description</span>
-                          <div className="complaint-view-item-desc">
-                            {activeViewingComplaint.accountManagerRemark || '—'}
+                        <div className="query-view-field-block query-view-field-block--desc">
+                          <span className="query-view-sub-label">Description</span>
+                          <div className="query-view-item-desc">
+                            {activeViewingQuery.accountManagerRemark || '—'}
                           </div>
                         </div>
                       </>
@@ -619,7 +619,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                 <button
                   type="button"
                   className="btn-primary"
-                  onClick={() => setViewingComplaint(null)}
+                  onClick={() => setViewingQuery(null)}
                 >
                   Close
                 </button>

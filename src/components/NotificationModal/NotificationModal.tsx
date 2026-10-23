@@ -10,7 +10,7 @@ import {
   getExistingPushSubscription,
   unsubscribeUserFromPush,
 } from '../../lib/pushSubscription';
-import { dispatchComplaintPushNotification } from '../../lib/pushDispatcher';
+import { dispatchQueryPushNotification } from '../../lib/pushDispatcher';
 import './NotificationModal.css';
 
 interface NotificationModalProps {
@@ -108,15 +108,15 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     try {
       await showWebNotification(
         '🔔 Portal Alert Test',
-        'If you see and hear this chime, your device is ready to receive instant complaint alerts!'
+        'If you see and hear this chime, your device is ready to receive instant query alerts!'
       );
 
       // Also trigger test push dispatch
-      await dispatchComplaintPushNotification({
+      await dispatchQueryPushNotification({
         event: 'TEST',
-        complaint: {
+        query: {
           id: 'TEST-001',
-          complaintId: 'CMP-TEST',
+          queryId: 'QRY-TEST',
           createdAt: '',
           createdAtMs: Date.now(),
           accountManagerId: currentUser.id,
@@ -125,8 +125,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           managerId: currentUser.id,
           managerName: currentUser.name,
           managerEmail: currentUser.email,
-          complaintTitle: 'Test Notification',
-          complaintText: 'Test desktop push notification alert',
+          queryTitle: 'Test Notification',
+          queryText: 'Test desktop push notification alert',
           managerRemarkTitle: '',
           managerRemark: '',
           managerDone: false,
@@ -198,7 +198,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               </span>
             </div>
             <p className="notif-desc">
-              When enabled, your device will receive notifications whenever a complaint is assigned, a remark is submitted, a box is checked
+              When enabled, your device will receive notifications whenever a query is assigned, a remark is submitted, a box is checked
             </p>
 
             <div className="notif-btn-row">
@@ -240,15 +240,15 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 <>
                   <li>Notified when the manager submits a remark</li>
                   <li>Notified when the manager checks the Done button</li>
-                  <li>Notified when a complaint is delayed without manager action</li>
+                  <li>Notified when a query is delayed without manager action</li>
                 </>
               )}
               {currentUser.role === 'manager' && (
                 <>
-                  <li>Notified when a sender submits a complaint for you</li>
+                  <li>Notified when a sender submits a query for you</li>
                   <li>Notified when the sender submits a remark</li>
                   <li>Notified when the sender checks Done</li>
-                  <li>Notified when a complaint is delayed without manager action</li>
+                  <li>Notified when a query is delayed without manager action</li>
                 </>
               )}
               {currentUser.role === 'admin' && (

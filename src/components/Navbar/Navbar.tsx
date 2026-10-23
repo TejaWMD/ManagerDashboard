@@ -10,7 +10,7 @@ interface NavbarProps {
   onLogout: () => void;
   tvMode: boolean;
   onToggleTvMode: () => void;
-  openComplaintsCount: number;
+  openQueriesCount: number;
   onOpenNotifications?: () => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
@@ -24,7 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   tvMode,
   onToggleTvMode,
-  openComplaintsCount,
+  openQueriesCount,
   onOpenNotifications,
   onRefresh,
   isRefreshing = false,
@@ -97,10 +97,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         <button
           type="button"
           className={`sidebar-link-btn ${
-            activePage === 'complaints' ? 'sidebar-link-btn--active' : ''
+            activePage === 'queries' ? 'sidebar-link-btn--active' : ''
           }`}
-          onClick={() => onNavigate('complaints')}
-          title="Complaints"
+          onClick={() => onNavigate('queries')}
+          title="Queries"
         >
           <svg
             className="sidebar-nav-icon"
@@ -114,14 +114,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             <path d="M9 12h6M9 16h6M13 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-5-5z" />
             <polyline points="13 4 13 9 18 9" />
           </svg>
-          {!isCollapsed && <span className="sidebar-link-text">Complaints</span>}
-          {openComplaintsCount > 0 && (
+          {!isCollapsed && <span className="sidebar-link-text">Queries</span>}
+          {openQueriesCount > 0 && (
             <span
               className={`sidebar-badge-count ${
                 isCollapsed ? 'sidebar-badge-count--collapsed' : ''
               }`}
             >
-              {openComplaintsCount}
+              {openQueriesCount}
             </span>
           )}
         </button>

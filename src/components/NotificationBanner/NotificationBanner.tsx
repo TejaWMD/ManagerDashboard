@@ -66,7 +66,7 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
       // Show greeting alert
       showWebNotification(
         '🔔 Desktop Notifications Activated',
-        `Welcome ${currentUser.name}! You will now receive background alerts for complaints and updates.`
+        `Welcome ${currentUser.name}! You will now receive background alerts for queries and updates.`
       );
       setTimeout(() => setDismissed(true), 3500);
     } else {
@@ -103,7 +103,7 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
             Enable Desktop Background Push Alerts
           </div>
           <div className="notif-banner-desc">
-            Stay alerted on new complaints, manager remarks, and SLA delays even when your browser tab is closed.
+            Stay alerted on new queries, manager remarks, and SLA delays even when your browser tab is closed.
           </div>
           {feedback && (
             <div className={`notif-banner-feedback notif-banner-feedback--${feedback.type}`}>

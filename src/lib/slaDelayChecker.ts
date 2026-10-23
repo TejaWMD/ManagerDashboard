@@ -1,7 +1,7 @@
 // Background SLA Delay Monitor for WMD Query Portal
-import { Complaint, isComplaintDelayed, UserAccount } from '../types';
+import { Query, isQueryDelayed, UserAccount } from '../types';
 import { supabase } from './supabase';
-import { dispatchComplaintPushNotification } from './pushDispatcher';
+import { dispatchQueryPushNotification } from './pushDispatcher';
 
 const SYSTEM_ACTOR: UserAccount = {
   id: 'system',
@@ -26,10 +26,10 @@ function getLocalDelayNotifiedSet(): Set<string> {
   }
 }
 
-function recordDelayNotifiedLocally(complaintId: string): void {
+function recordDelayNotifiedLocally(queryId: string): void {
   try {
     const current = getLocalDelayNotifiedSet();
-    current.add(complaintId);
+    current.add(queryId);
     localStorage.setItem(
       DELAY_NOTIFIED_CACHE_KEY,
       JSON.stringify(Array.from(current))
@@ -39,47 +39,47 @@ function recordDelayNotifiedLocally(complaintId: string): void {
   }
 }
 
-// Check open complaints and dispatch notifications for SLA breaches
-export async function checkAndNotifyDelayedComplaints(
-  complaints: Complaint[]
+// Check open queries and dispatch notifications for SLA breaches
+export async function checkAndNotifyDelayedQueries(
+  queries: Query[]
 ): Promise<string[]> {
   const nowMs = Date.now();
   const localNotified = getLocalDelayNotifiedSet();
   const notifiedIds: string[] = [];
 
-  for (const complaint of complaints) {
-    // Only alert if manager has NOT marked Done and complaint is delayed
-    if (complaint.managerDone) {
+  for (const query of queries) {
+    // Only alert if manager has NOT marked Done and query is delayed
+    if (query.managerDone) {
       continue;
     }
 
-    const delayed = isComplaintDelayed(complaint, nowMs);
+    const delayed = isQueryDelayed(query, nowMs);
     if (!delayed) {
       continue;
     }
 
     // Check if already notified
-    if (complaint.delayNotified === true || localNotified.has(complaint.complaintId)) {
+    if (query.delayNotified === true || localNotified.has(query.queryId)) {
       continue;
     }
 
-    console.log(`[SLAChecker] Complaint ${complaint.complaintId} is delayed. Triggering alerts...`);
-    recordDelayNotifiedLocally(complaint.complaintId);
-    notifiedIds.push(complaint.complaintId);
+    console.log(`[SLAChecker] Query ${query.queryId} is delayed. Triggering alerts...`);
+    recordDelayNotifiedLocally(query.queryId);
+    notifiedIds.push(query.queryId);
 
     // 1. Dispatch push notification to Manager, AM, and Admin
-    await dispatchComplaintPushNotification({
-      event: 'COMPLAINT_DELAYED',
-      complaint,
+    await dispatchQueryPushNotification({
+      event: 'QUERY_DELAYED',
+      query,
       actor: SYSTEM_ACTOR,
     });
 
     // 2. Persist delay_notified = TRUE in Supabase
     try {
       await supabase
-        .from('complaints')
+        .from('queries')
         .update({ delay_notified: true })
-        .eq('complaint_id', complaint.complaintId);
+        .eq('query_id', query.queryId);
     } catch {
       // Non-blocking if column does not exist yet
     }

@@ -118,7 +118,7 @@ export async function requestWebNotificationPermission(): Promise<boolean> {
     if (perm === 'granted') {
       showWebNotification(
         '🔔 Notifications Enabled',
-        'You will now receive alerts whenever complaints or remarks are updated!'
+        'You will now receive alerts whenever queries or remarks are updated!'
       );
       return true;
     }
@@ -133,7 +133,7 @@ export async function requestWebNotificationPermission(): Promise<boolean> {
 export async function showWebNotification(
   title: string,
   body: string,
-  tag = 'wmd-complaint-alert'
+  tag = 'wmd-query-alert'
 ): Promise<void> {
   playNotificationChime();
 

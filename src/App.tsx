@@ -2,49 +2,49 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   belongsToAccountManager,
   belongsToManager,
-  Complaint,
+  Query,
   DELAY_THRESHOLD_MS,
-  getComplaintTimestampMs,
-  isComplaintDelayed,
-  isComplaintDone,
+  getQueryTimestampMs,
+  isQueryDelayed,
+  isQueryDone,
   PageView,
   UserAccount,
 } from './types';
 import { AUTHORIZED_USERS } from './data/users';
-import { INITIAL_COMPLAINTS } from './data/initialComplaints';
+import { INITIAL_QUERIES } from './data/initialQueries';
 import {
-  ComplaintRow,
+  QueryRow,
   ensureUsersSeededInDb,
-  fetchComplaintsFromDb,
+  fetchQueriesFromDb,
   fetchUsersFromDb,
-  insertComplaintInDb,
-  mapRowToComplaint,
+  insertQueryInDb,
+  mapRowToQuery,
   supabase,
-  updateComplaintInDb,
+  updateQueryInDb,
 } from './lib/supabase';
 import {
   registerServiceWorker,
   showWebNotification,
 } from './lib/notifications';
-import { dispatchComplaintPushNotification } from './lib/pushDispatcher';
-import { checkAndNotifyDelayedComplaints } from './lib/slaDelayChecker';
+import { dispatchQueryPushNotification } from './lib/pushDispatcher';
+import { checkAndNotifyDelayedQueries } from './lib/slaDelayChecker';
 import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
 import { HomePage } from './components/HomePage/HomePage';
-import { ComplaintPage } from './components/ComplaintPage/ComplaintPage';
+import { QueryPage } from './components/QueryPage/QueryPage';
 import { KPIPage } from './components/KPIPage/KPIPage';
 import { NotificationModal } from './components/NotificationModal/NotificationModal';
 import { NotificationBanner } from './components/NotificationBanner/NotificationBanner';
 import sqlSchemaText from '../supabase_schema.sql?raw';
 import './App.css';
 
-const OLD_DUMMY_STORAGE_KEY = 'wm_portal_complaints_v1';
-const STORAGE_KEY_COMPLAINTS = 'wm_portal_complaints_v3';
+const OLD_DUMMY_STORAGE_KEY = 'wm_portal_queries_v1';
+const STORAGE_KEY_QUERIES = 'wm_portal_queries_v3';
 const STORAGE_KEY_SESSION = 'wm_portal_active_user_v1';
 
-function persistComplaintsCache(list: Complaint[]): void {
+function persistQueriesCache(list: Query[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY_COMPLAINTS, JSON.stringify(list));
+    localStorage.setItem(STORAGE_KEY_QUERIES, JSON.stringify(list));
   } catch {
     // Ignore storage errors
   }
@@ -73,11 +73,11 @@ export const App: React.FC = () => {
   const [allUsers, setAllUsers] = useState<UserAccount[]>(AUTHORIZED_USERS);
   const [isNotifModalOpen, setIsNotifModalOpen] = useState<boolean>(false);
 
-  const [complaints, setComplaints] = useState<Complaint[]>(INITIAL_COMPLAINTS);
+  const [queries, setQueries] = useState<Query[]>(INITIAL_QUERIES);
   const [isLoadingDb, setIsLoadingDb] = useState<boolean>(true);
   const [dbTableMissing, setDbTableMissing] = useState<boolean>(false);
   const [dbError, setDbError] = useState<string | null>(null);
-  const [savingComplaintId, setSavingComplaintId] = useState<string | null>(null);
+  const [savingQueryId, setSavingQueryId] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string>('');
@@ -85,8 +85,8 @@ export const App: React.FC = () => {
   // Keep fresh references for realtime subscription closures
   const currentUserRef = useRef<UserAccount | null>(currentUser);
   currentUserRef.current = currentUser;
-  const complaintsRef = useRef<Complaint[]>(complaints);
-  complaintsRef.current = complaints;
+  const queriesRef = useRef<Query[]>(queries);
+  queriesRef.current = queries;
 
   // Initialize Service Worker for Web Push and fetch updated user phone & keys
   useEffect(() => {
@@ -100,38 +100,38 @@ export const App: React.FC = () => {
 
   // Monitor for SLA delay breaches and dispatch push notifications
   useEffect(() => {
-    if (complaints.length === 0) return;
-    checkAndNotifyDelayedComplaints(complaints);
+    if (queries.length === 0) return;
+    checkAndNotifyDelayedQueries(queries);
 
     const delayTimer = window.setInterval(() => {
-      if (complaintsRef.current.length > 0) {
-        checkAndNotifyDelayedComplaints(complaintsRef.current);
+      if (queriesRef.current.length > 0) {
+        checkAndNotifyDelayedQueries(queriesRef.current);
       }
     }, 60 * 1000); // Check every minute
 
     return () => window.clearInterval(delayTimer);
-  }, [complaints.length]);
+  }, [queries.length]);
 
-  const loadComplaints = useCallback(async () => {
+  const loadQueries = useCallback(async () => {
     setIsLoadingDb(true);
     try {
       localStorage.removeItem(OLD_DUMMY_STORAGE_KEY);
-      localStorage.removeItem('wm_portal_complaints_v2');
+      localStorage.removeItem('wm_portal_queries_v2');
     } catch {
       // Ignore storage errors
     }
 
     await ensureUsersSeededInDb();
-    const result = await fetchComplaintsFromDb();
+    const result = await fetchQueriesFromDb();
     if (result.error) {
       setDbTableMissing(result.tableMissing);
       setDbError(result.error);
       try {
-        const cached = localStorage.getItem(STORAGE_KEY_COMPLAINTS);
+        const cached = localStorage.getItem(STORAGE_KEY_QUERIES);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed)) {
-            setComplaints(parsed as Complaint[]);
+            setQueries(parsed as Query[]);
           }
         }
       } catch {
@@ -140,8 +140,8 @@ export const App: React.FC = () => {
     } else {
       setDbTableMissing(false);
       setDbError(null);
-      setComplaints(result.data);
-      persistComplaintsCache(result.data);
+      setQueries(result.data);
+      persistQueriesCache(result.data);
     }
     setIsLoadingDb(false);
   }, []);
@@ -150,7 +150,7 @@ export const App: React.FC = () => {
     setIsRefreshing(true);
     try {
       await Promise.all([
-        loadComplaints(),
+        loadQueries(),
         fetchUsersFromDb().then((users) => {
           if (users && users.length > 0) {
             setAllUsers(users);
@@ -167,29 +167,29 @@ export const App: React.FC = () => {
         setIsRefreshing(false);
       }, 450);
     }
-  }, [loadComplaints]);
+  }, [loadQueries]);
 
   useEffect(() => {
-    loadComplaints();
+    loadQueries();
 
     const channel = supabase
-      .channel('public:complaints')
+      .channel('public:queries')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'complaints' },
+        { event: '*', schema: 'public', table: 'queries' },
         (payload) => {
           const user = currentUserRef.current;
 
           if (payload.eventType === 'INSERT' && payload.new) {
-            const incoming = mapRowToComplaint(payload.new as ComplaintRow);
-            setComplaints((prev) => {
-              const exists = prev.some((c) => c.complaintId === incoming.complaintId);
+            const incoming = mapRowToQuery(payload.new as QueryRow);
+            setQueries((prev) => {
+              const exists = prev.some((c) => c.queryId === incoming.queryId);
               const next = exists
                 ? prev.map((c) =>
-                    c.complaintId === incoming.complaintId ? incoming : c
+                    c.queryId === incoming.queryId ? incoming : c
                   )
                 : [incoming, ...prev];
-              persistComplaintsCache(next);
+              persistQueriesCache(next);
               return next;
             });
 
@@ -210,25 +210,25 @@ export const App: React.FC = () => {
 
               if (user.role === 'admin') {
                 showWebNotification(
-                  '🚨 New Complaint Created',
-                  `${senderLabel} submitted ${incoming.complaintId} to Manager ${incoming.managerName}`
+                  '🚨 New Query Created',
+                  `${senderLabel} submitted ${incoming.queryId} to Manager ${incoming.managerName}`
                 );
               } else if (user.id === incoming.managerId) {
                 showWebNotification(
-                  '🚨 New Complaint Assigned',
-                  `${senderLabel} assigned ${incoming.complaintId} to you`
+                  '🚨 New Query Assigned',
+                  `${senderLabel} assigned ${incoming.queryId} to you`
                 );
               }
             }
           } else if (payload.eventType === 'UPDATE' && payload.new) {
-            const updated = mapRowToComplaint(payload.new as ComplaintRow);
-            const prevItem = complaintsRef.current.find((c) => c.complaintId === updated.complaintId);
+            const updated = mapRowToQuery(payload.new as QueryRow);
+            const prevItem = queriesRef.current.find((c) => c.queryId === updated.queryId);
 
-            setComplaints((prev) => {
+            setQueries((prev) => {
               const next = prev.map((c) =>
-                c.complaintId === updated.complaintId ? updated : c
+                c.queryId === updated.queryId ? updated : c
               );
-              persistComplaintsCache(next);
+              persistQueriesCache(next);
               return next;
             });
 
@@ -250,15 +250,15 @@ export const App: React.FC = () => {
               if (updated.status === 'Completed' && prevItem.status !== 'Completed') {
                 if (user.id === updated.managerId || user.role === 'admin') {
                   showWebNotification(
-                    '🎉 Complaint Completed',
-                    `${updated.complaintId} marked Completed by ${senderLabel}!`
+                    '🎉 Query Completed',
+                    `${updated.queryId} marked Completed by ${senderLabel}!`
                   );
                 }
               } else if (updated.managerDone !== prevItem.managerDone) {
                 if (user.id === updated.accountManagerId || user.role === 'admin') {
                   showWebNotification(
                     updated.managerDone ? '✅ Manager Marked Done' : '↩️ Manager Unmarked Done',
-                    `Manager ${updated.managerName} ${updated.managerDone ? 'marked Done on' : 'unmarked'} ${updated.complaintId}`
+                    `Manager ${updated.managerName} ${updated.managerDone ? 'marked Done on' : 'unmarked'} ${updated.queryId}`
                   );
                 }
               } else if (
@@ -270,7 +270,7 @@ export const App: React.FC = () => {
                     updated.managerRemarkTitle || updated.managerRemark;
                   showWebNotification(
                     '💬 Manager Added Remark',
-                    `Manager ${updated.managerName} on ${updated.complaintId}: "${mgrRemarkSummary}"`
+                    `Manager ${updated.managerName} on ${updated.queryId}: "${mgrRemarkSummary}"`
                   );
                 }
               } else if (
@@ -284,17 +284,17 @@ export const App: React.FC = () => {
                     updated.accountManagerRemark;
                   showWebNotification(
                     `💬 ${senderRolePrefix || 'Sender'} Added Remark`,
-                    `${senderLabel} on ${updated.complaintId}: "${amRemarkSummary}"`
+                    `${senderLabel} on ${updated.queryId}: "${amRemarkSummary}"`
                   );
                 }
               }
             }
           } else if (payload.eventType === 'DELETE' && payload.old) {
-            const deletedId = (payload.old as { complaint_id?: string }).complaint_id;
+            const deletedId = (payload.old as { query_id?: string }).query_id;
             if (deletedId) {
-              setComplaints((prev) => {
-                const next = prev.filter((c) => c.complaintId !== deletedId);
-                persistComplaintsCache(next);
+              setQueries((prev) => {
+                const next = prev.filter((c) => c.queryId !== deletedId);
+                persistQueriesCache(next);
                 return next;
               });
             }
@@ -306,7 +306,7 @@ export const App: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadComplaints]);
+  }, [loadQueries]);
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
@@ -338,10 +338,10 @@ export const App: React.FC = () => {
     return `${yyyy}-${mm}-${dd} ${hh}:${min}:${sec}`;
   };
 
-  const generateNextComplaintId = (list: Complaint[]): string => {
+  const generateNextQueryId = (list: Query[]): string => {
     let maxNum = 0;
     for (const item of list) {
-      const match = item.complaintId.match(/CMP-(\d+)/i);
+      const match = item.queryId.match(/QRY-(\d+)/i);
       if (match) {
         const num = parseInt(match[1], 10);
         if (!Number.isNaN(num) && num > maxNum) {
@@ -350,23 +350,23 @@ export const App: React.FC = () => {
       }
     }
     const nextNumber = maxNum + 1;
-    return `CMP-${String(nextNumber).padStart(3, '0')}`;
+    return `QRY-${String(nextNumber).padStart(3, '0')}`;
   };
 
-  const handleCreateComplaint = async (payload: {
+  const handleCreateQuery = async (payload: {
     managerId: string;
     managerEmail: string;
     managerName: string;
-    complaintTitle: string;
-    complaintText: string;
+    queryTitle: string;
+    queryText: string;
   }) => {
     if (!currentUser) return;
     const now = new Date();
-    const tempComplaintId = generateNextComplaintId(complaints);
+    const tempQueryId = generateNextQueryId(queries);
 
-    const created: Complaint = {
-      id: tempComplaintId,
-      complaintId: tempComplaintId,
+    const created: Query = {
+      id: tempQueryId,
+      queryId: tempQueryId,
       createdAt: formatTimestamp(now),
       createdAtMs: now.getTime(),
       completedAt: null,
@@ -378,8 +378,8 @@ export const App: React.FC = () => {
       managerId: payload.managerId,
       managerEmail: payload.managerEmail,
       managerName: payload.managerName,
-      complaintTitle: payload.complaintTitle,
-      complaintText: payload.complaintText,
+      queryTitle: payload.queryTitle,
+      queryText: payload.queryText,
       managerRemarkTitle: '',
       managerRemark: '',
       managerDone: false,
@@ -389,48 +389,48 @@ export const App: React.FC = () => {
       status: 'Pending',
     };
 
-    setComplaints((prev) => {
+    setQueries((prev) => {
       const next = [created, ...prev];
-      persistComplaintsCache(next);
+      persistQueriesCache(next);
       return next;
     });
 
-    const { data, error } = await insertComplaintInDb(created);
+    const { data, error } = await insertQueryInDb(created);
     if (error) {
       setDbError(error);
       // Roll back optimistic insert on error
-      setComplaints((prev) => {
-        const rolledBack = prev.filter((c) => c.complaintId !== tempComplaintId);
-        persistComplaintsCache(rolledBack);
+      setQueries((prev) => {
+        const rolledBack = prev.filter((c) => c.queryId !== tempQueryId);
+        persistQueriesCache(rolledBack);
         return rolledBack;
       });
     } else if (data) {
       setDbError(null);
-      setComplaints((prev) => {
+      setQueries((prev) => {
         const withoutTemp = prev.filter(
-          (c) => c.complaintId !== tempComplaintId && c.complaintId !== data.complaintId
+          (c) => c.queryId !== tempQueryId && c.queryId !== data.queryId
         );
         const next = [data, ...withoutTemp];
-        persistComplaintsCache(next);
+        persistQueriesCache(next);
         return next;
       });
 
       // Dispatch desktop background push notification to assigned Manager & Admin
-      dispatchComplaintPushNotification({
-        event: 'NEW_COMPLAINT',
-        complaint: data,
+      dispatchQueryPushNotification({
+        event: 'NEW_QUERY',
+        query: data,
         actor: currentUser,
       });
     }
   };
 
-  const handleUpdateComplaint = async (
-    complaintId: string,
+  const handleUpdateQuery = async (
+    queryId: string,
     updates: Partial<
       Pick<
-        Complaint,
-        | 'complaintTitle'
-        | 'complaintText'
+        Query,
+        | 'queryTitle'
+        | 'queryText'
         | 'managerRemarkTitle'
         | 'managerRemark'
         | 'managerDone'
@@ -441,12 +441,12 @@ export const App: React.FC = () => {
     >
   ) => {
     if (!currentUser) return;
-    const existing = complaints.find((c) => c.complaintId === complaintId);
+    const existing = queries.find((c) => c.queryId === queryId);
     if (!existing) return;
 
     const now = new Date();
     const nowMs = now.getTime();
-    const createdMs = getComplaintTimestampMs(existing);
+    const createdMs = getQueryTimestampMs(existing);
 
     const nextManagerDone =
       updates.managerDone !== undefined
@@ -479,7 +479,7 @@ export const App: React.FC = () => {
       : null;
 
     // Once delayed (>48h), it stays delayed even when both Manager Done & AM Done are checked
-    const wasAlreadyDelayed = isComplaintDelayed(existing, nowMs);
+    const wasAlreadyDelayed = isQueryDelayed(existing, nowMs);
     const nextIsDelayed = nextIsCompleted
       ? Boolean(
           wasAlreadyDelayed ||
@@ -489,7 +489,7 @@ export const App: React.FC = () => {
         )
       : Boolean(createdMs > 0 && nowMs - createdMs > DELAY_THRESHOLD_MS);
 
-    const optimisticItem: Complaint = {
+    const optimisticItem: Query = {
       ...existing,
       ...updates,
       managerDone: nextManagerDone,
@@ -504,17 +504,17 @@ export const App: React.FC = () => {
       isDelayed: nextIsDelayed,
     };
 
-    setSavingComplaintId(complaintId);
+    setSavingQueryId(queryId);
 
-    setComplaints((prev) => {
+    setQueries((prev) => {
       const next = prev.map((item) =>
-        item.complaintId === complaintId ? optimisticItem : item
+        item.queryId === queryId ? optimisticItem : item
       );
-      persistComplaintsCache(next);
+      persistQueriesCache(next);
       return next;
     });
 
-    const { data, error } = await updateComplaintInDb(complaintId, {
+    const { data, error } = await updateQueryInDb(queryId, {
       ...updates,
       managerDone: nextManagerDone,
       managerDoneAt: nextManagerDoneAt,
@@ -526,25 +526,25 @@ export const App: React.FC = () => {
       isDelayed: nextIsDelayed,
     });
 
-    setSavingComplaintId(null);
+    setSavingQueryId(null);
 
     if (error) {
       setDbError(error);
       // Roll back optimistic update on error
-      setComplaints((prev) => {
+      setQueries((prev) => {
         const rolledBack = prev.map((item) =>
-          item.complaintId === complaintId ? existing : item
+          item.queryId === queryId ? existing : item
         );
-        persistComplaintsCache(rolledBack);
+        persistQueriesCache(rolledBack);
         return rolledBack;
       });
     } else if (data) {
       setDbError(null);
-      setComplaints((prev) => {
+      setQueries((prev) => {
         const next = prev.map((item) =>
-          item.complaintId === complaintId ? data : item
+          item.queryId === queryId ? data : item
         );
-        persistComplaintsCache(next);
+        persistQueriesCache(next);
         return next;
       });
 
@@ -554,9 +554,9 @@ export const App: React.FC = () => {
         updates.managerDone !== existing.managerDone &&
         updates.managerDone
       ) {
-        dispatchComplaintPushNotification({
+        dispatchQueryPushNotification({
           event: 'MANAGER_DONE',
-          complaint: data,
+          query: data,
           actor: currentUser,
           isDone: true,
         });
@@ -565,9 +565,9 @@ export const App: React.FC = () => {
         updates.accountManagerDone !== existing.accountManagerDone &&
         updates.accountManagerDone
       ) {
-        dispatchComplaintPushNotification({
+        dispatchQueryPushNotification({
           event: 'AM_DONE',
-          complaint: data,
+          query: data,
           actor: currentUser,
           isDone: true,
         });
@@ -583,9 +583,9 @@ export const App: React.FC = () => {
         ((updates.managerRemarkTitle ?? '').trim() ||
           (updates.managerRemark ?? '').trim())
       ) {
-        dispatchComplaintPushNotification({
+        dispatchQueryPushNotification({
           event: 'MANAGER_REMARK',
-          complaint: data,
+          query: data,
           actor: currentUser,
           remarkText:
             (updates.managerRemarkTitle ?? '').trim() ||
@@ -603,9 +603,9 @@ export const App: React.FC = () => {
         ((updates.accountManagerRemarkTitle ?? '').trim() ||
           (updates.accountManagerRemark ?? '').trim())
       ) {
-        dispatchComplaintPushNotification({
+        dispatchQueryPushNotification({
           event: 'AM_REMARK',
-          complaint: data,
+          query: data,
           actor: currentUser,
           remarkText:
             (updates.accountManagerRemarkTitle ?? '').trim() ||
@@ -629,8 +629,8 @@ export const App: React.FC = () => {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  const openComplaintsCount = complaints.filter((c) => {
-    if (isComplaintDone(c)) return false;
+  const openQueriesCount = queries.filter((c) => {
+    if (isQueryDone(c)) return false;
     if (currentUser.role === 'account_manager') {
       return belongsToAccountManager(c, currentUser);
     }
@@ -652,7 +652,7 @@ export const App: React.FC = () => {
         onLogout={handleLogout}
         tvMode={tvMode}
         onToggleTvMode={() => setTvMode((prev) => !prev)}
-        openComplaintsCount={openComplaintsCount}
+        openQueriesCount={openQueriesCount}
         onOpenNotifications={() => setIsNotifModalOpen(true)}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing || isLoadingDb}
@@ -674,7 +674,7 @@ export const App: React.FC = () => {
               <button
                 type="button"
                 className="db-banner-btn"
-                onClick={loadComplaints}
+                onClick={loadQueries}
                 disabled={isLoadingDb}
               >
                 {isLoadingDb ? '...' : 'Retry'}
@@ -689,7 +689,7 @@ export const App: React.FC = () => {
             <button
               type="button"
               className="db-banner-btn"
-              onClick={loadComplaints}
+              onClick={loadQueries}
             >
               Retry
             </button>
@@ -702,24 +702,24 @@ export const App: React.FC = () => {
           {activePage === 'home' ? (
             <HomePage
               currentUser={currentUser}
-              complaints={complaints}
+              queries={queries}
               users={allUsers}
               onNavigate={setActivePage}
             />
           ) : activePage === 'kpi' ? (
             <KPIPage
               currentUser={currentUser}
-              complaints={complaints}
+              queries={queries}
               users={allUsers}
               onNavigate={setActivePage}
             />
           ) : (
-            <ComplaintPage
+            <QueryPage
               currentUser={currentUser}
-              complaints={complaints}
-              savingComplaintId={savingComplaintId}
-              onCreateComplaint={handleCreateComplaint}
-              onUpdateComplaint={handleUpdateComplaint}
+              queries={queries}
+              savingQueryId={savingQueryId}
+              onCreateQuery={handleCreateQuery}
+              onUpdateQuery={handleUpdateQuery}
             />
           )}
         </main>

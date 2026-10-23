@@ -1,6 +1,6 @@
 -- ============================================================================
 -- WM Manager Dashboard - Supabase Relational Schema (Complete with SLA & Web Push)
--- Connected by: complaint_id, account_manager_id, manager_id, created_at, and completed_at
+-- Connected by: query_id, account_manager_id, manager_id, created_at, and completed_at
 -- ============================================================================
 
 -- 1. Users Table (Account Managers, Managers, Admin)
@@ -37,21 +37,25 @@ ON CONFLICT (id) DO UPDATE SET
   avatar_initials = EXCLUDED.avatar_initials,
   phone = COALESCE(EXCLUDED.phone, public.users.phone);
 
--- 2. Complaints Table
--- Note: Both Account Managers and Managers can submit complaints.
--- All complaints must be addressed to a Manager (manager_id).
+-- 2. Queries Table
+-- Remove legacy table and trigger function if they exist
+DROP TABLE IF EXISTS public.complaints CASCADE;
+DROP FUNCTION IF EXISTS public.enforce_complaint_rules() CASCADE;
+
+-- Note: Both Account Managers and Managers can submit queries.
+-- All queries must be addressed to a Manager (manager_id).
 -- The creator/sender is stored in account_manager_id (which references public.users(id)).
 -- Because public.users contains both managers and account managers, NO schema migration is needed!
-CREATE TABLE IF NOT EXISTS public.complaints (
-  complaint_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS public.queries (
+  query_id TEXT PRIMARY KEY,
   account_manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE, -- Sender/Creator (AM or Manager)
   account_manager_name TEXT NOT NULL,
   account_manager_email TEXT NOT NULL,
   manager_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE, -- Assigned Manager (must be manager)
   manager_name TEXT NOT NULL,
   manager_email TEXT NOT NULL,
-  complaint_title TEXT NOT NULL DEFAULT '',
-  complaint_text TEXT NOT NULL,
+  query_title TEXT NOT NULL DEFAULT '',
+  query_text TEXT NOT NULL,
   manager_remark_title TEXT NOT NULL DEFAULT '',
   manager_remark TEXT NOT NULL DEFAULT '',
   manager_done BOOLEAN NOT NULL DEFAULT FALSE,
@@ -69,9 +73,9 @@ CREATE TABLE IF NOT EXISTS public.complaints (
   delay_notified BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- Safely add new columns if upgrading an existing complaints table
-ALTER TABLE public.complaints
-  ADD COLUMN IF NOT EXISTS complaint_title TEXT NOT NULL DEFAULT '',
+-- Safely add new columns if upgrading an existing queries table
+ALTER TABLE public.queries
+  ADD COLUMN IF NOT EXISTS query_title TEXT NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS manager_remark_title TEXT NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS account_manager_remark_title TEXT NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS completed_at TEXT DEFAULT NULL,
@@ -82,7 +86,7 @@ ALTER TABLE public.complaints
   ADD COLUMN IF NOT EXISTS delay_notified BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Backfill existing manager_done rows that do not have manager_done_at_ms yet
-UPDATE public.complaints
+UPDATE public.queries
 SET
   manager_done_at = COALESCE(completed_at, created_at),
   manager_done_at_ms = COALESCE(completed_at_ms, created_at_ms)
@@ -90,7 +94,7 @@ WHERE manager_done = TRUE
   AND manager_done_at_ms IS NULL;
 
 -- Backfill existing completed rows that do not have completed_at_ms yet
-UPDATE public.complaints
+UPDATE public.queries
 SET
   completed_at = COALESCE(completed_at, created_at),
   completed_at_ms = COALESCE(completed_at_ms, created_at_ms)
@@ -99,7 +103,7 @@ WHERE manager_done = TRUE
   AND completed_at_ms IS NULL;
 
 -- Backfill is_delayed for existing rows (> 48 hours = 172,800,000 ms)
-UPDATE public.complaints
+UPDATE public.queries
 SET is_delayed = CASE
   WHEN manager_done = TRUE AND account_manager_done = TRUE THEN
     ((COALESCE(completed_at_ms, created_at_ms) - created_at_ms) > 172800000)
@@ -108,14 +112,14 @@ SET is_delayed = CASE
 END;
 
 -- Indexes for fast filtering & metric calculations
-CREATE INDEX IF NOT EXISTS idx_complaints_manager_id ON public.complaints(manager_id);
-CREATE INDEX IF NOT EXISTS idx_complaints_account_manager_id ON public.complaints(account_manager_id);
-CREATE INDEX IF NOT EXISTS idx_complaints_created_at_ms ON public.complaints(created_at_ms DESC);
-CREATE INDEX IF NOT EXISTS idx_complaints_status ON public.complaints(status);
-CREATE INDEX IF NOT EXISTS idx_complaints_is_delayed ON public.complaints(is_delayed);
+CREATE INDEX IF NOT EXISTS idx_queries_manager_id ON public.queries(manager_id);
+CREATE INDEX IF NOT EXISTS idx_queries_account_manager_id ON public.queries(account_manager_id);
+CREATE INDEX IF NOT EXISTS idx_queries_created_at_ms ON public.queries(created_at_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_queries_status ON public.queries(status);
+CREATE INDEX IF NOT EXISTS idx_queries_is_delayed ON public.queries(is_delayed);
 
--- 3. Trigger to enforce complaint rules & delay calculations
-CREATE OR REPLACE FUNCTION public.enforce_complaint_rules()
+-- 3. Trigger to enforce query rules & delay calculations
+CREATE OR REPLACE FUNCTION public.enforce_query_rules()
 RETURNS TRIGGER AS $$
 DECLARE
   now_ms BIGINT := (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT;
@@ -174,15 +178,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_enforce_complaint_rules ON public.complaints;
-CREATE TRIGGER trg_enforce_complaint_rules
-BEFORE INSERT OR UPDATE ON public.complaints
+DROP TRIGGER IF EXISTS trg_enforce_query_rules ON public.queries;
+CREATE TRIGGER trg_enforce_query_rules
+BEFORE INSERT OR UPDATE ON public.queries
 FOR EACH ROW
-EXECUTE FUNCTION public.enforce_complaint_rules();
+EXECUTE FUNCTION public.enforce_query_rules();
 
 -- 4. Enable Row Level Security & Policies for Anon/Public Client Access
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.complaints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.queries ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow full access to users" ON public.users;
 CREATE POLICY "Allow full access to users"
@@ -190,22 +194,22 @@ CREATE POLICY "Allow full access to users"
   USING (true)
   WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Allow full access to complaints" ON public.complaints;
-CREATE POLICY "Allow full access to complaints"
-  ON public.complaints FOR ALL
+DROP POLICY IF EXISTS "Allow full access to queries" ON public.queries;
+CREATE POLICY "Allow full access to queries"
+  ON public.queries FOR ALL
   USING (true)
   WITH CHECK (true);
 
--- 5. Enable Realtime for complaints table
-ALTER TABLE public.complaints REPLICA IDENTITY FULL;
+-- 5. Enable Realtime for queries table
+ALTER TABLE public.queries REPLICA IDENTITY FULL;
 
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_publication_tables
-    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'complaints'
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'queries'
   ) THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.complaints;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.queries;
   END IF;
 END $$;
 

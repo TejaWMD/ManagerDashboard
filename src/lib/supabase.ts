@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Complaint, ComplaintStatus, DELAY_THRESHOLD_MS, UserAccount } from '../types';
+import { Query, QueryStatus, DELAY_THRESHOLD_MS, UserAccount } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 
 export const SUPABASE_URL =
@@ -35,28 +35,28 @@ function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
 }
 
 export function saveLocalCompletionMeta(
-  complaintId: string,
+  queryId: string,
   meta: LocalCompletionMeta
 ): void {
   try {
     const current = readLocalCompletionMetaMap();
-    current[complaintId] = meta;
+    current[queryId] = meta;
     localStorage.setItem(COMPLETION_META_STORAGE_KEY, JSON.stringify(current));
   } catch {
     // Ignore storage errors
   }
 }
 
-export interface ComplaintRow {
-  complaint_id: string;
+export interface QueryRow {
+  query_id: string;
   account_manager_id: string;
   account_manager_name: string;
   account_manager_email: string;
   manager_id: string;
   manager_name: string;
   manager_email: string;
-  complaint_title?: string | null;
-  complaint_text: string;
+  query_title?: string | null;
+  query_text: string;
   manager_remark_title?: string | null;
   manager_remark: string;
   manager_done: boolean;
@@ -65,7 +65,7 @@ export interface ComplaintRow {
   account_manager_remark_title?: string | null;
   account_manager_remark: string;
   account_manager_done: boolean;
-  status: ComplaintStatus;
+  status: QueryStatus;
   created_at: string;
   created_at_ms: number;
   completed_at?: string | null;
@@ -122,11 +122,11 @@ export function unpackTitleAndDescription(
   };
 }
 
-export function mapRowToComplaint(row: ComplaintRow): Complaint {
+export function mapRowToQuery(row: QueryRow): Query {
   const managerDone = Boolean(row.manager_done);
   const accountManagerDone = Boolean(row.account_manager_done);
   const isDone = managerDone && accountManagerDone;
-  const status: ComplaintStatus = isDone ? 'Completed' : 'Pending';
+  const status: QueryStatus = isDone ? 'Completed' : 'Pending';
 
   const rawCreatedMs = Number(row.created_at_ms);
   const parsedCreatedMs = row.created_at
@@ -139,7 +139,7 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
       ? parsedCreatedMs
       : 0;
 
-  const localMeta = readLocalCompletionMetaMap()[row.complaint_id];
+  const localMeta = readLocalCompletionMetaMap()[row.query_id];
 
   const dbManagerDoneAtMs =
     row.manager_done_at_ms !== null && row.manager_done_at_ms !== undefined
@@ -177,9 +177,9 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
       : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)
     : Boolean(createdAtMs > 0 && Date.now() - createdAtMs > DELAY_THRESHOLD_MS);
 
-  const unpackedComplaint = unpackTitleAndDescription(
-    row.complaint_text,
-    row.complaint_title
+  const unpackedQuery = unpackTitleAndDescription(
+    row.query_text,
+    row.query_title
   );
   const unpackedMgrRemark = unpackTitleAndDescription(
     row.manager_remark,
@@ -191,8 +191,8 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
   );
 
   return {
-    id: row.complaint_id,
-    complaintId: row.complaint_id,
+    id: row.query_id,
+    queryId: row.query_id,
     createdAt: row.created_at,
     createdAtMs,
     completedAt,
@@ -204,8 +204,8 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
     managerId: row.manager_id,
     managerName: row.manager_name,
     managerEmail: row.manager_email,
-    complaintTitle: unpackedComplaint.title,
-    complaintText: unpackedComplaint.description,
+    queryTitle: unpackedQuery.title,
+    queryText: unpackedQuery.description,
     managerRemarkTitle: unpackedMgrRemark.title,
     managerRemark: unpackedMgrRemark.description,
     managerDone,
@@ -219,37 +219,37 @@ export function mapRowToComplaint(row: ComplaintRow): Complaint {
   };
 }
 
-export function mapComplaintToBaseRow(complaint: Complaint): ComplaintRow {
-  const managerDone = Boolean(complaint.managerDone);
-  const accountManagerDone = Boolean(complaint.accountManagerDone);
-  const status: ComplaintStatus =
+export function mapQueryToBaseRow(query: Query): QueryRow {
+  const managerDone = Boolean(query.managerDone);
+  const accountManagerDone = Boolean(query.accountManagerDone);
+  const status: QueryStatus =
     managerDone && accountManagerDone ? 'Completed' : 'Pending';
 
   return {
-    complaint_id: complaint.complaintId,
-    account_manager_id: complaint.accountManagerId,
-    account_manager_name: complaint.accountManagerName,
-    account_manager_email: complaint.accountManagerEmail,
-    manager_id: complaint.managerId,
-    manager_name: complaint.managerName,
-    manager_email: complaint.managerEmail,
-    complaint_text: packTitleAndDescription(
-      complaint.complaintTitle,
-      complaint.complaintText
+    query_id: query.queryId,
+    account_manager_id: query.accountManagerId,
+    account_manager_name: query.accountManagerName,
+    account_manager_email: query.accountManagerEmail,
+    manager_id: query.managerId,
+    manager_name: query.managerName,
+    manager_email: query.managerEmail,
+    query_text: packTitleAndDescription(
+      query.queryTitle,
+      query.queryText
     ),
     manager_remark: packTitleAndDescription(
-      complaint.managerRemarkTitle,
-      complaint.managerRemark
+      query.managerRemarkTitle,
+      query.managerRemark
     ),
     manager_done: managerDone,
     account_manager_remark: packTitleAndDescription(
-      complaint.accountManagerRemarkTitle,
-      complaint.accountManagerRemark
+      query.accountManagerRemarkTitle,
+      query.accountManagerRemark
     ),
     account_manager_done: accountManagerDone,
     status,
-    created_at: complaint.createdAt,
-    created_at_ms: complaint.createdAtMs,
+    created_at: query.createdAt,
+    created_at_ms: query.createdAtMs,
   };
 }
 
@@ -318,13 +318,13 @@ export async function updateUserSettingsInDb(
   }
 }
 
-export async function fetchComplaintsFromDb(): Promise<{
-  data: Complaint[];
+export async function fetchQueriesFromDb(): Promise<{
+  data: Query[];
   tableMissing: boolean;
   error: string | null;
 }> {
   const { data, error } = await supabase
-    .from('complaints')
+    .from('queries')
     .select('*')
     .order('created_at_ms', { ascending: false });
 
@@ -332,7 +332,7 @@ export async function fetchComplaintsFromDb(): Promise<{
     const isMissingTable =
       error.code === 'PGRST205' ||
       error.code === '42P01' ||
-      error.message?.includes("Could not find the table 'public.complaints'");
+      error.message?.includes("Could not find the table 'public.queries'");
 
     return {
       data: [],
@@ -341,12 +341,12 @@ export async function fetchComplaintsFromDb(): Promise<{
     };
   }
 
-  const rows = (data || []) as ComplaintRow[];
+  const rows = (data || []) as QueryRow[];
   if (rows.length > 0 && rows[0] && typeof rows[0] === 'object') {
-    titleColumnsSupported = 'complaint_title' in rows[0];
+    titleColumnsSupported = 'query_title' in rows[0];
   }
 
-  const mapped = rows.map(mapRowToComplaint);
+  const mapped = rows.map(mapRowToQuery);
   return {
     data: mapped,
     tableMissing: false,
@@ -357,7 +357,7 @@ export async function fetchComplaintsFromDb(): Promise<{
 function isMissingTitleColumnError(message?: string): boolean {
   if (!message) return false;
   return (
-    message.includes('complaint_title') ||
+    message.includes('query_title') ||
     message.includes('manager_remark_title') ||
     message.includes('account_manager_remark_title')
   );
@@ -374,13 +374,13 @@ function isMissingExtendedColumnError(message?: string): boolean {
   );
 }
 
-async function computeNextComplaintIdFromDb(): Promise<string> {
+async function computeNextQueryIdFromDb(): Promise<string> {
   const { data } = await supabase
-    .from('complaints')
-    .select('complaint_id');
+    .from('queries')
+    .select('query_id');
   let maxNum = 0;
-  for (const row of (data || []) as { complaint_id?: string }[]) {
-    const match = row.complaint_id?.match(/CMP-(\d+)/i);
+  for (const row of (data || []) as { query_id?: string }[]) {
+    const match = row.query_id?.match(/QRY-(\d+)/i);
     if (match) {
       const num = parseInt(match[1], 10);
       if (!Number.isNaN(num) && num > maxNum) {
@@ -388,37 +388,37 @@ async function computeNextComplaintIdFromDb(): Promise<string> {
       }
     }
   }
-  return `CMP-${String(maxNum + 1).padStart(3, '0')}`;
+  return `QRY-${String(maxNum + 1).padStart(3, '0')}`;
 }
 
-export async function insertComplaintInDb(complaint: Complaint): Promise<{
-  data: Complaint | null;
+export async function insertQueryInDb(query: Query): Promise<{
+  data: Query | null;
   error: string | null;
 }> {
-  const baseRow = mapComplaintToBaseRow(complaint);
-  const extendedRow: ComplaintRow = {
+  const baseRow = mapQueryToBaseRow(query);
+  const extendedRow: QueryRow = {
     ...baseRow,
-    completed_at: complaint.completedAt ?? null,
-    completed_at_ms: complaint.completedAtMs ?? null,
-    manager_done_at: complaint.managerDoneAt ?? null,
-    manager_done_at_ms: complaint.managerDoneAtMs ?? null,
-    is_delayed: Boolean(complaint.isDelayed),
+    completed_at: query.completedAt ?? null,
+    completed_at_ms: query.completedAtMs ?? null,
+    manager_done_at: query.managerDoneAt ?? null,
+    manager_done_at_ms: query.managerDoneAtMs ?? null,
+    is_delayed: Boolean(query.isDelayed),
   };
 
-  const rowToInsert: ComplaintRow =
+  const rowToInsert: QueryRow =
     titleColumnsSupported !== false
       ? {
           ...extendedRow,
-          complaint_title: (complaint.complaintTitle || '').trim(),
-          manager_remark_title: (complaint.managerRemarkTitle || '').trim(),
+          query_title: (query.queryTitle || '').trim(),
+          manager_remark_title: (query.managerRemarkTitle || '').trim(),
           account_manager_remark_title: (
-            complaint.accountManagerRemarkTitle || ''
+            query.accountManagerRemarkTitle || ''
           ).trim(),
         }
       : extendedRow;
 
   let { data, error } = await supabase
-    .from('complaints')
+    .from('queries')
     .insert([rowToInsert])
     .select('*')
     .single();
@@ -426,7 +426,7 @@ export async function insertComplaintInDb(complaint: Complaint): Promise<{
   if (error && isMissingTitleColumnError(error.message)) {
     titleColumnsSupported = false;
     const retryWithoutTitles = await supabase
-      .from('complaints')
+      .from('queries')
       .insert([extendedRow])
       .select('*')
       .single();
@@ -437,7 +437,7 @@ export async function insertComplaintInDb(complaint: Complaint): Promise<{
   // Fallback if user hasn't run ALTER TABLE for completed_at / is_delayed yet
   if (error && isMissingExtendedColumnError(error.message)) {
     const retryBase = await supabase
-      .from('complaints')
+      .from('queries')
       .insert([baseRow])
       .select('*')
       .single();
@@ -445,12 +445,12 @@ export async function insertComplaintInDb(complaint: Complaint): Promise<{
     error = retryBase.error;
   }
 
-  // Handle duplicate complaint_id collision automatically by fetching max ID from DB
+  // Handle duplicate query_id collision automatically by fetching max ID from DB
   if (error && (error.code === '23505' || error.message?.includes('duplicate key'))) {
-    const nextId = await computeNextComplaintIdFromDb();
-    const retryRow = { ...extendedRow, complaint_id: nextId };
+    const nextId = await computeNextQueryIdFromDb();
+    const retryRow = { ...extendedRow, query_id: nextId };
     const retryDuplicate = await supabase
-      .from('complaints')
+      .from('queries')
       .insert([retryRow])
       .select('*')
       .single();
@@ -463,16 +463,16 @@ export async function insertComplaintInDb(complaint: Complaint): Promise<{
   }
 
   return {
-    data: mapRowToComplaint(data as ComplaintRow),
+    data: mapRowToQuery(data as QueryRow),
     error: null,
   };
 }
 
-export async function updateComplaintInDb(
-  complaintId: string,
+export async function updateQueryInDb(
+  queryId: string,
   updates: {
-    complaintTitle?: string;
-    complaintText?: string;
+    queryTitle?: string;
+    queryText?: string;
     managerRemarkTitle?: string;
     managerRemark?: string;
     managerDone?: boolean;
@@ -481,23 +481,23 @@ export async function updateComplaintInDb(
     accountManagerRemarkTitle?: string;
     accountManagerRemark?: string;
     accountManagerDone?: boolean;
-    status: ComplaintStatus;
+    status: QueryStatus;
     completedAt?: string | null;
     completedAtMs?: number | null;
     isDelayed?: boolean;
   }
 ): Promise<{
-  data: Complaint | null;
+  data: Query | null;
   error: string | null;
 }> {
   const baseUpdates: Record<string, unknown> = {
     status: updates.status,
   };
 
-  if (updates.complaintTitle !== undefined || updates.complaintText !== undefined) {
-    baseUpdates.complaint_text = packTitleAndDescription(
-      updates.complaintTitle,
-      updates.complaintText
+  if (updates.queryTitle !== undefined || updates.queryText !== undefined) {
+    baseUpdates.query_text = packTitleAndDescription(
+      updates.queryTitle,
+      updates.queryText
     );
   }
   if (updates.managerRemarkTitle !== undefined || updates.managerRemark !== undefined) {
@@ -545,8 +545,8 @@ export async function updateComplaintInDb(
     titleColumnsSupported !== false
       ? {
           ...extendedUpdates,
-          ...(updates.complaintTitle !== undefined
-            ? { complaint_title: updates.complaintTitle.trim() }
+          ...(updates.queryTitle !== undefined
+            ? { query_title: updates.queryTitle.trim() }
             : {}),
           ...(updates.managerRemarkTitle !== undefined
             ? { manager_remark_title: updates.managerRemarkTitle.trim() }
@@ -568,7 +568,7 @@ export async function updateComplaintInDb(
     updates.managerDoneAtMs !== undefined ||
     updates.isDelayed !== undefined
   ) {
-    saveLocalCompletionMeta(complaintId, {
+    saveLocalCompletionMeta(queryId, {
       completedAt: updates.completedAt ?? null,
       completedAtMs: updates.completedAtMs ?? null,
       managerDoneAt: updates.managerDoneAt ?? null,
@@ -580,18 +580,18 @@ export async function updateComplaintInDb(
   // Note: created_at and created_at_ms are intentionally NEVER included in updates
   // so the original creation timestamp is strictly preserved.
   let { data, error } = await supabase
-    .from('complaints')
+    .from('queries')
     .update(updatesWithTitles)
-    .eq('complaint_id', complaintId)
+    .eq('query_id', queryId)
     .select('*')
     .single();
 
   if (error && isMissingTitleColumnError(error.message)) {
     titleColumnsSupported = false;
     const retryWithoutTitles = await supabase
-      .from('complaints')
+      .from('queries')
       .update(extendedUpdates)
-      .eq('complaint_id', complaintId)
+      .eq('query_id', queryId)
       .select('*')
       .single();
     data = retryWithoutTitles.data;
@@ -600,9 +600,9 @@ export async function updateComplaintInDb(
 
   if (error && isMissingExtendedColumnError(error.message)) {
     const retryBase = await supabase
-      .from('complaints')
+      .from('queries')
       .update(baseUpdates)
-      .eq('complaint_id', complaintId)
+      .eq('query_id', queryId)
       .select('*')
       .single();
     data = retryBase.data;
@@ -614,7 +614,7 @@ export async function updateComplaintInDb(
   }
 
   return {
-    data: mapRowToComplaint(data as ComplaintRow),
+    data: mapRowToQuery(data as QueryRow),
     error: null,
   };
 }

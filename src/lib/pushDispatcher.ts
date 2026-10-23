@@ -1,21 +1,21 @@
 // Notification Dispatcher & Role Matrix for WMD Query Portal
-import { Complaint, UserAccount } from '../types';
+import { Query, UserAccount } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 import { supabase } from './supabase';
 import { showWebNotification } from './notifications';
 
 export type NotificationEventType =
-  | 'NEW_COMPLAINT'
+  | 'NEW_QUERY'
   | 'MANAGER_REMARK'
   | 'MANAGER_DONE'
   | 'AM_REMARK'
   | 'AM_DONE'
-  | 'COMPLAINT_DELAYED'
+  | 'QUERY_DELAYED'
   | 'TEST';
 
 export interface DispatchNotificationParams {
   event: NotificationEventType;
-  complaint: Complaint;
+  query: Query;
   actor: UserAccount;
   remarkText?: string;
   isDone?: boolean;
@@ -27,49 +27,49 @@ export function getAdminUserIds(): string[] {
 }
 
 // Determine target recipients strictly according to requirements:
-// 1. Account Manager: Manager remark, Manager Done, Complaint delayed
-// 2. Manager: New complaint assigned, AM remark, AM Done, Complaint delayed
+// 1. Account Manager: Manager remark, Manager Done, Query delayed
+// 2. Manager: New query assigned, AM remark, AM Done, Query delayed
 // 3. Admin: All events
 // Self-exclusion: The actor who initiated the event is never notified of their own action
 export function computeTargetRecipients(
   event: NotificationEventType,
-  complaint: Complaint,
+  query: Query,
   actorId: string
 ): string[] {
   const adminIds = getAdminUserIds();
   const rawRecipients: string[] = [];
 
   switch (event) {
-    case 'NEW_COMPLAINT':
-      // AM submits complaint -> Notify Manager + Admin
-      rawRecipients.push(complaint.managerId, ...adminIds);
+    case 'NEW_QUERY':
+      // AM submits query -> Notify Manager + Admin
+      rawRecipients.push(query.managerId, ...adminIds);
       break;
 
     case 'MANAGER_REMARK':
       // Manager submits remark -> Notify Account Manager + Admin
-      rawRecipients.push(complaint.accountManagerId, ...adminIds);
+      rawRecipients.push(query.accountManagerId, ...adminIds);
       break;
 
     case 'MANAGER_DONE':
       // Manager checks Done -> Notify Account Manager + Admin
-      rawRecipients.push(complaint.accountManagerId, ...adminIds);
+      rawRecipients.push(query.accountManagerId, ...adminIds);
       break;
 
     case 'AM_REMARK':
       // AM submits remark -> Notify Manager + Admin
-      rawRecipients.push(complaint.managerId, ...adminIds);
+      rawRecipients.push(query.managerId, ...adminIds);
       break;
 
     case 'AM_DONE':
-      // AM checks Done (Complaint completed) -> Notify Manager + Admin
-      rawRecipients.push(complaint.managerId, ...adminIds);
+      // AM checks Done (Query completed) -> Notify Manager + Admin
+      rawRecipients.push(query.managerId, ...adminIds);
       break;
 
-    case 'COMPLAINT_DELAYED':
+    case 'QUERY_DELAYED':
       // SLA delayed -> Notify Manager, Account Manager + Admin
       rawRecipients.push(
-        complaint.managerId,
-        complaint.accountManagerId,
+        query.managerId,
+        query.accountManagerId,
         ...adminIds
       );
       break;
@@ -90,7 +90,7 @@ export function computeTargetRecipients(
 // Format notification title and body based on event type
 export function formatNotificationContent(
   event: NotificationEventType,
-  complaint: Complaint,
+  query: Query,
   actor: UserAccount,
   remarkText?: string
 ): { title: string; body: string } {
@@ -102,40 +102,40 @@ export function formatNotificationContent(
       : 'Admin';
 
   switch (event) {
-    case 'NEW_COMPLAINT':
+    case 'NEW_QUERY':
       return {
-        title: `🚨 New Complaint: ${complaint.complaintId}`,
-        body: `${actorRoleLabel} ${actor.name} assigned ${complaint.complaintId} to ${complaint.managerName}: "${(complaint.complaintTitle || complaint.complaintText).slice(0, 80)}"`,
+        title: `🚨 New Query: ${query.queryId}`,
+        body: `${actorRoleLabel} ${actor.name} assigned ${query.queryId} to ${query.managerName}: "${(query.queryTitle || query.queryText).slice(0, 80)}"`,
       };
 
     case 'MANAGER_REMARK':
       return {
-        title: `💬 Manager Remark: ${complaint.complaintId}`,
-        body: `Manager ${actor.name}: "${(remarkText || complaint.managerRemarkTitle || complaint.managerRemark).slice(0, 90)}"`,
+        title: `💬 Manager Remark: ${query.queryId}`,
+        body: `Manager ${actor.name}: "${(remarkText || query.managerRemarkTitle || query.managerRemark).slice(0, 90)}"`,
       };
 
     case 'MANAGER_DONE':
       return {
-        title: `✅ Manager Checked Done: ${complaint.complaintId}`,
-        body: `Manager ${actor.name} marked ${complaint.complaintId} as Done. Pending sender verification.`,
+        title: `✅ Manager Checked Done: ${query.queryId}`,
+        body: `Manager ${actor.name} marked ${query.queryId} as Done. Pending sender verification.`,
       };
 
     case 'AM_REMARK':
       return {
-        title: `💬 ${actorRoleLabel} Remark: ${complaint.complaintId}`,
-        body: `${actorRoleLabel} ${actor.name}: "${(remarkText || complaint.accountManagerRemarkTitle || complaint.accountManagerRemark).slice(0, 90)}"`,
+        title: `💬 ${actorRoleLabel} Remark: ${query.queryId}`,
+        body: `${actorRoleLabel} ${actor.name}: "${(remarkText || query.accountManagerRemarkTitle || query.accountManagerRemark).slice(0, 90)}"`,
       };
 
     case 'AM_DONE':
       return {
-        title: `🎉 Complaint Completed: ${complaint.complaintId}`,
-        body: `${actorRoleLabel} ${actor.name} verified and marked Done. ${complaint.complaintId} is now Completed!`,
+        title: `🎉 Query Completed: ${query.queryId}`,
+        body: `${actorRoleLabel} ${actor.name} verified and marked Done. ${query.queryId} is now Completed!`,
       };
 
-    case 'COMPLAINT_DELAYED':
+    case 'QUERY_DELAYED':
       return {
-        title: `⚠️ Complaint SLA Delayed: ${complaint.complaintId}`,
-        body: `${complaint.complaintId} is delayed (>48h) with no manager completion. Assigned to ${complaint.managerName}.`,
+        title: `⚠️ Query SLA Delayed: ${query.queryId}`,
+        body: `${query.queryId} is delayed (>48h) with no manager completion. Assigned to ${query.managerName}.`,
       };
 
     case 'TEST':
@@ -147,26 +147,26 @@ export function formatNotificationContent(
 }
 
 // Dispatches push notification through Supabase Edge Function to target devices
-export async function dispatchComplaintPushNotification(
+export async function dispatchQueryPushNotification(
   params: DispatchNotificationParams
 ): Promise<{ success: boolean; recipientCount: number }> {
-  const { event, complaint, actor, remarkText } = params;
+  const { event, query, actor, remarkText } = params;
 
-  const recipientUserIds = computeTargetRecipients(event, complaint, actor.id);
+  const recipientUserIds = computeTargetRecipients(event, query, actor.id);
   if (recipientUserIds.length === 0) {
     return { success: true, recipientCount: 0 };
   }
 
   const { title, body } = formatNotificationContent(
     event,
-    complaint,
+    query,
     actor,
     remarkText
   );
 
   const payload = {
     event,
-    complaintId: complaint.complaintId,
+    queryId: query.queryId,
     actorId: actor.id,
     actorName: actor.name,
     actorRole: actor.role,
@@ -175,10 +175,10 @@ export async function dispatchComplaintPushNotification(
     body,
     icon: './portal-icon.svg',
     badge: './portal-icon.svg',
-    tag: `wmd-${complaint.complaintId}-${event.toLowerCase()}`,
+    tag: `wmd-${query.queryId}-${event.toLowerCase()}`,
     data: {
-      complaintId: complaint.complaintId,
-      url: `./?complaint=${complaint.complaintId}`,
+      queryId: query.queryId,
+      url: `./?query=${query.queryId}`,
       event,
     },
   };
