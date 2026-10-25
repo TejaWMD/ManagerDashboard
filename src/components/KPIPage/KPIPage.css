@@ -1479,3 +1479,79 @@
     animation: none !important;
   }
 }
+
+/* ==========================================================================
+   7. MOBILE FIX: nothing cut off, nothing squeezed, last card fully reachable
+   ========================================================================== */
+@media (max-width: 900px) {
+  /* Nothing in the scrolling column may shrink (shrinking = clipped content) */
+  .kpi-compact-header,
+  .kpi-five-cards-grid,
+  .kpi-managers-row,
+  .kpi-bottom-panels,
+  .kpi-uniform-card,
+  .panel-header-clean,
+  .panel-bars-list,
+  .team-summary-pill-row,
+  .recent-queue-list,
+  .queue-row-item,
+  .comp-bar-item {
+    flex-shrink: 0;
+    min-height: min-content;
+  }
+
+  /* Cards grow with their content and never crop it */
+  .kpi-uniform-card {
+    overflow: visible;
+    height: auto;
+  }
+  .kpi-panel-card {
+    flex: 0 0 auto;
+  }
+  .recent-queue-list {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+
+  /* Breathing room at the very bottom so the last card clears the
+     browser toolbar / home bar and can be scrolled fully into view */
+  .kpi-five-cards-grid::after {
+    content: '';
+    display: block;
+    flex: 0 0 auto;
+    height: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Queue rows: allow text to wrap instead of being cut off */
+  .queue-row-item {
+    align-items: center;
+  }
+  .queue-detail-box {
+    gap: 0.1rem;
+  }
+  .queue-people {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+  .queue-remark-snippet {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+  .queue-id {
+    white-space: nowrap;
+  }
+
+  /* Header of the panels wraps cleanly instead of overlapping */
+  .panel-title-group,
+  .panel-tags-cluster {
+    flex-wrap: wrap;
+  }
+}
