@@ -47,10 +47,22 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(
-      payload.title || 'WMD Query Portal',
-      notificationOptions
-    )
+    Promise.all([
+      self.registration.showNotification(
+        payload.title || 'WMD Query Portal',
+        notificationOptions
+      ),
+      self.clients
+        .matchAll({ type: 'window', includeUncontrolled: true })
+        .then((clientList) => {
+          for (const client of clientList) {
+            client.postMessage({
+              type: 'SW_NOTIFICATION_RECEIVED',
+              tag: notificationOptions.tag,
+            });
+          }
+        }),
+    ])
   );
 });
 

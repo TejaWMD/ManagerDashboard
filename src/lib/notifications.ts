@@ -1,6 +1,210 @@
 // Web Notifications & Service Worker System Alert Service
 const WEB_NOTIFICATION_SOUND_KEY = 'wm_notification_sound_enabled';
 
+// Browser Tab Notification Dot State
+let unreadTabNotificationCount = 0;
+let baseFaviconHref: string | null = null;
+let baseDocumentTitle: string | null = null;
+let cachedFaviconImg: HTMLImageElement | null = null;
+let lastDotTriggeredAt = 0;
+let tabDotListenersInitialized = false;
+
+function getFaviconLinkElement(): HTMLLinkElement | null {
+  if (typeof document === 'undefined') return null;
+  let link = document.querySelector<HTMLLinkElement>("link[rel*='icon']");
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.appendChild(link);
+  }
+  if (!baseFaviconHref && link.href) {
+    baseFaviconHref = link.href;
+  }
+  return link;
+}
+
+function drawFaviconWithDot(img: HTMLImageElement | null, count: number): string {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return baseFaviconHref || '/wmd-logo.jpg';
+
+  // Draw base icon or fallback background
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.drawImage(img, 0, 0, size, size);
+  } else {
+    ctx.fillStyle = '#4f46e5';
+    ctx.beginPath();
+    ctx.roundRect(0, 0, size, size, 12);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('W', size / 2, size / 2);
+  }
+
+  // Draw prominent red notification dot in top-right corner
+  const dotRadius = 18;
+  const centerX = size - dotRadius - 2;
+  const centerY = dotRadius + 2;
+
+  // White outer ring for contrast on any tab theme
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, dotRadius + 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+
+  // Bright red notification dot
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, dotRadius, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff2b2b';
+  ctx.fill();
+
+  // Draw count inside dot if 1-9
+  if (count > 0) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(count > 9 ? '9+' : String(count), centerX, centerY + 1);
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+function applyTabNotificationDot(): void {
+  if (typeof document === 'undefined') return;
+
+  if (!baseDocumentTitle) {
+    baseDocumentTitle = document.title.replace(/^🔴\s*(\(\d+\+?\)\s*)?/, '');
+  }
+
+  const countLabel =
+    unreadTabNotificationCount > 1 ? `(${unreadTabNotificationCount}) ` : '';
+  document.title = `🔴 ${countLabel}${baseDocumentTitle}`;
+
+  // Update app badge if supported by browser
+  if (typeof navigator !== 'undefined' && 'setAppBadge' in navigator) {
+    try {
+      (navigator as Navigator & { setAppBadge: (n?: number) => Promise<void> })
+        .setAppBadge(unreadTabNotificationCount)
+        .catch(() => {});
+    } catch {
+      // Ignore
+    }
+  }
+
+  const link = getFaviconLinkElement();
+  if (!link) return;
+
+  const iconSrc = baseFaviconHref || link.href || '/wmd-logo.jpg';
+
+  if (cachedFaviconImg && cachedFaviconImg.complete && cachedFaviconImg.naturalWidth > 0) {
+    link.href = drawFaviconWithDot(cachedFaviconImg, unreadTabNotificationCount);
+    return;
+  }
+
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    cachedFaviconImg = img;
+    if (unreadTabNotificationCount > 0) {
+      link.href = drawFaviconWithDot(img, unreadTabNotificationCount);
+    }
+  };
+  img.onerror = () => {
+    if (unreadTabNotificationCount > 0) {
+      link.href = drawFaviconWithDot(null, unreadTabNotificationCount);
+    }
+  };
+  img.src = iconSrc;
+
+  // Immediately draw fallback dot while image loads
+  link.href = drawFaviconWithDot(null, unreadTabNotificationCount);
+}
+
+export function clearTabNotificationDot(): void {
+  if (typeof document === 'undefined') return;
+  if (unreadTabNotificationCount === 0) return;
+
+  // Avoid clearing immediately from the same click that triggered a test alert
+  if (Date.now() - lastDotTriggeredAt < 600) return;
+
+  unreadTabNotificationCount = 0;
+
+  if (baseDocumentTitle) {
+    document.title = baseDocumentTitle;
+  }
+
+  const link = getFaviconLinkElement();
+  if (link && baseFaviconHref) {
+    link.href = baseFaviconHref;
+  }
+
+  if (typeof navigator !== 'undefined' && 'clearAppBadge' in navigator) {
+    try {
+      (navigator as Navigator & { clearAppBadge: () => Promise<void> })
+        .clearAppBadge()
+        .catch(() => {});
+    } catch {
+      // Ignore
+    }
+  }
+}
+
+function initTabDotListeners(): void {
+  if (typeof window === 'undefined' || tabDotListenersInitialized) return;
+  tabDotListenersInitialized = true;
+
+  getFaviconLinkElement();
+  if (typeof document !== 'undefined' && !baseDocumentTitle) {
+    baseDocumentTitle = document.title;
+  }
+
+  window.addEventListener('focus', () => {
+    clearTabNotificationDot();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      clearTabNotificationDot();
+    }
+  });
+
+  window.addEventListener('pointerdown', () => {
+    clearTabNotificationDot();
+  });
+
+  window.addEventListener('keydown', () => {
+    clearTabNotificationDot();
+  });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (
+        event.data &&
+        (event.data.type === 'SW_NOTIFICATION_RECEIVED' ||
+          event.data.type === 'SHOW_NOTIFICATION')
+      ) {
+        if (Date.now() - lastDotTriggeredAt > 2000) {
+          showTabNotificationDot();
+        }
+      }
+    });
+  }
+}
+
+export function showTabNotificationDot(): void {
+  if (typeof window === 'undefined') return;
+  initTabDotListeners();
+  unreadTabNotificationCount += 1;
+  lastDotTriggeredAt = Date.now();
+  applyTabNotificationDot();
+}
+
 // Play a lightweight, pleasant audio chime using Web Audio API
 export function playNotificationChime(): void {
   try {
@@ -73,6 +277,7 @@ let swRegistration: ServiceWorkerRegistration | null = null;
 
 // Register service worker for system tray & mobile notifications
 export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  initTabDotListeners();
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return null;
   }
@@ -136,6 +341,7 @@ export async function showWebNotification(
   tag = 'wmd-query-alert'
 ): Promise<void> {
   playNotificationChime();
+  showTabNotificationDot();
 
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return;
