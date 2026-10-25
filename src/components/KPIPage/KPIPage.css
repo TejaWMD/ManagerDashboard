@@ -1169,31 +1169,313 @@
 .table-status-pill--pending { background: #f1f5f9; color: #475569; }
 
 /* ==========================================================================
-   6. Small screens: 5 cards can't physically fit, so stack and allow scroll
+   6. RESPONSIVE
+   PC (>=1280)      : full fit-to-screen layout (default above)
+   Large PC (>=1600): a little bigger text
+   Laptop (901-1279): same layout, tighter, less secondary text
+   Tablet/phone (<=900): header wraps, manager cards become a swipe carousel,
+                         panels stack, page scrolls vertically
    ========================================================================== */
+
+/* ---------- Large PC / big monitors ---------- */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .kpi-screen-container {
+    --fs-xxs: clamp(0.56rem, 1.2vh, 0.82rem);
+    --fs-xs: clamp(0.64rem, 1.4vh, 0.92rem);
+    --fs-sm: clamp(0.74rem, 1.7vh, 1.05rem);
+    --fs-md: clamp(0.9rem, 2.1vh, 1.25rem);
+    --fs-lg: clamp(1.15rem, 3vh, 1.9rem);
+    --fs-xl: clamp(1.8rem, 5.2vh, 3.4rem);
+    --card-gap: 0.7rem;
+  }
+}
+
+/* ---------- Laptop (still fits the screen, just tighter) ---------- */
+@media (min-width: 901px) and (max-width: 1279px) {
+  .kpi-screen-container {
+    --card-gap: 0.4rem;
+  }
+  .kpi-compact-header {
+    padding: 0.7rem 1rem;
+  }
+  .mgr-footer-counts {
+    display: none;
+  }
+  .mgr-speed-strip {
+    justify-content: center;
+  }
+  .score-caption {
+    letter-spacing: 0;
+  }
+  .comp-bar-item {
+    grid-template-columns: minmax(70px, 26%) 1fr auto;
+    gap: 0.35rem;
+  }
+  .comp-pts-sub {
+    display: none;
+  }
+  .panel-tag-clean--alt {
+    display: none;
+  }
+  .queue-row-item {
+    gap: 0.35rem;
+  }
+}
+
+/* ---------- Short laptop screens (height under 720px) ---------- */
+@media (min-width: 901px) and (max-height: 720px) {
+  .mgr-role-text,
+  .mgr-footer-counts,
+  .kpi-uniform-card::before,
+  .kpi-uniform-card::after {
+    display: none;
+  }
+  .kpi-compact-header {
+    height: 64px;
+    min-height: 64px;
+    max-height: 64px;
+    padding: 0.5rem 1.1rem;
+  }
+  .kpi-brand-logo-badge {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* ---------- Tablet + phone: scrolling, stacked layout ---------- */
 @media (max-width: 900px) {
   .kpi-screen-container {
-    height: auto;
-    max-height: none;
+    /* fixed readable sizes (vh units are too small on phones) */
+    --fs-xxs: 0.64rem;
+    --fs-xs: 0.72rem;
+    --fs-sm: 0.82rem;
+    --fs-md: 0.95rem;
+    --fs-lg: 1.3rem;
+    --fs-xl: 2.2rem;
+    --card-gap: 0.65rem;
+    --card-pad: 0.8rem;
+    --inner-gap: 0.55rem;
+
+    height: 100%;
+    max-height: 100%;
+    overflow-x: hidden;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+
+  /* Header wraps: [Title ........ Logo] then [pills across full width] */
+  .kpi-compact-header {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    flex-wrap: wrap;
+    row-gap: 0.65rem;
+    padding: 0.8rem 1rem;
+  }
+  .kpi-header-right {
+    display: contents;
+  }
+  .kpi-header-left {
+    order: 1;
+    flex: 1 1 auto;
+  }
+  .kpi-brand-logo-badge {
+    order: 2;
+    width: 42px;
+    height: 42px;
+    margin-left: 0;
+  }
+  .kpi-pill-group {
+    order: 3;
+    flex: 1 1 100%;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .kpi-pill-btn {
+    flex: 1 1 0;
+    text-align: center;
+    padding: 0.5rem 0.2rem;
+    font-size: 0.78rem;
+  }
+
+  /* Cards: natural height, no forced fit */
   .kpi-five-cards-grid {
     display: flex;
     flex-direction: column;
     flex: 0 0 auto;
+    min-height: auto;
     overflow: visible;
-  }
-  .kpi-managers-row,
-  .kpi-bottom-panels {
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-    height: auto;
+    gap: var(--card-gap);
   }
   .kpi-uniform-card {
     height: auto;
+    border-radius: 22px;
   }
-  .queue-row-item,
+
+  /* Manager cards: swipe carousel (one card + a peek of the next) */
+  .kpi-managers-row {
+    display: flex;
+    flex-direction: row;
+    height: auto;
+    gap: 0.65rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 0.1rem;
+    -webkit-overflow-scrolling: touch;
+    padding: 4px 4px 0.9rem;
+    margin: -4px -4px -0.5rem;
+    width: calc(100% + 8px);
+    scrollbar-width: none;
+  }
+  .kpi-managers-row::-webkit-scrollbar {
+    display: none;
+  }
+  .kpi-managers-row .kpi-mgr-box {
+    flex: 0 0 62%;
+    width: auto;
+    scroll-snap-align: start;
+  }
+
+  .mgr-avatar {
+    width: 38px;
+    height: 38px;
+  }
+  .mgr-score-block {
+    flex: 0 0 auto;
+    padding: 0.6rem 0.7rem;
+    border-radius: 18px;
+  }
+  .mgr-metrics-group {
+    flex: 0 0 auto;
+  }
+  .mgr-progress-track {
+    height: 10px;
+  }
+  .mgr-stats-capsules {
+    flex: 0 0 auto;
+    gap: 0.35rem;
+  }
+  .stat-capsule {
+    min-height: 3.1rem;
+    border-radius: 16px;
+  }
+  .mgr-speed-strip {
+    padding: 0.4rem 0.8rem;
+  }
+
+  /* Panels stack in one column */
+  .kpi-bottom-panels {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    gap: var(--card-gap);
+  }
+  .panel-header-clean {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+    padding-bottom: 0.45rem;
+  }
+  .panel-view-all-btn,
+  .panel-filter-indicator {
+    padding: 0.3rem 0.75rem;
+  }
+  .panel-bars-list,
+  .team-summary-pill-row,
+  .recent-queue-list {
+    flex: 0 0 auto;
+  }
   .comp-bar-item {
-    min-height: 2.2rem;
+    flex: 0 0 auto;
+    min-height: 2.8rem;
+    grid-template-columns: minmax(84px, 30%) 1fr auto;
+    padding: 0.25rem 0.75rem;
+  }
+  .comp-avatar {
+    width: 24px;
+    height: 24px;
+  }
+  .comp-bar-track {
+    height: 10px;
+  }
+  .summary-bubble {
+    min-height: 3.4rem;
+    border-radius: 16px;
+  }
+  .recent-queue-list {
+    overflow: visible;
+  }
+  .queue-row-item {
+    flex: 0 0 auto;
+    min-height: 3.4rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 20px;
+    gap: 0.5rem;
+  }
+  .queue-empty-msg {
+    padding: 1rem 0;
+  }
+
+  /* Pop-up modal on small screens */
+  .modal-backdrop {
+    padding: 0.5rem;
+    align-items: flex-end;
+  }
+  .modal-dialog.query-view-modal {
+    max-height: 92vh;
+    border-radius: 22px;
+  }
+  .modal-dialog.query-view-modal .query-view-remarks-grid,
+  .query-view-meta-grid {
+    grid-template-columns: 1fr;
+  }
+  .modal-header,
+  .query-view-body {
+    padding: 0.85rem 1rem;
+  }
+}
+
+/* ---------- Tablet (601-900): carousel shows about two cards at once ---------- */
+@media (min-width: 601px) and (max-width: 900px) {
+  .kpi-managers-row .kpi-mgr-box {
+    flex: 0 0 46%;
+  }
+}
+
+/* ---------- Phone (<=600) ---------- */
+@media (max-width: 600px) {
+  .kpi-managers-row .kpi-mgr-box {
+    flex: 0 0 88%;
+  }
+  .kpi-page-heading {
+    font-size: 1.2rem;
+  }
+}
+
+/* ---------- Small phones (<=380) ---------- */
+@media (max-width: 380px) {
+  .kpi-screen-container {
+    --card-pad: 0.65rem;
+    --fs-xl: 2rem;
+  }
+  .comp-pts-sub,
+  .queue-speed-box {
+    display: none;
+  }
+  .queue-row-item {
+    grid-template-columns: auto 1fr auto;
+  }
+  .summary-bubble {
+    border-radius: 14px;
+  }
+}
+
+/* ---------- Respect reduced-motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .kpi-screen-container * {
+    transition: none !important;
+    animation: none !important;
   }
 }
