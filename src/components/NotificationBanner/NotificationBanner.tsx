@@ -61,11 +61,11 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
       setPermission('granted');
       setFeedback({
         type: 'success',
-        message: 'Desktop background push notifications enabled successfully!',
+        message: 'Notifications enabled successfully!',
       });
       // Show greeting alert
       showWebNotification(
-        '🔔 Desktop Notifications Activated',
+        '🔔 Notifications Activated',
         `Welcome ${currentUser.name}! You will now receive background alerts for queries and updates.`
       );
       setTimeout(() => setDismissed(true), 3500);
@@ -95,12 +95,12 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
   };
 
   return (
-    <div className="notif-banner" role="region" aria-label="Desktop Notification Prompt">
+    <div className="notif-banner" role="region" aria-label="Notification Prompt">
       <div className="notif-banner-content">
         <div className="notif-banner-icon-box">🔔</div>
         <div className="notif-banner-text-box">
           <div className="notif-banner-title">
-            Enable Desktop Background Push Alerts
+            Enable Notifications Alerts
           </div>
           <div className="notif-banner-desc">
             Stay alerted on new queries, manager remarks, and SLA delays even when your browser tab is closed.

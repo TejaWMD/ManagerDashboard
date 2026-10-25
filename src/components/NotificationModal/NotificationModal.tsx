@@ -77,11 +77,11 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       setHasPushSub(true);
       setFeedback({
         type: 'success',
-        message: 'Desktop background push notifications activated successfully!',
+        message: 'Notifications activated successfully!',
       });
       showWebNotification(
         '🔔 Notifications Enabled',
-        'You will now receive desktop alerts even when the browser tab is closed.'
+        'You will now receive notifications even when the browser tab is closed.'
       );
     } else {
       setFeedback({
@@ -126,7 +126,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           managerName: currentUser.name,
           managerEmail: currentUser.email,
           queryTitle: 'Test Notification',
-          queryText: 'Test desktop push notification alert',
+          queryText: 'Test notification alert',
           managerRemarkTitle: '',
           managerRemark: '',
           managerDone: false,
@@ -160,7 +160,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             <div>
               <h3>Browser Notification Settings</h3>
               {/* <p className="notif-subtitle">
-                Receive instant desktop alerts even when tabs are closed
+                Receive instant notifications even when tabs are closed
               </p> */}
             </div>
           </div>
@@ -184,7 +184,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
 
           <section className="notif-section">
             <div className="notif-section-header">
-              <h4>Desktop Push & Chime Alerts</h4>
+              <h4>Notifications & Chime Alerts</h4>
               <span
                 className={`notif-status-badge notif-status-badge--${
                   webPermission === 'granted' && hasPushSub ? 'active' : 'inactive'
@@ -209,7 +209,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                   onClick={handleEnableWebPush}
                   disabled={loading}
                 >
-                  {loading ? 'Subscribing...' : 'Enable Desktop Notifications'}
+                  {loading ? 'Subscribing...' : 'Enable Notifications'}
                 </button>
               ) : (
                 <>
