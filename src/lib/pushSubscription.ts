@@ -98,7 +98,7 @@ export async function subscribeUserToPush(
     // 3. Get existing or subscribe anew with VAPID applicationServerKey
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
-      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer;
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey,
