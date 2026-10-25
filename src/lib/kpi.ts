@@ -176,11 +176,17 @@ export function calculateManagerKpi(
   }
 
   const totalEvaluated = onTimeCount + lateCount + overdueCount;
-  // If no evaluated queries (e.g. 0 queries or only in-progress), default to 100%
+  const completedCount = onTimeCount + lateCount;
+  const totalAssigned = windowQueries.length;
+  const completionRate =
+    totalAssigned > 0 ? Math.round((completedCount / totalAssigned) * 100) : 0;
+
+  // Weighted KPI Score Formula: (Earned Points ÷ Total Evaluated Queries) × 100
+  // If no queries have been evaluated yet (0 completed & 0 overdue), KPI is 0% (not 100%)
   const kpiScore =
     totalEvaluated > 0
       ? Math.round((earnedPoints / totalEvaluated) * 100)
-      : 100;
+      : 0;
 
   const avgManagerTurnaroundHours =
     turnaroundTimes.length > 0
@@ -201,7 +207,9 @@ export function calculateManagerKpi(
     kpiScore,
     earnedPoints: Math.round(earnedPoints * 10) / 10,
     totalEvaluated,
-    totalAssigned: windowQueries.length,
+    totalAssigned,
+    completedCount,
+    completionRate,
     onTimeCount,
     lateCount,
     overdueCount,
@@ -240,7 +248,7 @@ export function calculateAllManagersKpi(
       ? Math.round((totalEarnedSum / totalEvaluatedSum) * 100)
       : stats.length > 0
       ? Math.round(stats.reduce((acc, s) => acc + s.kpiScore, 0) / stats.length)
-      : 100;
+      : 0;
 
   return {
     stats,

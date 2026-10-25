@@ -56,11 +56,16 @@
   z-index: 1;
 }
 
-.app-body-column--queries {
+.app-body-column--home,
+.app-body-column--queries,
+.app-body-column--kpi {
   overflow: hidden;
+  height: 100%;
 }
 
-.app-main-content--queries {
+.app-main-content--home,
+.app-main-content--queries,
+.app-main-content--kpi {
   height: 100%;
   min-height: 0;
   flex: 1;

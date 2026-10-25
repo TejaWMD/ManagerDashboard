@@ -205,10 +205,12 @@ export interface EvaluatedQueryDetail {
 
 export interface ManagerKpiStats {
   manager: UserAccount;
-  kpiScore: number; // 0 - 100 percentage
+  kpiScore: number; // 0 - 100 percentage based on weighted scoring formula
   earnedPoints: number;
   totalEvaluated: number; // count of evaluated queries (onTime + late + overdue)
   totalAssigned: number; // total queries received in window
+  completedCount: number; // onTimeCount + lateCount
+  completionRate: number; // percentage of completed vs received: (completedCount / totalAssigned) * 100
   onTimeCount: number; // +1.0
   lateCount: number; // +0.5
   overdueCount: number; // 0.0

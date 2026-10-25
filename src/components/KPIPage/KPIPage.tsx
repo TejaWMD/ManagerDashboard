@@ -55,26 +55,46 @@ export const KPIPage: React.FC<KPIPageProps> = ({
     });
   }, [queries, managers, timeWindow, nowMs]);
 
-  // Overall totals across the 3 managers in the selected window
+  // Overall totals across the managers in the selected window
   const overallTotals = useMemo(() => {
     const totalOnTime = managerStats.reduce((sum, s) => sum + s.onTimeCount, 0);
     const totalLate = managerStats.reduce((sum, s) => sum + s.lateCount, 0);
     const totalOverdue = managerStats.reduce((sum, s) => sum + s.overdueCount, 0);
+    const totalInProgress = managerStats.reduce((sum, s) => sum + s.inProgressCount, 0);
     const totalEvaluated = managerStats.reduce((sum, s) => sum + s.totalEvaluated, 0);
-    return { totalOnTime, totalLate, totalOverdue, totalEvaluated };
+    const totalAssigned = managerStats.reduce((sum, s) => sum + s.totalAssigned, 0);
+    const totalCompleted = totalOnTime + totalLate;
+    const overallCompletionRate =
+      totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0;
+
+    return {
+      totalOnTime,
+      totalLate,
+      totalOverdue,
+      totalInProgress,
+      totalEvaluated,
+      totalAssigned,
+      totalCompleted,
+      overallCompletionRate,
+    };
   }, [managerStats]);
 
-  // Recent evaluated tickets for the quick snapshot card (max 4 items so it fits the exact card height)
-  const recentEvaluated = useMemo(() => {
+  // Recent queries for the snapshot card (max 4 items so it fits the card height)
+  const recentQueue = useMemo(() => {
     const inWindow = filterQueriesByWindow(queries, timeWindow, nowMs);
-    const evaluated = inWindow
-      .map((c) => evaluateQueryKpi(c, nowMs))
-      .filter((item) => item.isEvaluated);
+    const allEvaluated = inWindow.map((c) => evaluateQueryKpi(c, nowMs));
 
     const filtered =
       selectedManagerId === 'ALL'
-        ? evaluated
-        : evaluated.filter((item) => item.query.managerId === selectedManagerId);
+        ? allEvaluated
+        : allEvaluated.filter((item) => item.query.managerId === selectedManagerId);
+
+    // Sort by createdAtMs descending (most recent first)
+    filtered.sort((a, b) => {
+      const msA = a.query.createdAtMs || 0;
+      const msB = b.query.createdAtMs || 0;
+      return msB - msA;
+    });
 
     return filtered.slice(0, 4);
   }, [queries, timeWindow, nowMs, selectedManagerId]);
@@ -131,7 +151,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
         </div>
       </header>
 
-      {/* 2. Unified 5-Card Balanced Grid (All 5 cards share exact sizing & bubbly styling) */}
+      {/* 2. Unified 5-Card Balanced Grid (All cards full width, compact, fit to screen) */}
       <div className="kpi-five-cards-grid">
         {/* Top 3 Manager KPI Cards */}
         <section className="kpi-managers-row" aria-label="Manager KPI Scorecards">
@@ -141,23 +161,29 @@ export const KPIPage: React.FC<KPIPageProps> = ({
             const isSelected = selectedManagerId === stat.manager.id;
 
             const scoreColorClass =
-              stat.kpiScore >= 85
+              stat.totalEvaluated === 0
+                ? 'kpi-card--neutral'
+                : stat.kpiScore >= 85
                 ? 'kpi-card--green'
                 : stat.kpiScore >= 70
                 ? 'kpi-card--amber'
                 : 'kpi-card--red';
 
             const onTimePct =
-              stat.totalEvaluated > 0
-                ? Math.round((stat.onTimeCount / stat.totalEvaluated) * 100)
+              stat.totalAssigned > 0
+                ? Math.round((stat.onTimeCount / stat.totalAssigned) * 100)
                 : 0;
             const latePct =
-              stat.totalEvaluated > 0
-                ? Math.round((stat.lateCount / stat.totalEvaluated) * 100)
+              stat.totalAssigned > 0
+                ? Math.round((stat.lateCount / stat.totalAssigned) * 100)
                 : 0;
             const overduePct =
-              stat.totalEvaluated > 0
-                ? Math.round((stat.overdueCount / stat.totalEvaluated) * 100)
+              stat.totalAssigned > 0
+                ? Math.round((stat.overdueCount / stat.totalAssigned) * 100)
+                : 0;
+            const inProgressPct =
+              stat.totalAssigned > 0
+                ? Math.max(0, 100 - onTimePct - latePct - overduePct)
                 : 0;
 
             return (
@@ -192,62 +218,94 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   </div>
                 </div>
 
-                {/* Bubbly Score & Points Showcase */}
+                {/* Dual Metrics Showcase: KPI Score (Left) + Completed / Received (Right) */}
                 <div className="mgr-score-block">
-                  <div className="mgr-big-num">
-                    <span className="score-number">{stat.kpiScore}%</span>
-                    <span className="score-caption">KPI Score</span>
+                  <div className="mgr-score-primary">
+                    <div className="mgr-score-topline">
+                      <span className="score-number">{stat.kpiScore}%</span>
+                      <span className="mgr-score-tag">
+                        {stat.totalEvaluated === 0
+                          ? '0 / 0'
+                          : `${stat.earnedPoints}/${stat.totalEvaluated}`}{' '}
+                        pts
+                      </span>
+                    </div>
+                    <span className="score-caption">Weighted KPI Score</span>
                   </div>
 
-                  <div className="mgr-points-pill">
-                    <span className="points-number">
-                      {stat.earnedPoints} <span className="points-slash">/</span>{' '}
-                      {stat.totalEvaluated}
-                    </span>
-                    <span className="points-caption">Pts Earned</span>
+                  <div className="mgr-completion-secondary">
+                    <div className="mgr-score-topline">
+                      <span className="completion-number">
+                        {stat.completedCount}
+                        <span className="completion-slash">/</span>
+                        {stat.totalAssigned}
+                      </span>
+                      <span className="mgr-completion-tag">
+                        {stat.completionRate}% Done
+                      </span>
+                    </div>
+                    <span className="score-caption">Resolved / Received</span>
                   </div>
                 </div>
 
-                {/* Distribution Mini Bar + Compact Stat Bubbles */}
+                {/* Distribution Segmented Bar */}
                 <div className="mgr-metrics-group">
-                  <div className="mgr-progress-track">
+                  <div className="mgr-progress-track" title="On-Time | Late | Overdue | In-Progress">
                     <div
                       className="progress-seg progress-seg--ontime"
                       style={{ width: `${onTimePct}%` }}
+                      title={`On-time: ${stat.onTimeCount}`}
                     />
                     <div
                       className="progress-seg progress-seg--late"
                       style={{ width: `${latePct}%` }}
+                      title={`Late: ${stat.lateCount}`}
                     />
                     <div
                       className="progress-seg progress-seg--overdue"
                       style={{ width: `${overduePct}%` }}
+                      title={`Overdue: ${stat.overdueCount}`}
+                    />
+                    <div
+                      className="progress-seg progress-seg--inprog"
+                      style={{ width: `${inProgressPct}%` }}
+                      title={`In Progress: ${stat.inProgressCount}`}
                     />
                   </div>
 
+                  {/* 4 Compact Stat Capsules Spanning Full Width */}
                   <div className="mgr-stats-capsules">
-                    <div className="stat-capsule stat-capsule--ontime">
+                    <div className="stat-capsule stat-capsule--ontime" title="Queries completed within 48h (+1.0 pt)">
                       <span className="capsule-num">⚡ {stat.onTimeCount}</span>
                       <span className="capsule-lbl">On-Time</span>
                     </div>
-                    <div className="stat-capsule stat-capsule--late">
+                    <div className="stat-capsule stat-capsule--late" title="Queries completed after 48h (+0.5 pt)">
                       <span className="capsule-num">⏱️ {stat.lateCount}</span>
                       <span className="capsule-lbl">Late</span>
                     </div>
-                    <div className="stat-capsule stat-capsule--overdue">
+                    <div className="stat-capsule stat-capsule--overdue" title="Queries open past 48h (0.0 pt penalty)">
                       <span className="capsule-num">⚠️ {stat.overdueCount}</span>
                       <span className="capsule-lbl">Overdue</span>
+                    </div>
+                    <div className="stat-capsule stat-capsule--inprog" title="Open queries within 48h grace period (excluded from divisor)">
+                      <span className="capsule-num">⏳ {stat.inProgressCount}</span>
+                      <span className="capsule-lbl">In Prog</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Turnaround Speed Footer Bubble */}
+                {/* Turnaround Speed & Context Footer Strip */}
                 <div className="mgr-speed-strip">
-                  <span className="speed-lbl">Avg Response Speed</span>
-                  <span className="speed-val-pill">
-                    {stat.avgManagerTurnaroundHours !== null
-                      ? `${stat.avgManagerTurnaroundHours} hrs`
-                      : '—'}
+                  <div className="mgr-speed-item">
+                    <span className="speed-lbl">Avg Response:</span>
+                    <span className="speed-val-pill">
+                      {stat.avgManagerTurnaroundHours !== null
+                        ? `${stat.avgManagerTurnaroundHours}h`
+                        : '—'}
+                    </span>
+                  </div>
+                  <span className="mgr-footer-counts">
+                    {stat.totalEvaluated} evaluated · {stat.totalAssigned} assigned
                   </span>
                 </div>
               </div>
@@ -255,19 +313,26 @@ export const KPIPage: React.FC<KPIPageProps> = ({
           })}
         </section>
 
-        {/* Bottom 2 Analytics Cards (Same exact card size & height) */}
+        {/* Bottom 2 Analytics Cards (Full-width 2-column balanced grid) */}
         <section className="kpi-bottom-panels" aria-label="Analytics & Breakdown">
           {/* Card 4: Team Score Comparison */}
           <div className="kpi-uniform-card kpi-panel-card">
             <div className="panel-header-clean">
               <h2 className="panel-title-clean">Team Performance</h2>
-              <span className="panel-tag-clean">Avg: {teamAverageKpi}%</span>
+              <div className="panel-tags-cluster">
+                <span className="panel-tag-clean">Avg KPI: {teamAverageKpi}%</span>
+                <span className="panel-tag-clean panel-tag-clean--alt">
+                  {overallTotals.totalCompleted}/{overallTotals.totalAssigned} ({overallTotals.overallCompletionRate}%) Done
+                </span>
+              </div>
             </div>
 
             <div className="panel-bars-list">
               {managerStats.map((stat) => {
                 const barColorClass =
-                  stat.kpiScore >= 85
+                  stat.totalEvaluated === 0
+                    ? 'comp-bar-fill--neutral'
+                    : stat.kpiScore >= 85
                     ? 'comp-bar-fill--green'
                     : stat.kpiScore >= 70
                     ? 'comp-bar-fill--amber'
@@ -291,17 +356,20 @@ export const KPIPage: React.FC<KPIPageProps> = ({
 
                     <div className="comp-nums-col">
                       <span className="comp-rate-val">{stat.kpiScore}%</span>
-                      <span className="comp-pts-sub">{stat.earnedPoints}p</span>
+                      <span className="comp-pts-sub">
+                        {stat.earnedPoints}p · {stat.completedCount}/{stat.totalAssigned}
+                      </span>
                     </div>
                   </div>
                 );
               })}
             </div>
 
+            {/* 5-Column Full-Width Summary Bubbles */}
             <div className="team-summary-pill-row">
               <div className="summary-bubble">
-                <span className="summary-lbl">Total</span>
-                <strong className="summary-val">{overallTotals.totalEvaluated}</strong>
+                <span className="summary-lbl">Received</span>
+                <strong className="summary-val">{overallTotals.totalAssigned}</strong>
               </div>
               <div className="summary-bubble summary-bubble--ontime">
                 <span className="summary-lbl">On-Time</span>
@@ -314,6 +382,10 @@ export const KPIPage: React.FC<KPIPageProps> = ({
               <div className="summary-bubble summary-bubble--overdue">
                 <span className="summary-lbl">Overdue</span>
                 <strong className="summary-val">{overallTotals.totalOverdue}</strong>
+              </div>
+              <div className="summary-bubble summary-bubble--inprog">
+                <span className="summary-lbl">In-Prog</span>
+                <strong className="summary-val">{overallTotals.totalInProgress}</strong>
               </div>
             </div>
           </div>
@@ -347,20 +419,29 @@ export const KPIPage: React.FC<KPIPageProps> = ({
             </div>
 
             <div className="recent-queue-list">
-              {recentEvaluated.map(({ query: c, status, managerTurnaroundHours }) => {
+              {recentQueue.map(({ query: c, status, managerTurnaroundHours }) => {
+                const isItemEvaluated = status !== 'IN_PROGRESS';
                 const pointChipClass =
                   status === 'ON_TIME'
                     ? 'pt-chip--ontime'
                     : status === 'LATE'
                     ? 'pt-chip--late'
-                    : 'pt-chip--overdue';
+                    : status === 'OVERDUE'
+                    ? 'pt-chip--overdue'
+                    : 'pt-chip--inprog';
 
                 const pointText =
                   status === 'ON_TIME'
                     ? '+1.0'
                     : status === 'LATE'
                     ? '+0.5'
-                    : '0.0';
+                    : status === 'OVERDUE'
+                    ? '0.0'
+                    : 'In Prog';
+
+                const elapsedHours = Math.round(
+                  Math.max(0, nowMs - (c.createdAtMs || 0)) / (3600 * 1000)
+                );
 
                 return (
                   <div
@@ -388,8 +469,10 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                     <div className="queue-speed-box">
                       {managerTurnaroundHours !== null ? (
                         <span className="queue-speed-val">{managerTurnaroundHours}h</span>
-                      ) : (
+                      ) : status === 'OVERDUE' ? (
                         <span className="queue-speed-pending">&gt;48h</span>
+                      ) : (
+                        <span className="queue-speed-inprog">{elapsedHours}h</span>
                       )}
                     </div>
 
@@ -400,8 +483,8 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                 );
               })}
 
-              {recentEvaluated.length === 0 && (
-                <div className="queue-empty-msg">No evaluated queries in this window.</div>
+              {recentQueue.length === 0 && (
+                <div className="queue-empty-msg">No queries in this window.</div>
               )}
             </div>
           </div>
