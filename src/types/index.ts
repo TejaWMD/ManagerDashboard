@@ -21,8 +21,8 @@ export interface Query {
   createdAt: string; // Immutable creation timestamp string (YYYY-MM-DD HH:mm:ss)
   createdAtMs: number; // Immutable creation epoch milliseconds for calculations
   completedAt?: string | null; // Completion timestamp string when both Manager & AM checked
-  completedAtMs?: number | null; // Completion epoch milliseconds for SLA / delay persistence
-  isDelayed?: boolean; // Persisted flag if query exceeded 24h before or at completion
+  completedAtMs?: number | null; // Completion epoch milliseconds for completion tracking
+  isDelayed?: boolean; // Persisted flag if query exceeded 48h before or at completion
   accountManagerId: string; // Foreign Key -> UserAccount.id (e.g., 'am-1')
   accountManagerEmail: string;
   accountManagerName: string;
@@ -35,12 +35,13 @@ export interface Query {
   managerRemark: string;
   managerDone: boolean;
   managerDoneAt?: string | null; // Timestamp when assigned manager marked Done
-  managerDoneAtMs?: number | null; // Epoch ms when assigned manager marked Done (for SLA tracking)
+  managerDoneAtMs?: number | null; // Epoch ms when assigned manager marked Done (for turnaround tracking)
   accountManagerRemarkTitle: string;
   accountManagerRemark: string;
   accountManagerDone: boolean;
   status: QueryStatus;
   delayNotified?: boolean;
+  rating?: number | null; // Mandatory 1-5 star rating provided by sender upon completion
 }
 
 export const DELAY_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours (172,800,000 ms)
@@ -205,16 +206,21 @@ export interface EvaluatedQueryDetail {
 
 export interface ManagerKpiStats {
   manager: UserAccount;
-  kpiScore: number; // 0 - 100 percentage based on weighted scoring formula
+  kpiScore: number; // 0 - 100 percentage based on weighted turnaround formula (Turnaround KPI)
+  turnaroundKpi: number; // Alias for previous weighted calculation
   earnedPoints: number;
   totalEvaluated: number; // count of evaluated queries (onTime + late + overdue)
   totalAssigned: number; // total queries received in window
   completedCount: number; // onTimeCount + lateCount
+  delayedCount: number; // lateCount + overdueCount (all delayed queries)
   completionRate: number; // percentage of completed vs received: (completedCount / totalAssigned) * 100
   onTimeCount: number; // +1.0
   lateCount: number; // +0.5
   overdueCount: number; // 0.0
   inProgressCount: number; // excluded (<48h)
+  avgRating: number | null; // Average sender rating (1.0 to 5.0)
+  totalRated: number; // Number of rated queries in window
+  overallKpi: number; // Combined score: average of turnaround KPI and average rating percentage
   avgManagerTurnaroundHours: number | null;
   avgSenderVerificationHours: number | null;
   evaluatedQueries: EvaluatedQueryDetail[];

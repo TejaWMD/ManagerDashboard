@@ -177,16 +177,39 @@ export function calculateManagerKpi(
 
   const totalEvaluated = onTimeCount + lateCount + overdueCount;
   const completedCount = onTimeCount + lateCount;
+  const delayedCount = lateCount + overdueCount;
   const totalAssigned = windowQueries.length;
   const completionRate =
     totalAssigned > 0 ? Math.round((completedCount / totalAssigned) * 100) : 0;
 
-  // Weighted KPI Score Formula: (Earned Points ÷ Total Evaluated Queries) × 100
-  // If no queries have been evaluated yet (0 completed & 0 overdue), KPI is 0% (not 100%)
+  // Weighted Turnaround KPI Score Formula: (Earned Points ÷ Total Evaluated Queries) × 100
+  // If no queries have been evaluated yet (0 completed & 0 overdue), KPI is 0%
   const kpiScore =
     totalEvaluated > 0
       ? Math.round((earnedPoints / totalEvaluated) * 100)
       : 0;
+  const turnaroundKpi = kpiScore;
+
+  // Ratings calculation (sender ratings 1-5 stars)
+  const ratings: number[] = [];
+  for (const c of windowQueries) {
+    if (typeof c.rating === 'number' && c.rating >= 1 && c.rating <= 5) {
+      ratings.push(c.rating);
+    }
+  }
+  const totalRated = ratings.length;
+  const avgRating =
+    totalRated > 0
+      ? Math.round((ratings.reduce((acc, r) => acc + r, 0) / totalRated) * 10) / 10
+      : null;
+
+  // Overall KPI: average of turnaround KPI and sender average rating converted to percentage (5.0 stars = 100%)
+  // If no ratings exist yet, overall KPI defaults to turnaround KPI
+  let overallKpi = turnaroundKpi;
+  if (avgRating !== null) {
+    const ratingPercentage = (avgRating / 5.0) * 100;
+    overallKpi = Math.round((turnaroundKpi + ratingPercentage) / 2);
+  }
 
   const avgManagerTurnaroundHours =
     turnaroundTimes.length > 0
@@ -205,15 +228,20 @@ export function calculateManagerKpi(
   return {
     manager,
     kpiScore,
+    turnaroundKpi,
     earnedPoints: Math.round(earnedPoints * 10) / 10,
     totalEvaluated,
     totalAssigned,
     completedCount,
+    delayedCount,
     completionRate,
     onTimeCount,
     lateCount,
     overdueCount,
     inProgressCount,
+    avgRating,
+    totalRated,
+    overallKpi,
     avgManagerTurnaroundHours,
     avgSenderVerificationHours,
     evaluatedQueries: evaluatedList,
@@ -221,7 +249,7 @@ export function calculateManagerKpi(
 }
 
 /**
- * Calculates weighted KPI statistics for all managers, sorted by score descending.
+ * Calculates weighted KPI statistics for all managers, sorted by overall KPI score descending.
  */
 export function calculateAllManagersKpi(
   queries: Query[],
@@ -230,28 +258,38 @@ export function calculateAllManagersKpi(
 ): {
   stats: ManagerKpiStats[];
   teamAverageKpi: number;
+  teamAverageRating: number | null;
 } {
   const stats = managers.map((mgr) => calculateManagerKpi(queries, mgr, options));
 
-  // Sort by KPI Score (highest first), then earned points, then on-time count
+  // Sort by Overall KPI Score (highest first), then Turnaround KPI, then avgRating, then earned points
   stats.sort((a, b) => {
-    if (b.kpiScore !== a.kpiScore) return b.kpiScore - a.kpiScore;
+    if (b.overallKpi !== a.overallKpi) return b.overallKpi - a.overallKpi;
+    if (b.turnaroundKpi !== a.turnaroundKpi) return b.turnaroundKpi - a.turnaroundKpi;
+    const rateA = a.avgRating ?? 0;
+    const rateB = b.avgRating ?? 0;
+    if (rateB !== rateA) return rateB - rateA;
     if (b.earnedPoints !== a.earnedPoints) return b.earnedPoints - a.earnedPoints;
     return b.onTimeCount - a.onTimeCount;
   });
 
-  const totalEvaluatedSum = stats.reduce((acc, s) => acc + s.totalEvaluated, 0);
-  const totalEarnedSum = stats.reduce((acc, s) => acc + s.earnedPoints, 0);
+  const validRatings = stats
+    .map((s) => s.avgRating)
+    .filter((r): r is number => typeof r === 'number' && !Number.isNaN(r));
+
+  const teamAverageRating =
+    validRatings.length > 0
+      ? Math.round((validRatings.reduce((acc, r) => acc + r, 0) / validRatings.length) * 10) / 10
+      : null;
 
   const teamAverageKpi =
-    totalEvaluatedSum > 0
-      ? Math.round((totalEarnedSum / totalEvaluatedSum) * 100)
-      : stats.length > 0
-      ? Math.round(stats.reduce((acc, s) => acc + s.kpiScore, 0) / stats.length)
+    stats.length > 0
+      ? Math.round(stats.reduce((acc, s) => acc + s.overallKpi, 0) / stats.length)
       : 0;
 
   return {
     stats,
     teamAverageKpi,
+    teamAverageRating,
   };
 }

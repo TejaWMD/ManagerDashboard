@@ -37,6 +37,7 @@ interface QueryPageProps {
         | 'accountManagerRemarkTitle'
         | 'accountManagerRemark'
         | 'accountManagerDone'
+        | 'rating'
       >
     >
   ) => Promise<void>;
@@ -129,6 +130,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [editingMgrRemarkId, setEditingMgrRemarkId] = useState<string | null>(null);
   const [mgrRemarkTitleDraft, setMgrRemarkTitleDraft] = useState<string>('');
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
+
+  // Mandatory rating modal states
+  const [ratingModalQuery, setRatingModalQuery] = useState<Query | null>(null);
+  const [ratingInput, setRatingInput] = useState<number>(0);
+  const [ratingHover, setRatingHover] = useState<number>(0);
 
   // Mandatory Solution Remark Modal state (Director Policy Requirement)
   const [remarkModalQuery, setRemarkModalQuery] = useState<Query | null>(null);
@@ -385,6 +391,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     // Sender will only check the box once the query is completed by assigned manager
     if (!item.accountManagerDone && !item.managerDone) return;
 
+    // If sender is marking Done and has not rated yet, enforce mandatory rating
+    if (!item.accountManagerDone && (!item.rating || item.rating < 1)) {
+      setRatingModalQuery(item);
+      setRatingInput(0);
+      setRatingHover(0);
+      return;
+    }
+
     await onUpdateQuery(item.queryId, {
       accountManagerDone: !item.accountManagerDone,
     });
@@ -555,6 +569,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 <th className="th-center">Mgr Done</th>
                 <th>Sender Remark</th>
                 <th className="th-center">Sender Done</th>
+                <th className="th-center">Rating</th>
                 <th className="th-center">Status</th>
               </tr>
             </thead>
@@ -897,6 +912,63 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       </label>
                     </td>
 
+                    {/* Rating Cell */}
+                    <td className="td-rating th-center">
+                      {isAdmin ? (
+                        item.rating ? (
+                          <span
+                            className="rating-badge rating-badge--admin"
+                            title={`Rated ${item.rating}/5 stars by sender (${item.accountManagerName})`}
+                          >
+                            <span className="rating-stars-gold">
+                              {'★'.repeat(item.rating)}
+                              <span className="rating-stars-dim">{'★'.repeat(5 - item.rating)}</span>
+                            </span>
+                            <span className="rating-score-num">{item.rating}/5</span>
+                          </span>
+                        ) : (
+                          <span className="rating-placeholder">—</span>
+                        )
+                      ) : isSender ? (
+                        item.rating ? (
+                          <button
+                            type="button"
+                            className="rating-badge rating-badge--sender"
+                            onClick={() => {
+                              setRatingModalQuery(item);
+                              setRatingInput(item.rating || 0);
+                              setRatingHover(0);
+                            }}
+                            title="Click to edit your rating"
+                          >
+                            <span className="rating-stars-gold">
+                              {'★'.repeat(item.rating)}
+                              <span className="rating-stars-dim">{'★'.repeat(5 - item.rating)}</span>
+                            </span>
+                            <span className="rating-score-num">{item.rating}/5</span>
+                          </button>
+                        ) : item.managerDone ? (
+                          <button
+                            type="button"
+                            className="btn-rate-prompt"
+                            onClick={() => {
+                              setRatingModalQuery(item);
+                              setRatingInput(0);
+                              setRatingHover(0);
+                            }}
+                            title="Click to rate the receiving manager"
+                          >
+                            ★ Rate
+                          </button>
+                        ) : (
+                          <span className="rating-placeholder" title="Available once manager marks Done">—</span>
+                        )
+                      ) : (
+                        /* Receiving Manager or other users CANNOT see individual ratings (Strict Anonymity) */
+                        <span className="rating-placeholder">—</span>
+                      )}
+                    </td>
+
                     {/* Status Cell */}
                     <td className="td-status-cell">
                       <div className="td-status-pills-wrap">
@@ -939,7 +1011,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
               {sortedAndFilteredQueries.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="empty-queries-cell">
+                  <td colSpan={11} className="empty-queries-cell">
                     No queries match the selected filters.
                   </td>
                 </tr>
@@ -1358,6 +1430,66 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 </div>
               </div>
 
+              {/* Rating Section: strictly visible ONLY to Admin and the Sender (Hidden from Receiving Manager) */}
+              {(currentUser.role === 'admin' ||
+                currentUser.id === activeViewingQuery.accountManagerId) && (
+                <div className="query-view-section query-view-section--rating">
+                  <div className="query-view-section-header">
+                    <span className="query-view-section-label">
+                      {currentUser.role === 'admin' ? 'Sender Rating' : 'Your Rating'}
+                    </span>
+                  </div>
+                  <div className="query-view-rating-card">
+                    {activeViewingQuery.rating ? (
+                      <div className="query-view-rating-display">
+                        <span className="rating-stars-gold">
+                          {'★'.repeat(activeViewingQuery.rating)}
+                          <span className="rating-stars-dim">
+                            {'★'.repeat(5 - activeViewingQuery.rating)}
+                          </span>
+                        </span>
+                        <span className="query-view-rating-value">
+                          {activeViewingQuery.rating} / 5 Stars
+                        </span>
+                        {currentUser.id === activeViewingQuery.accountManagerId && (
+                          <button
+                            type="button"
+                            className="btn-inline-edit"
+                            onClick={() => {
+                              setRatingModalQuery(activeViewingQuery);
+                              setRatingInput(activeViewingQuery.rating || 0);
+                              setRatingHover(0);
+                            }}
+                          >
+                            Change Rating
+                          </button>
+                        )}
+                      </div>
+                    ) : currentUser.id === activeViewingQuery.accountManagerId &&
+                      activeViewingQuery.managerDone ? (
+                      <div className="query-view-rating-prompt">
+                        <span className="rating-pending-text">
+                          Manager has marked Done. Please provide a rating:
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-rate-prompt"
+                          onClick={() => {
+                            setRatingModalQuery(activeViewingQuery);
+                            setRatingInput(0);
+                            setRatingHover(0);
+                          }}
+                        >
+                          ★ Rate Manager
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="rating-placeholder">Not rated yet.</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="modal-actions">
                 <button
                   type="button"
@@ -1365,6 +1497,109 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   onClick={() => setViewingQuery(null)}
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mandatory Rating Modal: prompts sender to rate manager before completing */}
+      {ratingModalQuery && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setRatingModalQuery(null)}
+        >
+          <div
+            className="modal-dialog rating-prompt-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rating-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-header-text">
+                <h3 id="rating-modal-title">
+                  Rate Manager: {ratingModalQuery.managerName}
+                </h3>
+                <span className="modal-subtitle">
+                  Query {ratingModalQuery.queryId} &bull;{' '}
+                  {ratingModalQuery.queryTitle ||
+                    ratingModalQuery.queryText.slice(0, 35)}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setRatingModalQuery(null)}
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="rating-modal-body">
+              <p className="rating-modal-desc">
+                Please rate <strong>{ratingModalQuery.managerName}</strong>&apos;s
+                resolution. Ratings are <em>anonymous</em> to the manager and
+                contribute to their overall KPI score.
+              </p>
+
+              <div className="star-rating-picker" role="radiogroup" aria-label="Rating from 1 to 5 stars">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    className={`star-pick-btn ${
+                      (ratingHover || ratingInput) >= star
+                        ? 'star-pick-btn--active'
+                        : ''
+                    }`}
+                    onMouseEnter={() => setRatingHover(star)}
+                    onMouseLeave={() => setRatingHover(0)}
+                    onClick={() => setRatingInput(star)}
+                    title={`${star} Star${star > 1 ? 's' : ''}`}
+                    aria-label={`${star} Star${star > 1 ? 's' : ''}`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+
+              <div className="rating-score-label">
+                {ratingInput > 0 ? (
+                  <span className="rating-score-active">
+                    ⭐ {ratingInput} of 5 Stars Selected
+                  </span>
+                ) : (
+                  <span className="rating-score-hint">
+                    Select 1 to 5 stars to proceed
+                  </span>
+                )}
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setRatingModalQuery(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={ratingInput < 1 || savingQueryId === ratingModalQuery.queryId}
+                  onClick={async () => {
+                    if (ratingInput < 1) return;
+                    await onUpdateQuery(ratingModalQuery.queryId, {
+                      rating: ratingInput,
+                      accountManagerDone: true,
+                    });
+                    setRatingModalQuery(null);
+                  }}
+                >
+                  Submit Rating &amp; Complete
                 </button>
               </div>
             </div>

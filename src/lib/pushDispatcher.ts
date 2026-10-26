@@ -134,7 +134,7 @@ export function formatNotificationContent(
 
     case 'QUERY_DELAYED':
       return {
-        title: `⚠️ Query SLA Delayed: ${query.queryId}`,
+        title: `⚠️ Query Delayed (>48h): ${query.queryId}`,
         body: `${query.queryId} is delayed (>48h) with no manager completion. Assigned to ${query.managerName}.`,
       };
 

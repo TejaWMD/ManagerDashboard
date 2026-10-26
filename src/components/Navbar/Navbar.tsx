@@ -126,31 +126,29 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </button>
 
-        {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
-          <button
-            type="button"
-            className={`sidebar-link-btn ${
-              activePage === 'kpi' ? 'sidebar-link-btn--active' : ''
-            }`}
-            onClick={() => onNavigate('kpi')}
-            title="Manager KPI Leaderboard"
+        <button
+          type="button"
+          className={`sidebar-link-btn ${
+            activePage === 'kpi' ? 'sidebar-link-btn--active' : ''
+          }`}
+          onClick={() => onNavigate('kpi')}
+          title="Manager KPI Leaderboard"
+        >
+          <svg
+            className="sidebar-nav-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <svg
-              className="sidebar-nav-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 20V10" />
-              <path d="M12 20V4" />
-              <path d="M6 20v-6" />
-            </svg>
-            {!isCollapsed && <span className="sidebar-link-text">KPI</span>}
-          </button>
-        )}
+            <path d="M18 20V10" />
+            <path d="M12 20V4" />
+            <path d="M6 20v-6" />
+          </svg>
+          {!isCollapsed && <span className="sidebar-link-text">KPI</span>}
+        </button>
 
         {onOpenNotifications && (
           <button

@@ -1,5 +1,5 @@
 -- ============================================================================
--- WM Manager Dashboard - Supabase Relational Schema (Complete with SLA & Web Push)
+-- WM Manager Dashboard - Supabase Relational Schema (Complete with Delay Tracking & Web Push)
 -- Connected by: query_id, account_manager_id, manager_id, created_at, and completed_at
 -- ============================================================================
 
@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS public.queries (
   completed_at TEXT DEFAULT NULL,
   completed_at_ms BIGINT DEFAULT NULL,
   is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
-  delay_notified BOOLEAN NOT NULL DEFAULT FALSE
+  delay_notified BOOLEAN NOT NULL DEFAULT FALSE,
+  rating INTEGER DEFAULT NULL CHECK (rating >= 1 AND rating <= 5)
 );
 
 -- Safely add new columns if upgrading an existing queries table
@@ -84,7 +85,8 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS manager_done_at TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS manager_done_at_ms BIGINT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
-  ADD COLUMN IF NOT EXISTS delay_notified BOOLEAN NOT NULL DEFAULT FALSE;
+  ADD COLUMN IF NOT EXISTS delay_notified BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS rating INTEGER DEFAULT NULL;
 
 -- Backfill existing manager_done rows that do not have manager_done_at_ms yet
 UPDATE public.queries

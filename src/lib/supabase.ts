@@ -72,6 +72,7 @@ export interface QueryRow {
   completed_at_ms?: number | null;
   is_delayed?: boolean | null;
   delay_notified?: boolean | null;
+  rating?: number | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -216,6 +217,7 @@ export function mapRowToQuery(row: QueryRow): Query {
     accountManagerDone,
     status,
     delayNotified: Boolean(row.delay_notified),
+    rating: typeof row.rating === 'number' ? row.rating : null,
   };
 }
 
@@ -250,6 +252,7 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
     status,
     created_at: query.createdAt,
     created_at_ms: query.createdAtMs,
+    rating: query.rating ?? null,
   };
 }
 
@@ -370,7 +373,8 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('completed_at_ms') ||
     message.includes('is_delayed') ||
     message.includes('manager_done_at') ||
-    message.includes('manager_done_at_ms')
+    message.includes('manager_done_at_ms') ||
+    message.includes('rating')
   );
 }
 
@@ -485,6 +489,7 @@ export async function updateQueryInDb(
     completedAt?: string | null;
     completedAtMs?: number | null;
     isDelayed?: boolean;
+    rating?: number | null;
   }
 ): Promise<{
   data: Query | null;
@@ -539,6 +544,9 @@ export async function updateQueryInDb(
   }
   if (updates.isDelayed !== undefined) {
     extendedUpdates.is_delayed = updates.isDelayed;
+  }
+  if (updates.rating !== undefined) {
+    extendedUpdates.rating = updates.rating;
   }
 
   const updatesWithTitles: Record<string, unknown> =

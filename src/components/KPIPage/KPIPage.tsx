@@ -48,7 +48,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
   const nowMs = useMemo(() => Date.now(), []);
 
   // Compute rolling KPI stats for all 3 managers
-  const { stats: managerStats, teamAverageKpi } = useMemo(() => {
+  const { stats: managerStats, teamAverageKpi, teamAverageRating } = useMemo(() => {
     return calculateAllManagersKpi(queries, managers, {
       window: timeWindow,
       nowMs,
@@ -60,6 +60,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
     const totalOnTime = managerStats.reduce((sum, s) => sum + s.onTimeCount, 0);
     const totalLate = managerStats.reduce((sum, s) => sum + s.lateCount, 0);
     const totalOverdue = managerStats.reduce((sum, s) => sum + s.overdueCount, 0);
+    const totalDelayed = totalLate + totalOverdue;
     const totalInProgress = managerStats.reduce((sum, s) => sum + s.inProgressCount, 0);
     const totalEvaluated = managerStats.reduce((sum, s) => sum + s.totalEvaluated, 0);
     const totalAssigned = managerStats.reduce((sum, s) => sum + s.totalAssigned, 0);
@@ -71,6 +72,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
       totalOnTime,
       totalLate,
       totalOverdue,
+      totalDelayed,
       totalInProgress,
       totalEvaluated,
       totalAssigned,
@@ -162,11 +164,11 @@ export const KPIPage: React.FC<KPIPageProps> = ({
             const isSelected = selectedManagerId === stat.manager.id;
 
             const scoreColorClass =
-              stat.totalEvaluated === 0
+              stat.totalEvaluated === 0 && stat.totalRated === 0
                 ? 'kpi-card--neutral'
-                : stat.kpiScore >= 85
+                : stat.overallKpi >= 85
                 ? 'kpi-card--green'
-                : stat.kpiScore >= 70
+                : stat.overallKpi >= 70
                 ? 'kpi-card--amber'
                 : 'kpi-card--red';
 
@@ -219,19 +221,14 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   </div>
                 </div>
 
-                {/* Dual Metrics Showcase: KPI Score (Left) + Completed / Received (Right) */}
+                {/* Dual Metrics Showcase: Overall KPI (Left) + Completed / Received (Right) */}
                 <div className="mgr-score-block">
                   <div className="mgr-score-primary">
                     <div className="mgr-score-topline">
-                      <span className="score-number">{stat.kpiScore}%</span>
-                      <span className="mgr-score-tag">
-                        {stat.totalEvaluated === 0
-                          ? '0 / 0'
-                          : `${stat.earnedPoints}/${stat.totalEvaluated}`}{' '}
-                        pts
-                      </span>
+                      <span className="score-number">{stat.overallKpi}%</span>
+                      <span className="mgr-score-tag">Overall KPI</span>
                     </div>
-                    <span className="score-caption">Weighted KPI Score</span>
+                    <span className="score-caption">Combined KPI Score</span>
                   </div>
 
                   <div className="mgr-completion-secondary">
@@ -245,7 +242,33 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                         {stat.completionRate}% Done
                       </span>
                     </div>
-                    <span className="score-caption">Resolved / Received</span>
+                    <span className="score-caption">Completed / Received</span>
+                  </div>
+                </div>
+
+                {/* Sub-Metric Component Badges: Turnaround KPI + Avg Rating */}
+                <div className="mgr-pillars-row">
+                  <div className="mgr-pillar-box" title="Based on On-time (+1.0) and Late (+0.5) resolution speed">
+                    <span className="mgr-pillar-title">Turnaround KPI</span>
+                    <span className="mgr-pillar-value">{stat.turnaroundKpi}%</span>
+                    <span className="mgr-pillar-sub">
+                      {stat.totalEvaluated === 0
+                        ? '0 / 0'
+                        : `${stat.earnedPoints}/${stat.totalEvaluated}`}{' '}
+                      pts
+                    </span>
+                  </div>
+                  <div className="mgr-pillar-box" title="Average anonymous sender rating">
+                    <span className="mgr-pillar-title">Average Rating</span>
+                    <span className="mgr-pillar-value">
+                      {stat.avgRating !== null ? `⭐ ${stat.avgRating}` : '—'}
+                      {stat.avgRating !== null && <span className="mgr-pillar-slash">/ 5.0</span>}
+                    </span>
+                    <span className="mgr-pillar-sub">
+                      {stat.totalRated > 0
+                        ? `${stat.totalRated} review${stat.totalRated === 1 ? '' : 's'}`
+                        : 'No ratings yet'}
+                    </span>
                   </div>
                 </div>
 
@@ -288,9 +311,9 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                       <span className="capsule-num">⚠️ {stat.overdueCount}</span>
                       <span className="capsule-lbl">Overdue</span>
                     </div>
-                    <div className="stat-capsule stat-capsule--inprog" title="Open queries within 48h grace period (excluded from divisor)">
-                      <span className="capsule-num">⏳ {stat.inProgressCount}</span>
-                      <span className="capsule-lbl">In Prog</span>
+                    <div className="stat-capsule stat-capsule--delayed" title="All delayed queries (late + overdue)">
+                      <span className="capsule-num">🚨 {stat.delayedCount}</span>
+                      <span className="capsule-lbl">Delayed</span>
                     </div>
                   </div>
                 </div>
@@ -306,7 +329,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                     </span>
                   </div>
                   <span className="mgr-footer-counts">
-                    {stat.totalEvaluated} evaluated · {stat.totalAssigned} assigned
+                    {stat.completedCount} completed · {stat.delayedCount} delayed · {stat.totalAssigned} received
                   </span>
                 </div>
               </div>
@@ -321,9 +344,12 @@ export const KPIPage: React.FC<KPIPageProps> = ({
             <div className="panel-header-clean">
               <h2 className="panel-title-clean">Team Performance</h2>
               <div className="panel-tags-cluster">
-                <span className="panel-tag-clean">Avg KPI: {teamAverageKpi}%</span>
+                <span className="panel-tag-clean">Team KPI: {teamAverageKpi}%</span>
+                {teamAverageRating !== null && (
+                  <span className="panel-tag-clean">Team Rating: ⭐ {teamAverageRating}/5.0</span>
+                )}
                 <span className="panel-tag-clean panel-tag-clean--alt">
-                  {overallTotals.totalCompleted}/{overallTotals.totalAssigned} ({overallTotals.overallCompletionRate}%) Done
+                  {overallTotals.totalCompleted}/{overallTotals.totalAssigned} ({overallTotals.overallCompletionRate}%) Completion Rate
                 </span>
               </div>
             </div>
@@ -331,11 +357,11 @@ export const KPIPage: React.FC<KPIPageProps> = ({
             <div className="panel-bars-list">
               {managerStats.map((stat) => {
                 const barColorClass =
-                  stat.totalEvaluated === 0
+                  stat.totalEvaluated === 0 && stat.totalRated === 0
                     ? 'comp-bar-fill--neutral'
-                    : stat.kpiScore >= 85
+                    : stat.overallKpi >= 85
                     ? 'comp-bar-fill--green'
-                    : stat.kpiScore >= 70
+                    : stat.overallKpi >= 70
                     ? 'comp-bar-fill--amber'
                     : 'comp-bar-fill--red';
 
@@ -350,15 +376,15 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                       <div className="comp-bar-track">
                         <div
                           className={`comp-bar-fill ${barColorClass}`}
-                          style={{ width: `${stat.kpiScore}%` }}
+                          style={{ width: `${stat.overallKpi}%` }}
                         />
                       </div>
                     </div>
 
                     <div className="comp-nums-col">
-                      <span className="comp-rate-val">{stat.kpiScore}%</span>
+                      <span className="comp-rate-val">{stat.overallKpi}%</span>
                       <span className="comp-pts-sub">
-                        {stat.earnedPoints}p · {stat.completedCount}/{stat.totalAssigned}
+                        Turnaround: {stat.turnaroundKpi}% · {stat.avgRating !== null ? `⭐${stat.avgRating}` : 'No rating'}
                       </span>
                     </div>
                   </div>
@@ -373,16 +399,16 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                 <strong className="summary-val">{overallTotals.totalAssigned}</strong>
               </div>
               <div className="summary-bubble summary-bubble--ontime">
-                <span className="summary-lbl">On-Time</span>
-                <strong className="summary-val">{overallTotals.totalOnTime}</strong>
-              </div>
-              <div className="summary-bubble summary-bubble--late">
-                <span className="summary-lbl">Late</span>
-                <strong className="summary-val">{overallTotals.totalLate}</strong>
+                <span className="summary-lbl">Completed</span>
+                <strong className="summary-val">{overallTotals.totalCompleted}</strong>
               </div>
               <div className="summary-bubble summary-bubble--overdue">
-                <span className="summary-lbl">Overdue</span>
-                <strong className="summary-val">{overallTotals.totalOverdue}</strong>
+                <span className="summary-lbl">Delayed</span>
+                <strong className="summary-val">{overallTotals.totalDelayed}</strong>
+              </div>
+              <div className="summary-bubble summary-bubble--late">
+                <span className="summary-lbl">Completion Rate</span>
+                <strong className="summary-val">{overallTotals.overallCompletionRate}%</strong>
               </div>
               <div className="summary-bubble summary-bubble--inprog">
                 <span className="summary-lbl">In-Prog</span>

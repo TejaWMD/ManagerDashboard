@@ -508,6 +508,55 @@
   text-overflow: ellipsis;
 }
 
+/* Sub-Metric Component Badges: Turnaround KPI + Avg Rating */
+.mgr-pillars-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.mgr-pillar-box {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1.5px solid rgba(240, 227, 204, 0.9);
+  border-radius: 14px;
+  padding: 0.25rem 0.5rem;
+  box-shadow: 0 2px 6px rgba(132, 73, 24, 0.05);
+}
+
+.mgr-pillar-title {
+  font-size: var(--fs-xxs);
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.mgr-pillar-value {
+  font-size: var(--fs-sm);
+  font-weight: 900;
+  color: var(--c-espresso);
+  display: flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  margin-top: 0.05rem;
+}
+
+.mgr-pillar-slash {
+  font-size: var(--fs-xxs);
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.mgr-pillar-sub {
+  font-size: var(--fs-xxs);
+  color: #94a3b8;
+  font-weight: 700;
+  margin-top: 0.05rem;
+}
+
 /* Progress bar + 4 capsules. Grows to fill. */
 .mgr-metrics-group {
   flex: 1.25 1 0;
@@ -582,6 +631,7 @@
 .stat-capsule--ontime { background: #dcfce7; color: #15803d; border-color: rgba(21, 128, 61, 0.18); }
 .stat-capsule--late { background: #fef9c3; color: #a16207; border-color: rgba(161, 98, 7, 0.18); }
 .stat-capsule--overdue { background: #fee2e2; color: #b91c1c; border-color: rgba(185, 28, 28, 0.18); }
+.stat-capsule--delayed { background: #ffe4e6; color: #be123c; border-color: rgba(190, 18, 60, 0.2); }
 .stat-capsule--inprog { background: #e8f1ff; color: #1d4ed8; border-color: rgba(29, 78, 216, 0.18); }
 
 /* Footer strip */

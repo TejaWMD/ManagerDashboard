@@ -437,6 +437,7 @@ export const App: React.FC = () => {
         | 'accountManagerRemarkTitle'
         | 'accountManagerRemark'
         | 'accountManagerDone'
+        | 'rating'
       >
     >
   ) => {
