@@ -1300,121 +1300,271 @@
   }
 }
 
-/* ---------- Mobile Phones & Small Screens (<= 680px) ---------- */
-@media (max-width: 680px) {
+/* ---------- Mobile Phones & Tablets (<= 768px) - Full Scrollable Layout ---------- */
+@media (max-width: 768px) {
   .kpi-screen-container {
-    --fs-xxs: 0.62rem;
-    --fs-xs: 0.72rem;
-    --fs-sm: 0.8rem;
-    --fs-md: 0.92rem;
-    --fs-lg: 1.25rem;
-    --fs-xl: 1.8rem;
-    --card-gap: 0.35rem;
-    --card-pad: 0.5rem;
-    --inner-gap: 0.3rem;
+    --fs-xxs: 0.65rem;
+    --fs-xs: 0.74rem;
+    --fs-sm: 0.84rem;
+    --fs-md: 0.98rem;
+    --fs-lg: 1.35rem;
+    --fs-xl: 1.85rem;
+    --card-gap: 0.85rem;
+    --card-pad: 0.85rem;
+    --inner-gap: 0.5rem;
 
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden; /* Fit to page, not scrollable */
-    padding: 0;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.85rem !important;
+    padding: 0 0 2.5rem 0 !important;
   }
 
   /* Compact wrapping header for mobile */
   .kpi-compact-header {
-    height: auto;
-    min-height: 0;
-    max-height: none;
-    padding: 0.4rem 0.75rem;
-    flex-wrap: wrap;
-    row-gap: 0.35rem;
-    border-radius: 16px;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0.75rem 1rem !important;
+    flex-wrap: wrap !important;
+    row-gap: 0.55rem !important;
+    border-radius: var(--radius-md, 16px) !important;
   }
   .kpi-header-right {
-    display: contents;
+    display: contents !important;
   }
   .kpi-header-left {
-    order: 1;
-    flex: 1 1 auto;
+    order: 1 !important;
+    flex: 1 1 auto !important;
   }
   .kpi-brand-logo-badge {
-    order: 2;
-    width: 32px;
-    height: 32px;
-    margin-left: 0;
-    border-radius: 10px;
+    order: 2 !important;
+    width: 38px !important;
+    height: 38px !important;
+    margin-left: 0 !important;
+    border-radius: 12px !important;
   }
   .kpi-pill-group {
-    order: 3;
-    flex: 1 1 100%;
-    width: 100%;
-    padding: 0.15rem;
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    padding: 0.2rem !important;
   }
   .kpi-pill-btn {
-    flex: 1 1 0;
-    text-align: center;
-    padding: 0.24rem 0.2rem;
-    font-size: 0.72rem;
+    flex: 1 1 0 !important;
+    text-align: center !important;
+    padding: 0.38rem 0.25rem !important;
+    font-size: 0.76rem !important;
   }
 
-  /* Mobile Grid: 1.5fr horizontal swipe carousel for 6 managers + 1fr Team Performance at bottom */
+  /* Grid turns into vertical scrollable stack */
   .kpi-five-cards-grid {
-    flex: 1 1 0;
-    min-height: 0;
-    height: 100%;
-    width: 100%;
-    display: grid;
-    grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr);
-    gap: var(--card-gap);
-    overflow: hidden;
+    height: auto !important;
+    min-height: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.85rem !important;
+    overflow: visible !important;
   }
 
-  /* Manager cards swipe carousel */
+  /* 6 manager cards stack vertically (or 2 columns on small tablets) */
   .kpi-managers-row {
-    display: flex;
-    flex-direction: row;
-    height: 100%;
-    min-height: 0;
-    gap: 0.5rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    scroll-padding: 0 0.4rem;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding: 1px;
-    width: 100%;
-  }
-  .kpi-managers-row::-webkit-scrollbar {
-    display: none;
-  }
-  .kpi-managers-row .kpi-mgr-box {
-    flex: 0 0 86%;
-    width: 86%;
-    height: 100%;
-    min-height: 0;
-    scroll-snap-align: center;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+    grid-template-rows: auto !important;
+    gap: 0.85rem !important;
+    height: auto !important;
+    min-height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
   }
 
   .kpi-bottom-panels {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.85rem !important;
+    height: auto !important;
+    min-height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
   }
 
-  .panel-bars-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: repeat(3, minmax(0, 1fr));
-    gap: 0.15rem 0.4rem;
+  /* Cards have natural height, no cut-off, fully readable */
+  .kpi-uniform-card {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    border-radius: 20px !important;
+    padding: 0.95rem 1rem !important;
+    gap: 0.6rem !important;
+    box-shadow: 0 4px 14px rgba(132, 73, 24, 0.08) !important;
   }
 
-  .comp-pts-sub,
-  .panel-tag-clean--alt,
-  .mgr-footer-counts {
-    display: none;
+  .kpi-mgr-box {
+    cursor: pointer;
+  }
+
+  .mgr-box-top {
+    flex: 0 0 auto !important;
+  }
+  .mgr-avatar {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 0.82rem !important;
+  }
+  .mgr-name {
+    font-size: 1.05rem !important;
+  }
+  .mgr-role-text {
+    font-size: 0.74rem !important;
+    display: block !important;
+  }
+  .mgr-rank-pill {
+    padding: 0.15rem 0.55rem !important;
+  }
+
+  .mgr-score-block {
+    flex: 0 0 auto !important;
+    min-height: auto !important;
+    padding: 0.65rem 0.85rem !important;
+    border-radius: 16px !important;
+  }
+  .score-number,
+  .completion-number {
+    font-size: 1.45rem !important;
+  }
+  .mgr-score-tag,
+  .mgr-completion-tag {
+    font-size: 0.74rem !important;
+    padding: 0.1rem 0.45rem !important;
+  }
+  .score-caption {
+    font-size: 0.64rem !important;
+  }
+
+  .mgr-pillars-row {
+    flex: 0 0 auto !important;
+    min-height: auto !important;
+    gap: 0.5rem !important;
+  }
+  .mgr-pillar-box {
+    padding: 0.45rem 0.65rem !important;
+    border-radius: 14px !important;
+  }
+  .mgr-pillar-title {
+    font-size: 0.64rem !important;
+  }
+  .mgr-pillar-value {
+    font-size: 0.95rem !important;
+  }
+  .mgr-pillar-sub {
+    font-size: 0.64rem !important;
+  }
+
+  .mgr-metrics-group {
+    flex: 0 0 auto !important;
+    min-height: auto !important;
+    gap: 0.45rem !important;
+  }
+  .mgr-progress-track {
+    height: 10px !important;
+  }
+  .mgr-stats-capsules {
+    flex: 0 0 auto !important;
+    gap: 0.35rem !important;
+  }
+  .stat-capsule {
+    min-height: 48px !important;
+    border-radius: 14px !important;
+    padding: 0.35rem 0.2rem !important;
+  }
+  .capsule-num {
+    font-size: 0.92rem !important;
+  }
+  .capsule-lbl {
+    font-size: 0.66rem !important;
   }
 
   .mgr-speed-strip {
-    justify-content: center;
+    padding: 0.4rem 0.8rem !important;
+    border-radius: 9999px !important;
+  }
+  .speed-lbl,
+  .speed-val-pill {
+    font-size: 0.74rem !important;
+  }
+  .mgr-footer-counts {
+    display: inline-block !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Team Performance Card */
+  .panel-header-clean {
+    flex-wrap: wrap !important;
+    row-gap: 0.4rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+  .panel-title-clean {
+    font-size: 1.15rem !important;
+  }
+  .panel-tag-clean {
+    font-size: 0.72rem !important;
+  }
+  .panel-bars-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.45rem !important;
+    height: auto !important;
+    min-height: auto !important;
+  }
+  .comp-bar-item {
+    flex: 0 0 auto !important;
+    min-height: 38px !important;
+    padding: 0.35rem 0.8rem !important;
+    border-radius: 9999px !important;
+    grid-template-columns: minmax(75px, 28%) 1fr auto !important;
+    gap: 0.5rem !important;
+  }
+  .comp-avatar {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 0.7rem !important;
+  }
+  .comp-name {
+    font-size: 0.84rem !important;
+  }
+  .comp-bar-track {
+    height: 8px !important;
+  }
+  .comp-rate-val {
+    font-size: 0.85rem !important;
+  }
+  .comp-pts-sub {
+    display: inline-block !important;
+    font-size: 0.7rem !important;
+  }
+
+  .team-summary-pill-row {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(65px, 1fr)) !important;
+    gap: 0.4rem !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin-top: 0.4rem !important;
+  }
+  .summary-bubble {
+    min-height: 52px !important;
+    border-radius: 16px !important;
+    padding: 0.45rem 0.25rem !important;
+  }
+  .summary-lbl {
+    font-size: 0.68rem !important;
+  }
+  .summary-val {
+    font-size: 1.2rem !important;
   }
 }
 
@@ -1423,12 +1573,5 @@
   .kpi-screen-container * {
     transition: none !important;
     animation: none !important;
-  }
-}
-
-/* ---------- Ultra-short safety (screens with height under 480px) ---------- */
-@media (max-height: 480px) {
-  .kpi-screen-container {
-    overflow-y: auto !important;
   }
 }

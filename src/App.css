@@ -211,6 +211,22 @@
     overflow: hidden;
   }
 
+  .app-body-column--kpi {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-main-content--kpi {
+    flex: none;
+    min-height: auto;
+    height: auto;
+    padding: 0.65rem 0.65rem 2rem;
+    overflow: visible;
+  }
+
   .db-setup-banner,
   .db-error-banner {
     margin: 0.4rem 0.65rem 0;
