@@ -1,15 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import {
   Query,
-  isQueryDelayed,
-  isQueryDone,
   UserAccount,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
 import {
   calculateAllManagersKpi,
-  evaluateQueryKpi,
-  filterQueriesByWindow,
   KpiTimeWindow,
 } from '../../lib/kpi';
 import wmdLogo from '../../assets/wmd-logo.jpg';
@@ -36,18 +32,10 @@ export const KPIPage: React.FC<KPIPageProps> = ({
 
   const [timeWindow, setTimeWindow] = useState<KpiTimeWindow>('7d');
   const [selectedManagerId, setSelectedManagerId] = useState<string>('ALL');
-  const [viewingQuery, setViewingQuery] = useState<Query | null>(null);
-  const activeViewingQuery = useMemo(() => {
-    if (!viewingQuery) return null;
-    return (
-      queries.find((c) => c.queryId === viewingQuery.queryId) ||
-      viewingQuery
-    );
-  }, [queries, viewingQuery]);
 
   const nowMs = useMemo(() => Date.now(), []);
 
-  // Compute rolling KPI stats for all 3 managers
+  // Compute rolling KPI stats for all managers
   const { stats: managerStats, teamAverageKpi, teamAverageRating } = useMemo(() => {
     return calculateAllManagersKpi(queries, managers, {
       window: timeWindow,
@@ -80,26 +68,6 @@ export const KPIPage: React.FC<KPIPageProps> = ({
       overallCompletionRate,
     };
   }, [managerStats]);
-
-  // Recent queries for the snapshot card (max 4 items so it fits the card height)
-  const recentQueue = useMemo(() => {
-    const inWindow = filterQueriesByWindow(queries, timeWindow, nowMs);
-    const allEvaluated = inWindow.map((c) => evaluateQueryKpi(c, nowMs));
-
-    const filtered =
-      selectedManagerId === 'ALL'
-        ? allEvaluated
-        : allEvaluated.filter((item) => item.query.managerId === selectedManagerId);
-
-    // Sort by createdAtMs descending (most recent first)
-    filtered.sort((a, b) => {
-      const msA = a.query.createdAtMs || 0;
-      const msB = b.query.createdAtMs || 0;
-      return msB - msA;
-    });
-
-    return filtered.slice(0, 4);
-  }, [queries, timeWindow, nowMs, selectedManagerId]);
 
   return (
     <div className="kpi-screen-container">
@@ -200,7 +168,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                     prev === stat.manager.id ? 'ALL' : stat.manager.id
                   )
                 }
-                title="Click to filter recent queue"
+                title={isMe ? `${stat.manager.name} (You)` : stat.manager.name}
               >
                 {/* Card Header: Profile Left, Rank Bubble Right */}
                 <div className="mgr-box-top">
@@ -416,328 +384,8 @@ export const KPIPage: React.FC<KPIPageProps> = ({
               </div>
             </div>
           </div>
-
-          {/* Card 5: Recent Queue Snapshot */}
-          <div className="kpi-uniform-card kpi-panel-card">
-            <div className="panel-header-clean">
-              <div className="panel-title-group">
-                <h2 className="panel-title-clean">Recent Queue</h2>
-                {selectedManagerId !== 'ALL' && (
-                  <button
-                    type="button"
-                    className="panel-filter-indicator"
-                    onClick={() => setSelectedManagerId('ALL')}
-                    title="Click to clear filter"
-                  >
-                    {managers.find((m) => m.id === selectedManagerId)?.name} &times;
-                  </button>
-                )}
-              </div>
-
-              {onNavigate && (
-                <button
-                  type="button"
-                  className="panel-view-all-btn"
-                  onClick={() => onNavigate('queries')}
-                >
-                  View All &rarr;
-                </button>
-              )}
-            </div>
-
-            <div className="recent-queue-list">
-              {recentQueue.map(({ query: c, status, managerTurnaroundHours }) => {
-                const isItemEvaluated = status !== 'IN_PROGRESS';
-                const pointChipClass =
-                  status === 'ON_TIME'
-                    ? 'pt-chip--ontime'
-                    : status === 'LATE'
-                    ? 'pt-chip--late'
-                    : status === 'OVERDUE'
-                    ? 'pt-chip--overdue'
-                    : 'pt-chip--inprog';
-
-                const pointText =
-                  status === 'ON_TIME'
-                    ? '+1.0'
-                    : status === 'LATE'
-                    ? '+0.5'
-                    : status === 'OVERDUE'
-                    ? '0.0'
-                    : 'In Prog';
-
-                const elapsedHours = Math.round(
-                  Math.max(0, nowMs - (c.createdAtMs || 0)) / (3600 * 1000)
-                );
-
-                return (
-                  <div
-                    key={c.queryId}
-                    className="queue-row-item"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => setViewingQuery(c)}
-                    title="Click to view query details"
-                  >
-                    <div className="queue-id-box">
-                      <span className="queue-id">{c.queryId}</span>
-                    </div>
-
-                    <div className="queue-detail-box">
-                      <span className="queue-people">
-                        {c.accountManagerName} &rarr; <strong>{c.managerName}</strong>
-                      </span>
-                      <span className="queue-remark-snippet">
-                        {c.managerRemarkTitle || c.managerRemark
-                          ? `"${c.managerRemarkTitle || c.managerRemark}"`
-                          : c.queryTitle || c.queryText}
-                      </span>
-                    </div>
-
-                    <div className="queue-speed-box">
-                      {managerTurnaroundHours !== null ? (
-                        <span className="queue-speed-val">{managerTurnaroundHours}h</span>
-                      ) : status === 'OVERDUE' ? (
-                        <span className="queue-speed-pending">&gt;48h</span>
-                      ) : (
-                        <span className="queue-speed-inprog">{elapsedHours}h</span>
-                      )}
-                    </div>
-
-                    <div className="queue-point-box">
-                      <span className={`queue-pt-chip ${pointChipClass}`}>{pointText}</span>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {recentQueue.length === 0 && (
-                <div className="queue-empty-msg">No queries in this window.</div>
-              )}
-            </div>
-          </div>
         </section>
       </div>
-
-      {/* View Query Details Pop-up Modal */}
-      {activeViewingQuery && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setViewingQuery(null)}
-        >
-          <div
-            className="modal-dialog query-view-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="kpi-view-query-modal-title"
-          >
-            <div className="modal-header">
-              <div className="modal-header-text">
-                <div className="query-view-title-row">
-                  <h3 id="kpi-view-query-modal-title">
-                    Query {activeViewingQuery.queryId}
-                  </h3>
-                  <div className="td-status-pills-wrap">
-                    {isQueryDone(activeViewingQuery) ? (
-                      <>
-                        <span className="table-status-pill table-status-pill--completed">
-                          Completed
-                        </span>
-                        {isQueryDelayed(activeViewingQuery, nowMs) && (
-                          <span className="table-status-pill table-status-pill--delayed">
-                            Delayed
-                          </span>
-                        )}
-                      </>
-                    ) : activeViewingQuery.managerDone &&
-                      !activeViewingQuery.accountManagerDone ? (
-                      <>
-                        <span className="table-status-pill table-status-pill--mgr-done">
-                          Mgr Checked
-                        </span>
-                        {isQueryDelayed(activeViewingQuery, nowMs) && (
-                          <span className="table-status-pill table-status-pill--delayed">
-                            Delayed
-                          </span>
-                        )}
-                      </>
-                    ) : isQueryDelayed(activeViewingQuery, nowMs) ? (
-                      <span className="table-status-pill table-status-pill--delayed">
-                        Delayed
-                      </span>
-                    ) : (
-                      <span className="table-status-pill table-status-pill--pending">
-                        Pending
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <span className="modal-sender-badge">
-                  Created: <strong>{activeViewingQuery.createdAt}</strong>
-                  {activeViewingQuery.completedAt && (
-                    <>
-                      {' '}
-                      &bull; Completed:{' '}
-                      <strong>{activeViewingQuery.completedAt}</strong>
-                    </>
-                  )}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => setViewingQuery(null)}
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="query-view-body">
-              <div className="query-view-meta-grid">
-                <div className="query-view-meta-box">
-                  <span className="query-view-meta-label">From (Sender)</span>
-                  <div className="person-cell-wrapper">
-                    <span className="query-view-meta-value">
-                      {activeViewingQuery.accountManagerName}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="query-view-meta-box">
-                  <span className="query-view-meta-label">Assigned Manager</span>
-                  <div className="person-cell-wrapper">
-                    <span className="query-view-meta-value">
-                      {activeViewingQuery.managerName}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="query-view-section">
-                <span className="query-view-section-label">Query Details</span>
-                <div className="query-view-content-box">
-                  <div className="query-view-field-block">
-                    <span className="query-view-sub-label">Title</span>
-                    <div className="query-view-item-title">
-                      {activeViewingQuery.queryTitle ||
-                        activeViewingQuery.queryText}
-                    </div>
-                  </div>
-                  <div className="query-view-field-block query-view-field-block--desc">
-                    <span className="query-view-sub-label">Description</span>
-                    <div className="query-view-item-desc">
-                      {activeViewingQuery.queryText || '—'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="query-view-remarks-grid">
-                <div className="query-view-section">
-                  <div className="query-view-section-header">
-                    <span className="query-view-section-label">Manager Remark</span>
-                    <span
-                      className={`query-view-check-tag ${
-                        activeViewingQuery.managerDone
-                          ? 'query-view-check-tag--done'
-                          : ''
-                      }`}
-                    >
-                      {activeViewingQuery.managerDone ? '✓ Mgr Done' : 'Unchecked'}
-                    </span>
-                  </div>
-                  <div
-                    className={`query-view-remark-box ${
-                      !activeViewingQuery.managerRemarkTitle &&
-                      !activeViewingQuery.managerRemark
-                        ? 'query-view-remark-box--empty'
-                        : ''
-                    }`}
-                  >
-                    {activeViewingQuery.managerRemarkTitle ||
-                    activeViewingQuery.managerRemark ? (
-                      <>
-                        <div className="query-view-field-block">
-                          <span className="query-view-sub-label">Title</span>
-                          <div className="query-view-item-title">
-                            {activeViewingQuery.managerRemarkTitle ||
-                              activeViewingQuery.managerRemark}
-                          </div>
-                        </div>
-                        <div className="query-view-field-block query-view-field-block--desc">
-                          <span className="query-view-sub-label">Description</span>
-                          <div className="query-view-item-desc">
-                            {activeViewingQuery.managerRemark || '—'}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      'No manager remark yet.'
-                    )}
-                  </div>
-                </div>
-
-                <div className="query-view-section">
-                  <div className="query-view-section-header">
-                    <span className="query-view-section-label">Sender Remark</span>
-                    <span
-                      className={`query-view-check-tag ${
-                        activeViewingQuery.accountManagerDone
-                          ? 'query-view-check-tag--done'
-                          : ''
-                      }`}
-                    >
-                      {activeViewingQuery.accountManagerDone
-                        ? '✓ Sender Done'
-                        : 'Unchecked'}
-                    </span>
-                  </div>
-                  <div
-                    className={`query-view-remark-box ${
-                      !activeViewingQuery.accountManagerRemarkTitle &&
-                      !activeViewingQuery.accountManagerRemark
-                        ? 'query-view-remark-box--empty'
-                        : ''
-                    }`}
-                  >
-                    {activeViewingQuery.accountManagerRemarkTitle ||
-                    activeViewingQuery.accountManagerRemark ? (
-                      <>
-                        <div className="query-view-field-block">
-                          <span className="query-view-sub-label">Title</span>
-                          <div className="query-view-item-title">
-                            {activeViewingQuery.accountManagerRemarkTitle ||
-                              activeViewingQuery.accountManagerRemark}
-                          </div>
-                        </div>
-                        <div className="query-view-field-block query-view-field-block--desc">
-                          <span className="query-view-sub-label">Description</span>
-                          <div className="query-view-item-desc">
-                            {activeViewingQuery.accountManagerRemark || '—'}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      'No sender remark yet.'
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => setViewingQuery(null)}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -6,16 +6,16 @@
    ========================================================================== */
 
 .kpi-screen-container {
-  /* size tokens that scale with the screen height */
-  --fs-xxs: clamp(0.5rem, 1.15vh, 0.7rem);
-  --fs-xs: clamp(0.56rem, 1.3vh, 0.78rem);
-  --fs-sm: clamp(0.64rem, 1.55vh, 0.9rem);
-  --fs-md: clamp(0.76rem, 1.9vh, 1.05rem);
-  --fs-lg: clamp(1rem, 2.8vh, 1.6rem);
-  --fs-xl: clamp(1.5rem, 4.8vh, 2.9rem);
-  --card-gap: 0.5rem;
-  --card-pad: clamp(0.4rem, 1.1vh, 0.75rem);
-  --inner-gap: clamp(0.2rem, 0.7vh, 0.5rem);
+  /* size tokens that scale with the screen height (vh) */
+  --fs-xxs: clamp(0.46rem, 0.95vh, 0.65rem);
+  --fs-xs: clamp(0.52rem, 1.15vh, 0.74rem);
+  --fs-sm: clamp(0.58rem, 1.35vh, 0.84rem);
+  --fs-md: clamp(0.68rem, 1.6vh, 0.98rem);
+  --fs-lg: clamp(0.85rem, 2.1vh, 1.35rem);
+  --fs-xl: clamp(1.2rem, 3.2vh, 2rem);
+  --card-gap: clamp(0.2rem, 0.55vh, 0.45rem);
+  --card-pad: clamp(0.28rem, 0.7vh, 0.55rem);
+  --inner-gap: clamp(0.12rem, 0.38vh, 0.3rem);
 
   display: flex;
   flex-direction: column;
@@ -37,17 +37,17 @@
 .kpi-compact-header {
   flex-shrink: 0;
   background: linear-gradient(135deg, #251a0a 0%, #3d240e 45%, #844918 100%);
-  border-radius: var(--radius-lg, 22px);
-  padding: 0.9rem 1.4rem;
-  height: 80px;
-  min-height: 80px;
-  max-height: 80px;
+  border-radius: var(--radius-lg, 20px);
+  padding: clamp(0.35rem, 0.7vh, 0.65rem) clamp(0.8rem, 1.3vw, 1.3rem);
+  height: clamp(48px, 6.8vh, 62px);
+  min-height: clamp(48px, 6.8vh, 62px);
+  max-height: clamp(48px, 6.8vh, 62px);
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.85rem;
-  box-shadow: 0 10px 28px rgba(37, 26, 10, 0.16);
+  gap: 0.75rem;
+  box-shadow: 0 8px 22px rgba(37, 26, 10, 0.16);
   border: 1.5px solid rgba(242, 188, 108, 0.28);
   position: relative;
   overflow: hidden;
@@ -82,11 +82,11 @@
 }
 
 .kpi-page-heading {
-  font-size: 1.35rem;
+  font-size: clamp(1.05rem, 2vh, 1.35rem);
   font-weight: 800;
   color: #ffffff;
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.15;
   letter-spacing: -0.015em;
   white-space: nowrap;
 }
@@ -112,10 +112,10 @@
 }
 
 .kpi-pill-btn {
-  padding: 0.28rem 0.72rem;
+  padding: clamp(0.18rem, 0.35vh, 0.28rem) clamp(0.48rem, 0.8vw, 0.72rem);
   border: none;
   border-radius: 9999px;
-  font-size: 0.76rem;
+  font-size: clamp(0.68rem, 1.25vh, 0.76rem);
   font-weight: 800;
   color: #e2e8f0;
   background: transparent;
@@ -140,14 +140,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: clamp(34px, 4.2vh, 44px);
+  height: clamp(34px, 4.2vh, 44px);
   background: #ffffff;
-  border-radius: 14px;
-  padding: 3px;
+  border-radius: 12px;
+  padding: 2.5px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28), 0 0 0 1.5px rgba(242, 188, 108, 0.45);
   flex-shrink: 0;
-  margin-left: 0.4rem;
+  margin-left: 0.35rem;
   transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
   overflow: hidden;
   position: relative;
@@ -168,37 +168,39 @@
 }
 
 /* ==========================================================================
-   2. Card grid: takes ALL remaining height, split into 2 equal rows
+   2. Card grid: 3+3 Manager cards + 1 Team Performance card at bottom
    ========================================================================== */
 .kpi-five-cards-grid {
   flex: 1 1 0;
   min-height: 0;
+  height: 100%;
   width: 100%;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
   gap: var(--card-gap);
   overflow: hidden;
 }
 
 .kpi-managers-row {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: var(--card-gap);
   min-height: 0;
   height: 100%;
   width: 100%;
+  overflow: hidden;
 }
 
 .kpi-bottom-panels {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   grid-template-rows: minmax(0, 1fr);
   gap: var(--card-gap);
   min-height: 0;
   height: 100%;
   width: 100%;
+  overflow: hidden;
 }
 
 /* Base bubbly card */
@@ -213,11 +215,11 @@
   box-sizing: border-box;
   padding: var(--card-pad);
   background: #ffffff;
-  border: 2px solid #f0e3cc;
-  border-radius: 24px;
+  border: 1.5px solid #f0e3cc;
+  border-radius: clamp(14px, 1.8vh, 22px);
   box-shadow:
-    0 8px 20px -8px rgba(132, 73, 24, 0.18),
-    0 2px 0 rgba(255, 255, 255, 0.9) inset;
+    0 6px 16px -6px rgba(132, 73, 24, 0.14),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
   overflow: hidden;
   transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
@@ -312,20 +314,20 @@
 }
 
 .mgr-avatar {
-  width: clamp(26px, 5vh, 40px);
-  height: clamp(26px, 5vh, 40px);
+  width: clamp(24px, 3.4vh, 36px);
+  height: clamp(24px, 3.4vh, 36px);
   border-radius: 50%;
   background: linear-gradient(135deg, var(--c-gold, #f2bc6c) 0%, var(--c-orange, #d6742b) 55%, var(--c-russet, #844918) 100%);
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   font-weight: 900;
   flex-shrink: 0;
   box-shadow:
-    0 3px 8px rgba(132, 73, 24, 0.3),
-    inset 0 2px 0 rgba(255, 255, 255, 0.4);
+    0 2px 6px rgba(132, 73, 24, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .mgr-meta-col {
@@ -392,13 +394,13 @@
 
 /* Two big bubbles: Weighted KPI | Resolved / Received. Grows to fill. */
 .mgr-score-block {
-  flex: 1.35 1 0;
+  flex: 1.25 1 0;
   min-height: 0;
   display: grid;
   grid-template-columns: 1.1fr 1fr;
-  gap: 0.4rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 18px;
+  gap: 0.35rem;
+  padding: clamp(0.12rem, 0.35vh, 0.3rem) clamp(0.35rem, 0.7vh, 0.6rem);
+  border-radius: clamp(10px, 1.4vh, 16px);
   border: 1.5px solid rgba(0, 0, 0, 0.05);
   background: #ffffff;
   width: 100%;
@@ -510,20 +512,23 @@
 
 /* Sub-Metric Component Badges: Turnaround KPI + Avg Rating */
 .mgr-pillars-row {
+  flex: 1 1 0;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.35rem;
+  gap: clamp(0.2rem, 0.4vh, 0.35rem);
   width: 100%;
 }
 
 .mgr-pillar-box {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   background: #ffffff;
   border: 1.5px solid rgba(240, 227, 204, 0.9);
-  border-radius: 14px;
-  padding: 0.25rem 0.5rem;
-  box-shadow: 0 2px 6px rgba(132, 73, 24, 0.05);
+  border-radius: clamp(8px, 1.2vh, 12px);
+  padding: clamp(0.1rem, 0.3vh, 0.25rem) clamp(0.25rem, 0.5vh, 0.45rem);
+  box-shadow: 0 2px 6px rgba(132, 73, 24, 0.04);
 }
 
 .mgr-pillar-title {
@@ -570,14 +575,14 @@
 .mgr-progress-track {
   display: flex;
   flex: 0 0 auto;
-  height: clamp(7px, 1.2vh, 11px);
+  height: clamp(5px, 0.7vh, 8px);
   width: 100%;
   background: #f1ebe0;
   border-radius: 9999px;
   overflow: hidden;
-  padding: 2px;
+  padding: 1.5px;
   box-sizing: border-box;
-  gap: 2px;
+  gap: 1.5px;
 }
 
 .progress-seg {
@@ -596,7 +601,7 @@
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.3rem;
+  gap: clamp(0.12rem, 0.28vh, 0.25rem);
   width: 100%;
 }
 
@@ -605,23 +610,23 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.05rem;
-  padding: 0.1rem;
-  border-radius: 16px;
-  border: 1.5px solid transparent;
+  gap: 0.04rem;
+  padding: clamp(0.04rem, 0.15vh, 0.12rem);
+  border-radius: clamp(8px, 1.1vh, 12px);
+  border: 1px solid transparent;
   min-width: 0;
   min-height: 0;
 }
 
 .capsule-num {
-  font-size: var(--fs-md);
-  font-weight: 900;
+  font-size: var(--fs-xs);
+  font-weight: 800;
   line-height: 1.05;
   white-space: nowrap;
 }
 
 .capsule-lbl {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-xxs);
   font-weight: 800;
   line-height: 1.05;
   opacity: 0.9;
@@ -640,10 +645,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.3rem;
+  gap: 0.25rem;
   background: #fbf6ec;
-  border: 1.5px solid #f0e3cc;
-  padding: 0.18rem 0.6rem;
+  border: 1px solid #f0e3cc;
+  padding: clamp(0.06rem, 0.2vh, 0.16rem) clamp(0.3rem, 0.5vh, 0.5rem);
   border-radius: 9999px;
   width: 100%;
   box-sizing: border-box;
@@ -652,22 +657,22 @@
 .mgr-speed-item {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.25rem;
 }
 
 .speed-lbl {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-xxs);
   font-weight: 700;
   color: #64748b;
 }
 
 .speed-val-pill {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-xxs);
   font-weight: 900;
   color: var(--c-russet, #844918);
   background: #ffffff;
   border: 1px solid rgba(132, 73, 24, 0.2);
-  padding: 0.04rem 0.45rem;
+  padding: 0.02rem 0.38rem;
   border-radius: 9999px;
 }
 
@@ -770,13 +775,14 @@
   background: #faede2;
 }
 
-/* Team performance bars: rows share the available height equally */
+/* Team performance bars: 2 columns of 3 rows for all 6 managers */
 .panel-bars-list {
-  flex: 3 1 0;
+  flex: 1.8 1 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--inner-gap);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.1rem, 0.28vh, 0.22rem) clamp(0.4rem, 0.8vw, 0.9rem);
   width: 100%;
 }
 
@@ -784,16 +790,16 @@
   flex: 1 1 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(80px, 28%) 1fr auto;
+  grid-template-columns: minmax(70px, 24%) 1fr auto;
   align-items: center;
-  gap: 0.5rem;
+  gap: clamp(0.25rem, 0.6vw, 0.5rem);
   background: #ffffff;
   border: 1.5px solid #f1e6d2;
-  padding: 0 0.6rem;
+  padding: 0 clamp(0.35rem, 0.6vh, 0.6rem);
   border-radius: 9999px;
   width: 100%;
   box-sizing: border-box;
-  box-shadow: 0 2px 6px rgba(132, 73, 24, 0.06);
+  box-shadow: 0 2px 6px rgba(132, 73, 24, 0.05);
 }
 
 .comp-user-col {
@@ -873,11 +879,11 @@
 
 /* 5 summary bubbles stretch to fill the rest of the card */
 .team-summary-pill-row {
-  flex: 1.6 1 0;
+  flex: 1 1 0;
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.3rem;
+  gap: clamp(0.15rem, 0.35vh, 0.3rem);
   width: 100%;
 }
 
@@ -886,7 +892,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.05rem;
+  padding: clamp(0.06rem, 0.2vh, 0.16rem);
+  border-radius: clamp(8px, 1.2vh, 14px);
+  gap: 0.04rem;
   background: #f8fafc;
   border: 1.5px solid #e2e8f0;
   padding: 0.1rem;
@@ -1220,131 +1228,106 @@
 .table-status-pill--pending { background: #f1f5f9; color: #475569; }
 
 /* ==========================================================================
-   6. RESPONSIVE
-   PC (>=1280)      : full fit-to-screen layout (default above)
-   Large PC (>=1600): a little bigger text
-   Laptop (901-1279): same layout, tighter, less secondary text
-   Tablet/phone (<=900): header wraps, manager cards become a swipe carousel,
-                         panels stack, page scrolls vertically
+   6. RESPONSIVE DESIGN (Fit to Page, No Scrolling on PC, Laptop & Mobile)
    ========================================================================== */
 
-/* ---------- Large PC / big monitors ---------- */
+/* ---------- Large PC / High-Res Monitors (>= 1600px & >= 900px height) ---------- */
 @media (min-width: 1600px) and (min-height: 900px) {
   .kpi-screen-container {
-    --fs-xxs: clamp(0.56rem, 1.2vh, 0.82rem);
-    --fs-xs: clamp(0.64rem, 1.4vh, 0.92rem);
-    --fs-sm: clamp(0.74rem, 1.7vh, 1.05rem);
-    --fs-md: clamp(0.9rem, 2.1vh, 1.25rem);
-    --fs-lg: clamp(1.15rem, 3vh, 1.9rem);
-    --fs-xl: clamp(1.8rem, 5.2vh, 3.4rem);
-    --card-gap: 0.7rem;
+    --fs-xxs: clamp(0.52rem, 1.05vh, 0.72rem);
+    --fs-xs: clamp(0.58rem, 1.25vh, 0.82rem);
+    --fs-sm: clamp(0.66rem, 1.5vh, 0.95rem);
+    --fs-md: clamp(0.8rem, 1.8vh, 1.15rem);
+    --fs-lg: clamp(1rem, 2.5vh, 1.6rem);
+    --fs-xl: clamp(1.5rem, 4vh, 2.6rem);
+    --card-gap: 0.55rem;
+    --card-pad: 0.65rem;
   }
 }
 
-/* ---------- Laptop (still fits the screen, just tighter) ---------- */
-@media (min-width: 901px) and (max-width: 1279px) {
-  .kpi-screen-container {
-    --card-gap: 0.4rem;
-  }
+/* ---------- Laptop & Medium Screens (Height under 780px) ---------- */
+@media (max-height: 780px) and (min-width: 681px) {
   .kpi-compact-header {
-    padding: 0.7rem 1rem;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    padding: 0.3rem 0.9rem;
   }
-  .mgr-footer-counts {
+  .kpi-brand-logo-badge {
+    width: 32px;
+    height: 32px;
+  }
+  .mgr-role-text,
+  .mgr-footer-counts,
+  .comp-pts-sub,
+  .kpi-uniform-card::before,
+  .kpi-uniform-card::after {
+    display: none;
+  }
+  .mgr-avatar {
+    width: 26px;
+    height: 26px;
+  }
+  .mgr-score-block {
+    padding: 0.1rem 0.35rem;
+  }
+  .mgr-pillars-row {
+    gap: 0.2rem;
+  }
+  .mgr-pillar-box {
+    padding: 0.08rem 0.25rem;
+  }
+  .mgr-speed-strip {
+    justify-content: center;
+    padding: 0.05rem 0.3rem;
+  }
+}
+
+/* ---------- Tablet & Medium Widths (681px - 1024px) ---------- */
+@media (min-width: 681px) and (max-width: 1024px) {
+  .kpi-screen-container {
+    --card-gap: 0.35rem;
+    --card-pad: 0.45rem;
+  }
+  .mgr-footer-counts,
+  .mgr-role-text,
+  .comp-pts-sub,
+  .panel-tag-clean--alt {
     display: none;
   }
   .mgr-speed-strip {
     justify-content: center;
   }
-  .score-caption {
-    letter-spacing: 0;
-  }
-  .mgr-stats-capsules {
-    gap: 0.2rem;
-  }
-  .stat-capsule {
-    padding: 0.08rem;
-    border-radius: 12px;
-  }
-  .capsule-num {
-    font-size: var(--fs-sm);
-  }
-  .capsule-lbl {
-    font-size: var(--fs-xxs);
-  }
-  .mgr-score-block {
-    padding: 0.2rem 0.45rem;
-    gap: 0.25rem;
-  }
-  .mgr-rank-pill {
-    padding: 0.08rem 0.42rem;
-    gap: 0.15rem;
-  }
-  .comp-bar-item {
-    grid-template-columns: minmax(70px, 26%) 1fr auto;
-    gap: 0.35rem;
-  }
-  .comp-pts-sub {
-    display: none;
-  }
-  .panel-tag-clean--alt {
-    display: none;
-  }
-  .queue-row-item {
-    gap: 0.35rem;
-  }
 }
 
-/* ---------- Short laptop screens (height under 720px) ---------- */
-@media (min-width: 901px) and (max-height: 720px) {
-  .mgr-role-text,
-  .mgr-footer-counts,
-  .kpi-uniform-card::before,
-  .kpi-uniform-card::after {
-    display: none;
-  }
-  .kpi-compact-header {
-    height: 64px;
-    min-height: 64px;
-    max-height: 64px;
-    padding: 0.5rem 1.1rem;
-  }
-  .kpi-brand-logo-badge {
-    width: 40px;
-    height: 40px;
-  }
-}
-
-/* ---------- Tablet + phone: scrolling, stacked layout ---------- */
-@media (max-width: 900px) {
+/* ---------- Mobile Phones & Small Screens (<= 680px) ---------- */
+@media (max-width: 680px) {
   .kpi-screen-container {
-    /* fixed readable sizes (vh units are too small on phones) */
-    --fs-xxs: 0.64rem;
+    --fs-xxs: 0.62rem;
     --fs-xs: 0.72rem;
-    --fs-sm: 0.82rem;
-    --fs-md: 0.95rem;
-    --fs-lg: 1.3rem;
-    --fs-xl: 2.2rem;
-    --card-gap: 0.65rem;
-    --card-pad: 0.8rem;
-    --inner-gap: 0.55rem;
+    --fs-sm: 0.8rem;
+    --fs-md: 0.92rem;
+    --fs-lg: 1.25rem;
+    --fs-xl: 1.8rem;
+    --card-gap: 0.35rem;
+    --card-pad: 0.5rem;
+    --inner-gap: 0.3rem;
 
     height: 100%;
     max-height: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow: hidden; /* Fit to page, not scrollable */
+    padding: 0;
   }
 
-  /* Header wraps: [Title ........ Logo] then [pills across full width] */
+  /* Compact wrapping header for mobile */
   .kpi-compact-header {
     height: auto;
     min-height: 0;
     max-height: none;
+    padding: 0.4rem 0.75rem;
     flex-wrap: wrap;
-    row-gap: 0.65rem;
-    padding: 0.8rem 1rem;
+    row-gap: 0.35rem;
+    border-radius: 16px;
   }
   .kpi-header-right {
     display: contents;
@@ -1355,210 +1338,83 @@
   }
   .kpi-brand-logo-badge {
     order: 2;
-    width: 42px;
-    height: 42px;
+    width: 32px;
+    height: 32px;
     margin-left: 0;
+    border-radius: 10px;
   }
   .kpi-pill-group {
     order: 3;
     flex: 1 1 100%;
     width: 100%;
-    box-sizing: border-box;
+    padding: 0.15rem;
   }
   .kpi-pill-btn {
     flex: 1 1 0;
     text-align: center;
-    padding: 0.5rem 0.2rem;
-    font-size: 0.78rem;
+    padding: 0.24rem 0.2rem;
+    font-size: 0.72rem;
   }
 
-  /* Cards: natural height, no forced fit */
+  /* Mobile Grid: 1.5fr horizontal swipe carousel for 6 managers + 1fr Team Performance at bottom */
   .kpi-five-cards-grid {
-    display: flex;
-    flex-direction: column;
-    flex: 0 0 auto;
-    min-height: auto;
-    overflow: visible;
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+    display: grid;
+    grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr);
     gap: var(--card-gap);
-  }
-  .kpi-uniform-card {
-    height: auto;
-    border-radius: 22px;
+    overflow: hidden;
   }
 
-  /* Manager cards: swipe carousel (one card + a peek of the next) */
+  /* Manager cards swipe carousel */
   .kpi-managers-row {
     display: flex;
     flex-direction: row;
-    height: auto;
-    gap: 0.65rem;
+    height: 100%;
+    min-height: 0;
+    gap: 0.5rem;
     overflow-x: auto;
     overflow-y: hidden;
     scroll-snap-type: x mandatory;
-    scroll-padding: 0 0.5rem;
+    scroll-padding: 0 0.4rem;
     -webkit-overflow-scrolling: touch;
-    padding: 4px 0.75rem 0.9rem 4px;
-    margin: -4px -4px -0.5rem;
-    width: calc(100% + 8px);
     scrollbar-width: none;
+    padding: 1px;
+    width: 100%;
   }
   .kpi-managers-row::-webkit-scrollbar {
     display: none;
   }
-  .kpi-managers-row::after {
-    content: '';
-    flex: 0 0 0.65rem;
-    height: 1px;
-    pointer-events: none;
-  }
   .kpi-managers-row .kpi-mgr-box {
-    flex: 0 0 62%;
-    width: auto;
-    scroll-snap-align: start;
+    flex: 0 0 86%;
+    width: 86%;
+    height: 100%;
+    min-height: 0;
+    scroll-snap-align: center;
   }
 
-  .mgr-avatar {
-    width: 38px;
-    height: 38px;
-  }
-  .mgr-score-block {
-    flex: 0 0 auto;
-    padding: 0.6rem 0.7rem;
-    border-radius: 18px;
-  }
-  .mgr-metrics-group {
-    flex: 0 0 auto;
-  }
-  .mgr-progress-track {
-    height: 10px;
-  }
-  .mgr-stats-capsules {
-    flex: 0 0 auto;
-    gap: 0.35rem;
-  }
-  .stat-capsule {
-    min-height: 3.1rem;
-    border-radius: 16px;
-  }
-  .mgr-speed-strip {
-    padding: 0.4rem 0.8rem;
-  }
-
-  /* Panels stack in one column */
   .kpi-bottom-panels {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    gap: var(--card-gap);
-  }
-  .panel-header-clean {
-    flex-wrap: wrap;
-    row-gap: 0.35rem;
-    padding-bottom: 0.45rem;
-  }
-  .panel-view-all-btn,
-  .panel-filter-indicator {
-    padding: 0.3rem 0.75rem;
-  }
-  .panel-bars-list,
-  .team-summary-pill-row,
-  .recent-queue-list {
-    flex: 0 0 auto;
-  }
-  .comp-bar-item {
-    flex: 0 0 auto;
-    min-height: 2.8rem;
-    grid-template-columns: minmax(84px, 30%) 1fr auto;
-    padding: 0.25rem 0.75rem;
-  }
-  .comp-avatar {
-    width: 24px;
-    height: 24px;
-  }
-  .comp-bar-track {
-    height: 10px;
-  }
-  .summary-bubble {
-    min-height: 3.4rem;
-    border-radius: 16px;
-  }
-  .recent-queue-list {
-    overflow: visible;
-  }
-  .queue-row-item {
-    flex: 0 0 auto;
-    min-height: 3.4rem;
-    padding: 0.4rem 0.75rem;
-    border-radius: 20px;
-    gap: 0.5rem;
-  }
-  .queue-empty-msg {
-    padding: 1rem 0;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
-  /* Pop-up modal on small screens */
-  .modal-backdrop {
-    padding: 0.5rem;
-    align-items: flex-end;
+  .panel-bars-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: 0.15rem 0.4rem;
   }
-  .modal-dialog.query-view-modal {
-    max-height: 92vh;
-    border-radius: 22px;
-  }
-  .modal-dialog.query-view-modal .query-view-remarks-grid,
-  .query-view-meta-grid {
-    grid-template-columns: 1fr;
-  }
-  .modal-header,
-  .query-view-body {
-    padding: 0.85rem 1rem;
-  }
-}
 
-/* ---------- Tablet (601-900): carousel shows about two cards at once ---------- */
-@media (min-width: 601px) and (max-width: 900px) {
-  .kpi-managers-row .kpi-mgr-box {
-    flex: 0 0 46%;
-  }
-}
-
-/* ---------- Phone (<=600) ---------- */
-@media (max-width: 600px) {
-  .kpi-managers-row .kpi-mgr-box {
-    flex: 0 0 88%;
-  }
-  .kpi-page-heading {
-    font-size: 1.2rem;
-  }
-}
-
-/* ---------- Small phones (<=380) ---------- */
-@media (max-width: 380px) {
-  .kpi-screen-container {
-    --card-pad: 0.65rem;
-    --fs-xl: 2rem;
-  }
-  .kpi-managers-row .kpi-mgr-box {
-    flex: 0 0 92%;
-  }
-  .stat-capsule {
-    padding: 0.05rem;
-  }
-  .capsule-lbl {
-    font-size: 0.58rem;
-  }
-  .capsule-num {
-    font-size: 0.82rem;
-  }
   .comp-pts-sub,
-  .queue-speed-box {
+  .panel-tag-clean--alt,
+  .mgr-footer-counts {
     display: none;
   }
-  .queue-row-item {
-    grid-template-columns: auto 1fr auto;
-  }
-  .summary-bubble {
-    border-radius: 14px;
+
+  .mgr-speed-strip {
+    justify-content: center;
   }
 }
 
@@ -1570,78 +1426,9 @@
   }
 }
 
-/* ==========================================================================
-   7. MOBILE FIX: nothing cut off, nothing squeezed, last card fully reachable
-   ========================================================================== */
-@media (max-width: 900px) {
-  /* Nothing in the scrolling column may shrink (shrinking = clipped content) */
-  .kpi-compact-header,
-  .kpi-five-cards-grid,
-  .kpi-managers-row,
-  .kpi-bottom-panels,
-  .kpi-uniform-card,
-  .panel-header-clean,
-  .panel-bars-list,
-  .team-summary-pill-row,
-  .recent-queue-list,
-  .queue-row-item,
-  .comp-bar-item {
-    flex-shrink: 0;
-    min-height: min-content;
-  }
-
-  /* Cards grow with their content and never crop it */
-  .kpi-uniform-card {
-    overflow: visible;
-    height: auto;
-  }
-  .kpi-panel-card {
-    flex: 0 0 auto;
-  }
-  .recent-queue-list {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    overflow: visible;
-  }
-
-  /* Breathing room at the very bottom so the last card clears the
-     browser toolbar / home bar and can be scrolled fully into view */
-  .kpi-five-cards-grid::after {
-    content: '';
-    display: block;
-    flex: 0 0 auto;
-    height: calc(1.5rem + env(safe-area-inset-bottom, 0px));
-  }
-
-  /* Queue rows: allow text to wrap instead of being cut off */
-  .queue-row-item {
-    align-items: center;
-  }
-  .queue-detail-box {
-    gap: 0.1rem;
-  }
-  .queue-people {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    overflow-wrap: anywhere;
-  }
-  .queue-remark-snippet {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
-  }
-  .queue-id {
-    white-space: nowrap;
-  }
-
-  /* Header of the panels wraps cleanly instead of overlapping */
-  .panel-title-group,
-  .panel-tags-cluster {
-    flex-wrap: wrap;
+/* ---------- Ultra-short safety (screens with height under 480px) ---------- */
+@media (max-height: 480px) {
+  .kpi-screen-container {
+    overflow-y: auto !important;
   }
 }

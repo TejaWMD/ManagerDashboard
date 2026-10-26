@@ -29,6 +29,8 @@ VALUES
   ('mgr-2', 'Awi', 'wmdklawi@gmail.com', 'manager', 'Manager', 'AW', NULL),
   ('mgr-3', 'Jay', 'wmdkljay@gmail.com', 'manager', 'Manager', 'JY', NULL),
   ('mgr-4', 'Tamil', 'wmgtamil@gmail.com', 'manager', 'Manager', 'TM', NULL),
+  ('mgr-5', 'Aizam', 'wmgaizam@gmail.com', 'manager', 'Manager', 'AZ', NULL),
+  ('mgr-6', 'Usha', 'wmdusha@gmail.com', 'manager', 'Manager', 'US', NULL),
   ('adm-1', 'Admin', 'admin1@gmail.com', 'admin', 'Admin', 'AD', '+601157350949')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,

@@ -74,6 +74,26 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     avatarInitials: 'TM',
     phone: '',
   },
+  {
+    id: 'mgr-5',
+    name: 'Aizam',
+    email: 'wmgaizam@gmail.com',
+    password: '734599',
+    role: 'manager',
+    roleLabel: 'Manager',
+    avatarInitials: 'AZ',
+    phone: '',
+  },
+  {
+    id: 'mgr-6',
+    name: 'Usha',
+    email: 'wmdusha@gmail.com',
+    password: '589201',
+    role: 'manager',
+    roleLabel: 'Manager',
+    avatarInitials: 'US',
+    phone: '',
+  },
 
   // Admin
   {
