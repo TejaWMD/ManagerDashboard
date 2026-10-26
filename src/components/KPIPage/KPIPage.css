@@ -875,6 +875,18 @@
   font-size: var(--fs-xs);
   font-weight: 700;
   color: #64748b;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.comp-pts-item {
+  white-space: nowrap;
+}
+
+.comp-pts-dot {
+  color: #94a3b8;
+  font-weight: 900;
 }
 
 /* 5 summary bubbles stretch to fill the rest of the card */
@@ -1502,69 +1514,349 @@
   }
 
   /* Team Performance Card */
-  .panel-header-clean {
-    flex-wrap: wrap !important;
-    row-gap: 0.4rem !important;
-    padding-bottom: 0.5rem !important;
+  .kpi-panel-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
   }
+
+  .panel-header-clean {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+    padding-bottom: 0.55rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
   .panel-title-clean {
     font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    color: var(--c-dark, #251a0a) !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    line-height: 1.25 !important;
   }
+
+  .panel-tags-cluster {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.35rem !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
   .panel-tag-clean {
+    display: inline-flex !important;
+    align-items: center !important;
     font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    padding: 0.22rem 0.55rem !important;
+    border-radius: 8px !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    line-height: 1.25 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
+
+  .panel-tag-clean--alt {
+    display: inline-flex !important;
+  }
+
   .panel-bars-list {
     display: flex !important;
     flex-direction: column !important;
-    gap: 0.45rem !important;
+    gap: 0.5rem !important;
     height: auto !important;
     min-height: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
+
   .comp-bar-item {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    grid-template-areas:
+      "user rate"
+      "track track"
+      "sub sub" !important;
+    row-gap: 0.35rem !important;
+    column-gap: 0.5rem !important;
+    padding: 0.55rem 0.75rem !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    border: 1.5px solid #f1e6d2 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    box-shadow: 0 2px 6px rgba(132, 73, 24, 0.05) !important;
+    min-height: auto !important;
     flex: 0 0 auto !important;
-    min-height: 38px !important;
-    padding: 0.35rem 0.8rem !important;
-    border-radius: 9999px !important;
-    grid-template-columns: minmax(75px, 28%) 1fr auto !important;
-    gap: 0.5rem !important;
+    overflow: hidden !important;
   }
+
+  .comp-user-col {
+    grid-area: user !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.45rem !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
   .comp-avatar {
-    width: 24px !important;
-    height: 24px !important;
-    font-size: 0.7rem !important;
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 50% !important;
+    font-size: 0.72rem !important;
+    font-weight: 900 !important;
+    flex-shrink: 0 !important;
   }
+
   .comp-name {
-    font-size: 0.84rem !important;
+    font-size: 0.88rem !important;
+    font-weight: 800 !important;
+    color: var(--c-dark, #251a0a) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    min-width: 0 !important;
   }
-  .comp-bar-track {
-    height: 8px !important;
+
+  .comp-nums-col {
+    display: contents !important;
   }
+
   .comp-rate-val {
-    font-size: 0.85rem !important;
+    grid-area: rate !important;
+    justify-self: end !important;
+    align-self: center !important;
+    font-size: 0.92rem !important;
+    font-weight: 900 !important;
+    color: var(--c-dark, #251a0a) !important;
+    background: #faede2 !important;
+    border: 1px solid rgba(132, 73, 24, 0.18) !important;
+    padding: 0.12rem 0.55rem !important;
+    border-radius: 9999px !important;
+    white-space: nowrap !important;
+    line-height: 1.2 !important;
+    flex-shrink: 0 !important;
   }
+
+  .comp-track-col {
+    grid-area: track !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .comp-bar-track {
+    width: 100% !important;
+    height: 8px !important;
+    background: #efe8dc !important;
+    border-radius: 9999px !important;
+    overflow: hidden !important;
+    padding: 2px !important;
+    box-sizing: border-box !important;
+  }
+
+  .comp-bar-fill {
+    height: 100% !important;
+    border-radius: 9999px !important;
+    transition: width 0.4s ease !important;
+  }
+
   .comp-pts-sub {
-    display: inline-block !important;
-    font-size: 0.7rem !important;
+    grid-area: sub !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.15rem 0.35rem !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    color: #64748b !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    line-height: 1.35 !important;
+    max-width: 100% !important;
+  }
+
+  .comp-pts-item {
+    white-space: nowrap !important;
+  }
+
+  .comp-pts-dot {
+    color: #cbd5e1 !important;
+    font-weight: 900 !important;
   }
 
   .team-summary-pill-row {
     display: grid !important;
-    grid-template-columns: repeat(auto-fit, minmax(65px, 1fr)) !important;
+    grid-template-columns: repeat(6, 1fr) !important;
     gap: 0.4rem !important;
     height: auto !important;
     min-height: auto !important;
-    margin-top: 0.4rem !important;
+    margin-top: 0.45rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
+
+  .team-summary-pill-row > .summary-bubble:nth-child(1),
+  .team-summary-pill-row > .summary-bubble:nth-child(2),
+  .team-summary-pill-row > .summary-bubble:nth-child(3) {
+    grid-column: span 2 !important;
+  }
+
+  .team-summary-pill-row > .summary-bubble:nth-child(4),
+  .team-summary-pill-row > .summary-bubble:nth-child(5) {
+    grid-column: span 3 !important;
+  }
+
   .summary-bubble {
     min-height: 52px !important;
-    border-radius: 16px !important;
-    padding: 0.45rem 0.25rem !important;
+    border-radius: 14px !important;
+    padding: 0.45rem 0.3rem !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
   }
+
   .summary-lbl {
     font-size: 0.68rem !important;
+    font-weight: 800 !important;
+    white-space: normal !important;
+    text-align: center !important;
+    word-break: break-word !important;
+    line-height: 1.15 !important;
+    max-width: 100% !important;
   }
+
   .summary-val {
-    font-size: 1.2rem !important;
+    font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Tablet portrait / medium screens (601px - 768px): 5 bubbles in 1 row */
+@media (min-width: 601px) and (max-width: 768px) {
+  .team-summary-pill-row {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+  .team-summary-pill-row > .summary-bubble:nth-child(n) {
+    grid-column: auto !important;
+  }
+}
+
+/* Extra-compact phones (<= 480px) */
+@media (max-width: 480px) {
+  .kpi-uniform-card {
+    padding: 0.8rem 0.75rem !important;
+    border-radius: 16px !important;
+  }
+
+  .panel-title-clean {
+    font-size: 1.05rem !important;
+  }
+
+  .panel-tag-clean {
+    font-size: 0.68rem !important;
+    padding: 0.18rem 0.45rem !important;
+  }
+
+  .comp-bar-item {
+    padding: 0.45rem 0.6rem !important;
+    row-gap: 0.3rem !important;
+    border-radius: 12px !important;
+  }
+
+  .comp-avatar {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 0.68rem !important;
+  }
+
+  .comp-name {
+    font-size: 0.82rem !important;
+  }
+
+  .comp-rate-val {
+    font-size: 0.86rem !important;
+    padding: 0.1rem 0.45rem !important;
+  }
+
+  .comp-pts-sub {
+    font-size: 0.68rem !important;
+  }
+
+  .team-summary-pill-row {
+    gap: 0.35rem !important;
+  }
+
+  .summary-bubble {
+    min-height: 48px !important;
+    padding: 0.35rem 0.2rem !important;
+    border-radius: 12px !important;
+  }
+
+  .summary-lbl {
+    font-size: 0.62rem !important;
+  }
+
+  .summary-val {
+    font-size: 1.05rem !important;
+  }
+}
+
+/* Ultra-compact phones (<= 360px) */
+@media (max-width: 360px) {
+  .kpi-uniform-card {
+    padding: 0.7rem 0.55rem !important;
+  }
+
+  .panel-header-clean {
+    gap: 0.35rem !important;
+  }
+
+  .panel-tags-cluster {
+    gap: 0.25rem !important;
+  }
+
+  .panel-tag-clean {
+    font-size: 0.64rem !important;
+    padding: 0.15rem 0.38rem !important;
+  }
+
+  .comp-bar-item {
+    padding: 0.4rem 0.5rem !important;
+  }
+
+  .comp-name {
+    font-size: 0.78rem !important;
+  }
+
+  .comp-rate-val {
+    font-size: 0.82rem !important;
+    padding: 0.08rem 0.38rem !important;
+  }
+
+  .comp-pts-sub {
+    font-size: 0.64rem !important;
+  }
+
+  .summary-lbl {
+    font-size: 0.58rem !important;
+  }
+
+  .summary-val {
+    font-size: 0.95rem !important;
   }
 }
 

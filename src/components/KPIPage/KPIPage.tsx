@@ -352,7 +352,9 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                     <div className="comp-nums-col">
                       <span className="comp-rate-val">{stat.overallKpi}%</span>
                       <span className="comp-pts-sub">
-                        Turnaround: {stat.turnaroundKpi}% · {stat.avgRating !== null ? `⭐${stat.avgRating}` : 'No rating'}
+                        <span className="comp-pts-item">Turnaround: {stat.turnaroundKpi}%</span>
+                        <span className="comp-pts-dot">·</span>
+                        <span className="comp-pts-item">{stat.avgRating !== null ? `⭐ ${stat.avgRating}` : 'No rating'}</span>
                       </span>
                     </div>
                   </div>
