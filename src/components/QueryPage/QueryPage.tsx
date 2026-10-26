@@ -131,10 +131,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [mgrRemarkTitleDraft, setMgrRemarkTitleDraft] = useState<string>('');
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
-  // Mandatory rating modal states
+  // Rating modal states
   const [ratingModalQuery, setRatingModalQuery] = useState<Query | null>(null);
   const [ratingInput, setRatingInput] = useState<number>(0);
   const [ratingHover, setRatingHover] = useState<number>(0);
+  const [ratingModalCompleteOnSubmit, setRatingModalCompleteOnSubmit] = useState<boolean>(false);
 
   // Mandatory Solution Remark Modal state (Director Policy Requirement)
   const [remarkModalQuery, setRemarkModalQuery] = useState<Query | null>(null);
@@ -396,6 +397,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setRatingModalQuery(item);
       setRatingInput(0);
       setRatingHover(0);
+      setRatingModalCompleteOnSubmit(true);
       return;
     }
 
@@ -938,8 +940,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               setRatingModalQuery(item);
                               setRatingInput(item.rating || 0);
                               setRatingHover(0);
+                              setRatingModalCompleteOnSubmit(false);
                             }}
-                            title="Click to edit your rating"
+                            title="Click to change your rating (can be updated anytime)"
                           >
                             <span className="rating-stars-gold">
                               {'★'.repeat(item.rating)}
@@ -947,7 +950,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             </span>
                             <span className="rating-score-num">{item.rating}/5</span>
                           </button>
-                        ) : item.managerDone ? (
+                        ) : (
                           <button
                             type="button"
                             className="btn-rate-prompt"
@@ -955,13 +958,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               setRatingModalQuery(item);
                               setRatingInput(0);
                               setRatingHover(0);
+                              setRatingModalCompleteOnSubmit(false);
                             }}
-                            title="Click to rate the receiving manager"
+                            title="Click to rate the receiving manager (available anytime, can be updated later)"
                           >
                             ★ Rate
                           </button>
-                        ) : (
-                          <span className="rating-placeholder" title="Available once manager marks Done">—</span>
                         )
                       ) : (
                         /* Receiving Manager or other users CANNOT see individual ratings (Strict Anonymity) */
@@ -1459,17 +1461,17 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               setRatingModalQuery(activeViewingQuery);
                               setRatingInput(activeViewingQuery.rating || 0);
                               setRatingHover(0);
+                              setRatingModalCompleteOnSubmit(false);
                             }}
                           >
                             Change Rating
                           </button>
                         )}
                       </div>
-                    ) : currentUser.id === activeViewingQuery.accountManagerId &&
-                      activeViewingQuery.managerDone ? (
+                    ) : currentUser.id === activeViewingQuery.accountManagerId ? (
                       <div className="query-view-rating-prompt">
                         <span className="rating-pending-text">
-                          Manager has marked Done. Please provide a rating:
+                          You haven&apos;t rated this manager yet:
                         </span>
                         <button
                           type="button"
@@ -1478,9 +1480,10 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             setRatingModalQuery(activeViewingQuery);
                             setRatingInput(0);
                             setRatingHover(0);
+                            setRatingModalCompleteOnSubmit(false);
                           }}
                         >
-                          ★ Rate Manager
+                          ★ Rate Manager (1-5 Stars)
                         </button>
                       </div>
                     ) : (
@@ -1504,7 +1507,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
       )}
 
-      {/* Mandatory Rating Modal: prompts sender to rate manager before completing */}
+      {/* Rating Modal: allows sender to rate anytime and enforce mandatory rating before completion */}
       {ratingModalQuery && (
         <div
           className="modal-backdrop"
@@ -1540,9 +1543,19 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
             <div className="rating-modal-body">
               <p className="rating-modal-desc">
-                Please rate <strong>{ratingModalQuery.managerName}</strong>&apos;s
-                resolution. Ratings are <em>anonymous</em> to the manager and
-                contribute to their overall KPI score.
+                {ratingModalCompleteOnSubmit ? (
+                  <>
+                    Please rate <strong>{ratingModalQuery.managerName}</strong>&apos;s
+                    resolution to complete this query. Ratings are <em>anonymous</em> to the
+                    manager and contribute to their overall KPI score.
+                  </>
+                ) : (
+                  <>
+                    Rate <strong>{ratingModalQuery.managerName}</strong> for this query.
+                    You can update this rating at any time. Ratings are <em>anonymous</em> to
+                    the manager and contribute to their overall KPI score.
+                  </>
+                )}
               </p>
 
               <div className="star-rating-picker" role="radiogroup" aria-label="Rating from 1 to 5 stars">
@@ -1592,14 +1605,24 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   disabled={ratingInput < 1 || savingQueryId === ratingModalQuery.queryId}
                   onClick={async () => {
                     if (ratingInput < 1) return;
-                    await onUpdateQuery(ratingModalQuery.queryId, {
-                      rating: ratingInput,
-                      accountManagerDone: true,
-                    });
+                    if (ratingModalCompleteOnSubmit) {
+                      await onUpdateQuery(ratingModalQuery.queryId, {
+                        rating: ratingInput,
+                        accountManagerDone: true,
+                      });
+                    } else {
+                      await onUpdateQuery(ratingModalQuery.queryId, {
+                        rating: ratingInput,
+                      });
+                    }
                     setRatingModalQuery(null);
                   }}
                 >
-                  Submit Rating &amp; Complete
+                  {ratingModalCompleteOnSubmit
+                    ? 'Submit Rating & Complete'
+                    : ratingModalQuery.rating
+                    ? 'Update Rating'
+                    : 'Save Rating'}
                 </button>
               </div>
             </div>
