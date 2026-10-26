@@ -3,6 +3,7 @@ import {
   Query,
   DELAY_THRESHOLD_MS,
   EvaluatedQueryDetail,
+  getQueryDeadlineMs,
   getQueryTimestampMs,
   ManagerKpiStats,
   UserAccount,
@@ -17,16 +18,17 @@ export interface CalculateKpiOptions {
 
 /**
  * Evaluates a single query for weighted KPI points based on Director requirements:
- * - Completed On-Time (<= 48h): +1.0 pt
- * - Completed Late (> 48h):     +0.5 pt
- * - Open & Overdue (> 48h):     0.0 pt (included in evaluated queries)
- * - Open & In-Progress (< 48h): Excluded from evaluation until 48h threshold passes
+ * - Completed On-Time (<= target completion date / 48h): +1.0 pt
+ * - Completed Late (> target completion date / 48h):     +0.5 pt
+ * - Open & Overdue (> target completion date / 48h):     0.0 pt (included in evaluated queries)
+ * - Open & In-Progress (<= target completion deadline): Excluded from evaluation until deadline passes
  */
 export function evaluateQueryKpi(
   query: Query,
   nowMs: number = Date.now()
 ): EvaluatedQueryDetail {
   const createdMs = getQueryTimestampMs(query);
+  const deadlineMs = getQueryDeadlineMs(query);
   const managerDone = Boolean(query.managerDone);
 
   if (managerDone) {
@@ -37,13 +39,13 @@ export function evaluateQueryKpi(
     }
     if (!managerDoneMs) {
       managerDoneMs = query.isDelayed
-        ? createdMs + DELAY_THRESHOLD_MS + 1
+        ? deadlineMs + 1
         : createdMs;
     }
 
     const turnaroundMs = Math.max(0, managerDoneMs - createdMs);
     const turnaroundHours = Math.round((turnaroundMs / (1000 * 60 * 60)) * 10) / 10;
-    const isOnTime = turnaroundMs <= DELAY_THRESHOLD_MS && !query.isDelayed;
+    const isOnTime = managerDoneMs <= deadlineMs && !query.isDelayed;
 
     // Sender verification latency: completedAtMs - managerDoneAtMs
     let senderVerificationHours: number | null = null;
@@ -67,10 +69,9 @@ export function evaluateQueryKpi(
   }
 
   // Manager is NOT done yet
-  const elapsedMs = Math.max(0, nowMs - createdMs);
-  const isPast48h = elapsedMs > DELAY_THRESHOLD_MS || query.isDelayed === true;
+  const isPastDeadline = nowMs > deadlineMs || query.isDelayed === true;
 
-  if (isPast48h) {
+  if (isPastDeadline) {
     return {
       query,
       status: 'OVERDUE',
@@ -81,7 +82,7 @@ export function evaluateQueryKpi(
     };
   }
 
-  // In Progress (< 48h): Excluded from penalty until 48h passes
+  // In Progress (within target deadline): Excluded from penalty until deadline passes
   return {
     query,
     status: 'IN_PROGRESS',

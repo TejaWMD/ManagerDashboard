@@ -1335,3 +1335,304 @@
   font-size: 0.82rem;
   color: var(--c-espresso-light);
 }
+
+/* ==========================================================================
+   Completion Date Extension & Peer Accountability Styles
+   ========================================================================== */
+.table-status-pill--ext-pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  cursor: pointer;
+  animation: pulseExt 2.4s infinite ease-in-out;
+}
+
+@keyframes pulseExt {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+.table-status-pill--ext-approved {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+}
+
+.table-action-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.22rem 0.55rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  margin-top: 0.3rem;
+  white-space: nowrap;
+}
+
+.table-action-pill-btn--review {
+  background: #f59e0b;
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.3);
+}
+
+.table-action-pill-btn--review:hover {
+  background: #d97706;
+  transform: translateY(-1px);
+}
+
+.table-action-link-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--c-russet, #c18036);
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  margin-top: 0.25rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.table-action-link-btn:hover {
+  color: var(--c-espresso, #251a0a);
+}
+
+.query-view-section--extension {
+  background: #faf8f2;
+  border: 1px solid rgba(193, 128, 54, 0.2);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.query-view-due-text {
+  font-size: 0.82rem;
+  color: var(--c-espresso-light);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pill-extended-badge {
+  display: inline-block;
+  background: rgba(14, 165, 233, 0.15);
+  color: #0369a1;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.query-view-ext-banner {
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.9rem;
+  font-size: 0.84rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.query-view-ext-banner--pending {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #92400e;
+}
+
+.ext-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ext-proposed-pill {
+  font-size: 0.76rem;
+  font-weight: 700;
+  background: #ffffff;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #b45309;
+}
+
+.ext-banner-reason {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.4;
+  color: #78350f;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+}
+
+.ext-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.3rem;
+}
+
+.btn-approve-ext {
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.btn-approve-ext:hover {
+  background: #15803d;
+}
+
+.btn-decline-ext {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.btn-decline-ext:hover {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.query-view-ext-banner--approved {
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid rgba(22, 163, 74, 0.3);
+  color: #166534;
+}
+
+.query-view-ext-banner--declined {
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  color: #991b1b;
+}
+
+.ext-reason-note {
+  font-size: 0.8rem;
+  color: var(--c-espresso-light);
+  font-style: italic;
+}
+
+.ext-request-btn-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.2rem;
+}
+
+.btn-request-ext {
+  background: #ffffff;
+  border: 1px solid rgba(193, 128, 54, 0.4);
+  color: var(--c-russet);
+  border-radius: 6px;
+  padding: 0.38rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.btn-request-ext:hover {
+  background: rgba(193, 128, 54, 0.1);
+  border-color: var(--c-russet);
+}
+
+.extension-modal-dialog,
+.extension-review-modal {
+  max-width: 520px;
+}
+
+.extension-modal-note {
+  background: rgba(214, 116, 43, 0.08);
+  border: 1px solid rgba(214, 116, 43, 0.25);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.82rem;
+  color: var(--c-russet, #844918);
+  line-height: 1.45;
+}
+
+.extension-review-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.review-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.review-meta-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--c-espresso-light);
+}
+
+.review-meta-val.highlight {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #b45309;
+}
+
+.review-reason-box {
+  margin: 0;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.88rem;
+  color: #1e293b;
+  line-height: 1.45;
+  font-style: italic;
+}
+
+.modal-actions--split {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.btn-decline-action {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  font-weight: 700;
+}
+
+.btn-decline-action:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.btn-approve-action {
+  background: #16a34a;
+  border: none;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.btn-approve-action:hover {
+  background: #15803d;
+}

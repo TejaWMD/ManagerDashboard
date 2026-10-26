@@ -214,10 +214,10 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   </div>
                 </div>
 
-                {/* Sub-Metric Component Badges: Turnaround KPI + Avg Rating */}
+                {/* Sub-Metric Component Badges: Completion Rate + Avg Rating */}
                 <div className="mgr-pillars-row">
-                  <div className="mgr-pillar-box" title="Based on On-time (+1.0) and Late (+0.5) resolution speed">
-                    <span className="mgr-pillar-title">Turnaround KPI</span>
+                  <div className="mgr-pillar-box" title="Based on On-time (+1.0) and Late (+0.5) completion against target deadline">
+                    <span className="mgr-pillar-title">Completion Rate</span>
                     <span className="mgr-pillar-value">{stat.turnaroundKpi}%</span>
                     <span className="mgr-pillar-sub">
                       {stat.totalEvaluated === 0

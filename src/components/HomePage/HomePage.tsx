@@ -609,7 +609,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         {/* Panel 2: Dual Radial Gauges & Queue Split */}
         <div className="chart-card">
           <div className="chart-card-header">
-            <h2 className="chart-card-title">48h Response Speed</h2>
+            <h2 className="chart-card-title">Completion Rate</h2>
             <span
               className={`speed-status-badge ${
                 delayedCount === 0
@@ -622,7 +622,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           <div className="gauges-split-body">
-            {/* Gauge 1: On-Time SLA */}
+            {/* Gauge 1: On-Time Completion Rate */}
             <div className="gauge-unit">
               <div className="donut-chart-box">
                 <svg className="donut-svg" viewBox="0 0 110 110">

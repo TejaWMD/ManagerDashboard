@@ -11,6 +11,9 @@ export type NotificationEventType =
   | 'AM_REMARK'
   | 'AM_DONE'
   | 'QUERY_DELAYED'
+  | 'EXTENSION_REQUESTED'
+  | 'EXTENSION_APPROVED'
+  | 'EXTENSION_DECLINED'
   | 'TEST';
 
 export interface DispatchNotificationParams {
@@ -66,12 +69,27 @@ export function computeTargetRecipients(
       break;
 
     case 'QUERY_DELAYED':
-      // SLA delayed -> Notify Manager, Account Manager + Admin
+      // Past completion target -> Notify Manager, Account Manager + Admin
       rawRecipients.push(
         query.managerId,
         query.accountManagerId,
         ...adminIds
       );
+      break;
+
+    case 'EXTENSION_REQUESTED':
+      // Manager requests completion date extension -> Notify Account Manager (Sender) + Admin
+      rawRecipients.push(query.accountManagerId, ...adminIds);
+      break;
+
+    case 'EXTENSION_APPROVED':
+      // AM approves extension -> Notify Manager + Admin
+      rawRecipients.push(query.managerId, ...adminIds);
+      break;
+
+    case 'EXTENSION_DECLINED':
+      // AM declines extension -> Notify Manager + Admin
+      rawRecipients.push(query.managerId, ...adminIds);
       break;
 
     case 'TEST':
@@ -134,8 +152,26 @@ export function formatNotificationContent(
 
     case 'QUERY_DELAYED':
       return {
-        title: `⚠️ Query Delayed (>48h): ${query.queryId}`,
-        body: `${query.queryId} is delayed (>48h) with no manager completion. Assigned to ${query.managerName}.`,
+        title: `⚠️ Query Delayed: ${query.queryId}`,
+        body: `${query.queryId} has passed its target completion deadline with no manager completion. Assigned to ${query.managerName}.`,
+      };
+
+    case 'EXTENSION_REQUESTED':
+      return {
+        title: `⏳ Extension Requested: ${query.queryId}`,
+        body: `Manager ${actor.name} requested completion date extension to ${query.extensionProposedDueAt || 'new date'}: "${(query.extensionReason || '').slice(0, 80)}"`,
+      };
+
+    case 'EXTENSION_APPROVED':
+      return {
+        title: `✅ Extension Approved: ${query.queryId}`,
+        body: `${actorRoleLabel} ${actor.name} approved completion extension until ${query.targetDueAt || query.extensionProposedDueAt || 'extended date'}.`,
+      };
+
+    case 'EXTENSION_DECLINED':
+      return {
+        title: `❌ Extension Declined: ${query.queryId}`,
+        body: `${actorRoleLabel} ${actor.name} declined completion extension request.`,
       };
 
     case 'TEST':

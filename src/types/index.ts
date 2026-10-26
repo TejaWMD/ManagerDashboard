@@ -15,6 +15,8 @@ export interface UserAccount {
 
 export type QueryStatus = 'Pending' | 'Completed';
 
+export type ExtensionStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'DECLINED';
+
 export interface Query {
   id: string; // matches queryId for React keys
   queryId: string; // e.g., QRY-001 (Primary Key in Supabase)
@@ -22,7 +24,7 @@ export interface Query {
   createdAtMs: number; // Immutable creation epoch milliseconds for calculations
   completedAt?: string | null; // Completion timestamp string when both Manager & AM checked
   completedAtMs?: number | null; // Completion epoch milliseconds for completion tracking
-  isDelayed?: boolean; // Persisted flag if query exceeded 48h before or at completion
+  isDelayed?: boolean; // Persisted flag if query exceeded target completion deadline before or at completion
   accountManagerId: string; // Foreign Key -> UserAccount.id (e.g., 'am-1')
   accountManagerEmail: string;
   accountManagerName: string;
@@ -42,6 +44,16 @@ export interface Query {
   status: QueryStatus;
   delayNotified?: boolean;
   rating?: number | null; // Mandatory 1-5 star rating provided by sender upon completion
+  // Target Completion & Extension Management
+  targetDueAt?: string | null; // Effective target completion timestamp string (YYYY-MM-DD HH:mm:ss)
+  targetDueAtMs?: number | null; // Effective target completion epoch ms
+  extensionStatus?: ExtensionStatus | null; // 'NONE' | 'PENDING' | 'APPROVED' | 'DECLINED'
+  extensionRequestedAt?: string | null;
+  extensionProposedDueAt?: string | null;
+  extensionProposedDueAtMs?: number | null;
+  extensionReason?: string | null;
+  extensionReviewNote?: string | null;
+  extensionReviewedAt?: string | null;
 }
 
 export const DELAY_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours (172,800,000 ms)
@@ -83,6 +95,29 @@ export function getQueryTimestampMs(query: Query): number {
   return 0;
 }
 
+/**
+ * Returns the effective target completion deadline in epoch ms:
+ * If an approved extension (or explicit targetDueAt) is set, returns targetDueAtMs.
+ * Otherwise defaults to createdAt + 48 hours.
+ */
+export function getQueryDeadlineMs(query: Query): number {
+  if (
+    typeof query.targetDueAtMs === 'number' &&
+    !Number.isNaN(query.targetDueAtMs) &&
+    query.targetDueAtMs > 0
+  ) {
+    return query.targetDueAtMs;
+  }
+  if (query.targetDueAt) {
+    const parsed = Date.parse(query.targetDueAt.replace(' ', 'T'));
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  const createdMs = getQueryTimestampMs(query);
+  return createdMs > 0 ? createdMs + DELAY_THRESHOLD_MS : 0;
+}
+
 export function sortQueriesByStatusAndTimestamp(
   list: Query[],
   timestampOrder: 'desc' | 'asc' = 'desc'
@@ -109,31 +144,31 @@ export function isQueryDelayed(
     return true;
   }
 
-  const createdMs = getQueryTimestampMs(query);
-  if (createdMs <= 0) {
+  const deadlineMs = getQueryDeadlineMs(query);
+  if (deadlineMs <= 0) {
     return false;
   }
 
-  // If completed (both Manager Done & AM Done are checked), check if it took >24h to complete
+  // If completed (both Manager Done & AM Done are checked), check if completion exceeded deadline
   if (isQueryDone(query)) {
     if (
       typeof query.completedAtMs === 'number' &&
       !Number.isNaN(query.completedAtMs) &&
       query.completedAtMs > 0
     ) {
-      return query.completedAtMs - createdMs > DELAY_THRESHOLD_MS;
+      return query.completedAtMs > deadlineMs;
     }
     if (query.completedAt) {
       const parsedCompleted = Date.parse(query.completedAt.replace(' ', 'T'));
       if (!Number.isNaN(parsedCompleted) && parsedCompleted > 0) {
-        return parsedCompleted - createdMs > DELAY_THRESHOLD_MS;
+        return parsedCompleted > deadlineMs;
       }
     }
     return false;
   }
 
-  // Open query: delayed if more than 24h has elapsed since creation
-  return nowMs - createdMs > DELAY_THRESHOLD_MS;
+  // Open query: delayed if current time has passed target completion deadline
+  return nowMs > deadlineMs;
 }
 
 export function isQueryPending(

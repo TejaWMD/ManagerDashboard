@@ -39,6 +39,19 @@ function recordDelayNotifiedLocally(queryId: string): void {
   }
 }
 
+export function resetDelayNotifiedLocally(queryId: string): void {
+  try {
+    const current = getLocalDelayNotifiedSet();
+    current.delete(queryId);
+    localStorage.setItem(
+      DELAY_NOTIFIED_CACHE_KEY,
+      JSON.stringify(Array.from(current))
+    );
+  } catch {
+    // Ignore
+  }
+}
+
 // Check open queries and dispatch notifications for SLA breaches
 export async function checkAndNotifyDelayedQueries(
   queries: Query[]

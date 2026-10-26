@@ -38,6 +38,16 @@ interface QueryPageProps {
         | 'accountManagerRemark'
         | 'accountManagerDone'
         | 'rating'
+        | 'targetDueAt'
+        | 'targetDueAtMs'
+        | 'extensionStatus'
+        | 'extensionRequestedAt'
+        | 'extensionProposedDueAt'
+        | 'extensionProposedDueAtMs'
+        | 'extensionReason'
+        | 'extensionReviewNote'
+        | 'extensionReviewedAt'
+        | 'isDelayed'
       >
     >
   ) => Promise<void>;
@@ -46,6 +56,7 @@ interface QueryPageProps {
 type StatusFilterValue =
   | 'ALL'
   | 'Pending'
+  | 'ExtensionPending'
   | 'Unchecked'
   | 'ManagerDone'
   | 'Delayed'
@@ -143,6 +154,117 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [mandatoryRemarkDraft, setMandatoryRemarkDraft] = useState<string>('');
   const [remarkError, setRemarkError] = useState<string>('');
 
+  // Completion Extension Modal states (for Manager requesting extra time)
+  const [extensionModalQuery, setExtensionModalQuery] = useState<Query | null>(null);
+  const [extensionProposedDateInput, setExtensionProposedDateInput] = useState<string>('');
+  const [extensionReasonInput, setExtensionReasonInput] = useState<string>('');
+  const [extensionError, setExtensionError] = useState<string>('');
+  const [isSubmittingExtension, setIsSubmittingExtension] = useState<boolean>(false);
+
+  // Review Extension Modal states (for Sender AM or Admin approving/declining)
+  const [extensionReviewModalQuery, setExtensionReviewModalQuery] = useState<Query | null>(null);
+  const [extensionReviewNoteInput, setExtensionReviewNoteInput] = useState<string>('');
+  const [isReviewingExtension, setIsReviewingExtension] = useState<boolean>(false);
+
+  const formatTimestamp = (date: Date): string => {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const sec = String(date.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${sec}`;
+  };
+
+  const openExtensionModal = (query: Query) => {
+    // Default proposed date to 3 days from now at 18:00
+    const defaultDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    defaultDate.setHours(18, 0, 0, 0);
+    const yyyy = defaultDate.getFullYear();
+    const mm = String(defaultDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(defaultDate.getDate()).padStart(2, '0');
+    const hh = String(defaultDate.getHours()).padStart(2, '0');
+    const min = String(defaultDate.getMinutes()).padStart(2, '0');
+
+    setExtensionProposedDateInput(`${yyyy}-${mm}-${dd}T${hh}:${min}`);
+    setExtensionReasonInput('');
+    setExtensionError('');
+    setExtensionModalQuery(query);
+  };
+
+  const handleSubmitExtensionRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!extensionModalQuery) return;
+    if (!extensionProposedDateInput) {
+      setExtensionError('Please pick a proposed completion date & time.');
+      return;
+    }
+    const proposedMs = Date.parse(extensionProposedDateInput);
+    if (Number.isNaN(proposedMs) || proposedMs <= Date.now()) {
+      setExtensionError('Proposed completion date must be in the future.');
+      return;
+    }
+    const cleanReason = extensionReasonInput.trim();
+    if (cleanReason.length < 5) {
+      setExtensionError('Please explain why extra time is needed (min 5 chars).');
+      return;
+    }
+
+    const proposedTimestamp = extensionProposedDateInput.replace('T', ' ') + ':00';
+    const nowTimestamp = formatTimestamp(new Date());
+
+    setIsSubmittingExtension(true);
+    try {
+      await onUpdateQuery(extensionModalQuery.queryId, {
+        extensionStatus: 'PENDING',
+        extensionRequestedAt: nowTimestamp,
+        extensionProposedDueAt: proposedTimestamp,
+        extensionProposedDueAtMs: proposedMs,
+        extensionReason: cleanReason,
+      });
+      setExtensionModalQuery(null);
+      setExtensionReasonInput('');
+      setExtensionProposedDateInput('');
+      setExtensionError('');
+    } finally {
+      setIsSubmittingExtension(false);
+    }
+  };
+
+  const handleApproveExtension = async (query: Query) => {
+    if (!query.extensionProposedDueAtMs || !query.extensionProposedDueAt) return;
+    setIsReviewingExtension(true);
+    try {
+      const nowTimestamp = formatTimestamp(new Date());
+      await onUpdateQuery(query.queryId, {
+        extensionStatus: 'APPROVED',
+        targetDueAt: query.extensionProposedDueAt,
+        targetDueAtMs: query.extensionProposedDueAtMs,
+        extensionReviewedAt: nowTimestamp,
+        isDelayed: false,
+      });
+      setExtensionReviewModalQuery(null);
+    } finally {
+      setIsReviewingExtension(false);
+    }
+  };
+
+  const handleDeclineExtension = async (query: Query) => {
+    setIsReviewingExtension(true);
+    try {
+      const nowTimestamp = formatTimestamp(new Date());
+      await onUpdateQuery(query.queryId, {
+        extensionStatus: 'DECLINED',
+        extensionReviewNote: extensionReviewNoteInput.trim() || 'Declined by sender',
+        extensionReviewedAt: nowTimestamp,
+      });
+      setExtensionReviewModalQuery(null);
+      setExtensionReviewNoteInput('');
+    } finally {
+      setIsReviewingExtension(false);
+    }
+  };
+
   // View Query Details Pop-up Modal state (for all users)
   const [viewingQuery, setViewingQuery] = useState<Query | null>(null);
   const activeViewingQuery = useMemo(() => {
@@ -210,6 +332,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
         if (filterStatus === 'Completed' && !done) return false;
         if (filterStatus === 'Pending' && !pendingUnder48h) return false;
+        if (filterStatus === 'ExtensionPending' && c.extensionStatus !== 'PENDING') return false;
         if (filterStatus === 'Delayed' && !delayed) return false;
         if (filterStatus === 'Unchecked' && (c.managerDone || c.accountManagerDone)) {
           return false;
@@ -504,10 +627,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               onChange={(e) => setFilterStatus(e.target.value as StatusFilterValue)}
             >
               <option value="ALL">All Status</option>
-              <option value="Pending">Pending (&lt;48h)</option>
+              <option value="Pending">Pending (On Track)</option>
+              <option value="ExtensionPending">Extension Requested ⏳</option>
               <option value="Unchecked">Unchecked</option>
               <option value="ManagerDone">Manager Checked</option>
-              <option value="Delayed">Delayed (&gt;48h)</option>
+              <option value="Delayed">Delayed (Overdue)</option>
               <option value="Completed">Completed</option>
             </select>
           </div>
@@ -1005,7 +1129,61 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             Pending
                           </span>
                         )}
+
+                        {item.extensionStatus === 'PENDING' && (
+                          <span
+                            className="table-status-pill table-status-pill--ext-pending"
+                            title={`Extension requested until ${item.extensionProposedDueAt || 'new date'}: "${item.extensionReason || ''}"`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isSender || isAdmin) {
+                                setExtensionReviewModalQuery(item);
+                              } else {
+                                setViewingQuery(item);
+                              }
+                            }}
+                          >
+                            ⏳ Ext Req
+                          </span>
+                        )}
+                        {item.extensionStatus === 'APPROVED' && (
+                          <span
+                            className="table-status-pill table-status-pill--ext-approved"
+                            title={`Completion deadline extended to ${item.targetDueAt || ''}`}
+                          >
+                            Extended
+                          </span>
+                        )}
                       </div>
+
+                      {/* Quick contextual extension actions */}
+                      {item.extensionStatus === 'PENDING' && (isSender || isAdmin) ? (
+                        <button
+                          type="button"
+                          className="table-action-pill-btn table-action-pill-btn--review"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExtensionReviewModalQuery(item);
+                          }}
+                          title="Click to review and approve/decline this extension request"
+                        >
+                          Review Ext ⏳
+                        </button>
+                      ) : !completed &&
+                        item.extensionStatus !== 'PENDING' &&
+                        (isAssignedManager || isAdmin) ? (
+                        <button
+                          type="button"
+                          className="table-action-link-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openExtensionModal(item);
+                          }}
+                          title="Request completion date extension"
+                        >
+                          + Extend
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -1268,6 +1446,17 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         Pending
                       </span>
                     )}
+
+                    {activeViewingQuery.extensionStatus === 'PENDING' && (
+                      <span className="table-status-pill table-status-pill--ext-pending">
+                        ⏳ Ext Req
+                      </span>
+                    )}
+                    {activeViewingQuery.extensionStatus === 'APPROVED' && (
+                      <span className="table-status-pill table-status-pill--ext-approved">
+                        Extended
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span className="modal-sender-badge">
@@ -1338,6 +1527,94 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Target Completion & Extension Management */}
+              <div className="query-view-section query-view-section--extension">
+                <div className="query-view-section-header">
+                  <span className="query-view-section-label">Target Completion</span>
+                  <span className="query-view-due-text">
+                    {activeViewingQuery.targetDueAt ? (
+                      <>
+                        <strong>{activeViewingQuery.targetDueAt}</strong>{' '}
+                        <span className="pill-extended-badge">Extended</span>
+                      </>
+                    ) : (
+                      <>Standard: 48 hours from creation</>
+                    )}
+                  </span>
+                </div>
+
+                {activeViewingQuery.extensionStatus === 'PENDING' ? (
+                  <div className="query-view-ext-banner query-view-ext-banner--pending">
+                    <div className="ext-banner-top">
+                      <span className="ext-banner-title">
+                        ⏳ Extension Requested by Manager {activeViewingQuery.managerName}
+                      </span>
+                      <span className="ext-proposed-pill">
+                        Proposed: {activeViewingQuery.extensionProposedDueAt || '—'}
+                      </span>
+                    </div>
+                    <p className="ext-banner-reason">
+                      <strong>Reason:</strong> {activeViewingQuery.extensionReason || '—'}
+                    </p>
+                    {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && (
+                      <div className="ext-banner-actions">
+                        <button
+                          type="button"
+                          className="btn-approve-ext"
+                          onClick={() => handleApproveExtension(activeViewingQuery)}
+                          disabled={isReviewingExtension}
+                        >
+                          ✓ Approve Extension
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-decline-ext"
+                          onClick={() => {
+                            setExtensionReviewModalQuery(activeViewingQuery);
+                          }}
+                          disabled={isReviewingExtension}
+                        >
+                          ✕ Decline
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : activeViewingQuery.extensionStatus === 'APPROVED' ? (
+                  <div className="query-view-ext-banner query-view-ext-banner--approved">
+                    <span>
+                      ✅ <strong>Extension Approved</strong> to {activeViewingQuery.targetDueAt}.
+                      {activeViewingQuery.extensionReason && (
+                        <span className="ext-reason-note"> (Reason: {activeViewingQuery.extensionReason})</span>
+                      )}
+                    </span>
+                  </div>
+                ) : activeViewingQuery.extensionStatus === 'DECLINED' ? (
+                  <div className="query-view-ext-banner query-view-ext-banner--declined">
+                    <span>
+                      ❌ <strong>Extension Request Declined</strong>.
+                      {activeViewingQuery.extensionReviewNote && (
+                        <span className="ext-reason-note"> Note: {activeViewingQuery.extensionReviewNote}</span>
+                      )}
+                    </span>
+                  </div>
+                ) : null}
+
+                {/* Allow Assigned Manager or Admin to request extension if not currently pending and not yet done */}
+                {!isQueryDone(activeViewingQuery) &&
+                  activeViewingQuery.extensionStatus !== 'PENDING' &&
+                  (currentUser.id === activeViewingQuery.managerId || currentUser.role === 'admin') && (
+                    <div className="ext-request-btn-row">
+                      <button
+                        type="button"
+                        className="btn-request-ext"
+                        onClick={() => openExtensionModal(activeViewingQuery)}
+                      >
+                        ⏳ Request Completion Date Extension
+                      </button>
+                    </div>
+                  )}
               </div>
 
               <div className="query-view-remarks-grid">
@@ -1623,6 +1900,178 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     : ratingModalQuery.rating
                     ? 'Update Rating'
                     : 'Save Rating'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Extension Request Modal (for assigned manager) */}
+      {extensionModalQuery && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setExtensionModalQuery(null)}
+        >
+          <div
+            className="modal-dialog extension-modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="extension-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-header-text">
+                <h3 id="extension-modal-title">Request Completion Date Extension</h3>
+                <span className="modal-sender-badge">
+                  Query: <strong>{extensionModalQuery.queryId}</strong> &bull; Sender:{' '}
+                  <strong>{extensionModalQuery.accountManagerName}</strong>
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setExtensionModalQuery(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form className="modal-form" onSubmit={handleSubmitExtensionRequest}>
+              <div className="extension-modal-note">
+                <strong>Peer Accountability:</strong> Your extension request will be sent to{' '}
+                <strong>{extensionModalQuery.accountManagerName}</strong> for approval. If approved, the query&apos;s completion deadline will be extended and your completion rate will stay on-time!
+              </div>
+
+              <div className="cp-form-group">
+                <label htmlFor="ext-proposed-date">Proposed New Completion Date &amp; Time *</label>
+                <input
+                  id="ext-proposed-date"
+                  type="datetime-local"
+                  value={extensionProposedDateInput}
+                  onChange={(e) => {
+                    setExtensionProposedDateInput(e.target.value);
+                    if (extensionError) setExtensionError('');
+                  }}
+                  required
+                />
+              </div>
+
+              <div className="cp-form-group">
+                <label htmlFor="ext-reason">Reason for Extension *</label>
+                <textarea
+                  id="ext-reason"
+                  rows={4}
+                  placeholder="Explain why extra time is needed (e.g. Waiting on bank statement, external vendor update, etc.)..."
+                  value={extensionReasonInput}
+                  onChange={(e) => {
+                    setExtensionReasonInput(e.target.value);
+                    if (extensionError) setExtensionError('');
+                  }}
+                  required
+                />
+                {extensionError && (
+                  <span style={{ color: '#dc2626', fontSize: '0.82rem', fontWeight: 600 }}>
+                    {extensionError}
+                  </span>
+                )}
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setExtensionModalQuery(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isSubmittingExtension}
+                >
+                  {isSubmittingExtension ? 'Submitting...' : 'Send Request to Sender'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Extension Review Modal (when sender or admin wants to decline or review) */}
+      {extensionReviewModalQuery && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setExtensionReviewModalQuery(null)}
+        >
+          <div
+            className="modal-dialog extension-review-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="review-ext-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-header-text">
+                <h3 id="review-ext-modal-title">Review Extension Request</h3>
+                <span className="modal-sender-badge">
+                  Query: <strong>{extensionReviewModalQuery.queryId}</strong> &bull; From Manager:{' '}
+                  <strong>{extensionReviewModalQuery.managerName}</strong>
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setExtensionReviewModalQuery(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="extension-review-body">
+              <div className="review-meta-item">
+                <span className="review-meta-label">Proposed New Deadline:</span>
+                <span className="review-meta-val highlight">
+                  {extensionReviewModalQuery.extensionProposedDueAt || '—'}
+                </span>
+              </div>
+
+              <div className="review-meta-item">
+                <span className="review-meta-label">Manager's Reason:</span>
+                <p className="review-reason-box">
+                  "{extensionReviewModalQuery.extensionReason || 'No reason provided'}"
+                </p>
+              </div>
+
+              <div className="cp-form-group">
+                <label htmlFor="ext-decline-note">Note / Feedback (Optional if declining)</label>
+                <input
+                  id="ext-decline-note"
+                  type="text"
+                  placeholder="e.g. Please expedite by tomorrow instead..."
+                  value={extensionReviewNoteInput}
+                  onChange={(e) => setExtensionReviewNoteInput(e.target.value)}
+                />
+              </div>
+
+              <div className="modal-actions modal-actions--split">
+                <button
+                  type="button"
+                  className="btn-secondary btn-decline-action"
+                  disabled={isReviewingExtension}
+                  onClick={() => handleDeclineExtension(extensionReviewModalQuery)}
+                >
+                  ✕ Decline Request
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary btn-approve-action"
+                  disabled={isReviewingExtension}
+                  onClick={() => handleApproveExtension(extensionReviewModalQuery)}
+                >
+                  {isReviewingExtension ? 'Processing...' : '✓ Approve Extension'}
                 </button>
               </div>
             </div>

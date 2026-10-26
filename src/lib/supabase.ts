@@ -1,5 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
-import { Query, QueryStatus, DELAY_THRESHOLD_MS, UserAccount } from '../types';
+import {
+  Query,
+  QueryStatus,
+  ExtensionStatus,
+  DELAY_THRESHOLD_MS,
+  getQueryDeadlineMs,
+  UserAccount,
+} from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 
 export const SUPABASE_URL =
@@ -20,6 +27,15 @@ interface LocalCompletionMeta {
   managerDoneAt?: string | null;
   managerDoneAtMs?: number | null;
   isDelayed: boolean;
+  targetDueAt?: string | null;
+  targetDueAtMs?: number | null;
+  extensionStatus?: ExtensionStatus | null;
+  extensionRequestedAt?: string | null;
+  extensionProposedDueAt?: string | null;
+  extensionProposedDueAtMs?: number | null;
+  extensionReason?: string | null;
+  extensionReviewNote?: string | null;
+  extensionReviewedAt?: string | null;
 }
 
 function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
@@ -40,7 +56,10 @@ export function saveLocalCompletionMeta(
 ): void {
   try {
     const current = readLocalCompletionMetaMap();
-    current[queryId] = meta;
+    current[queryId] = {
+      ...(current[queryId] || {}),
+      ...meta,
+    };
     localStorage.setItem(COMPLETION_META_STORAGE_KEY, JSON.stringify(current));
   } catch {
     // Ignore storage errors
@@ -73,6 +92,15 @@ export interface QueryRow {
   is_delayed?: boolean | null;
   delay_notified?: boolean | null;
   rating?: number | null;
+  target_due_at?: string | null;
+  target_due_at_ms?: number | null;
+  extension_status?: string | null;
+  extension_requested_at?: string | null;
+  extension_proposed_due_at?: string | null;
+  extension_proposed_due_at_ms?: number | null;
+  extension_reason?: string | null;
+  extension_review_note?: string | null;
+  extension_reviewed_at?: string | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -172,11 +200,57 @@ export function mapRowToQuery(row: QueryRow): Query {
     ? row.completed_at || localMeta?.completedAt || null
     : null;
 
+  const rawTargetDueAtMs =
+    row.target_due_at_ms !== null && row.target_due_at_ms !== undefined
+      ? Number(row.target_due_at_ms)
+      : null;
+  const targetDueAtMs =
+    rawTargetDueAtMs && !Number.isNaN(rawTargetDueAtMs) && rawTargetDueAtMs > 0
+      ? rawTargetDueAtMs
+      : localMeta?.targetDueAtMs ?? null;
+
+  const targetDueAt =
+    row.target_due_at || localMeta?.targetDueAt || null;
+
+  const extensionStatus =
+    (row.extension_status as ExtensionStatus) || localMeta?.extensionStatus || 'NONE';
+
+  const extensionRequestedAt =
+    row.extension_requested_at || localMeta?.extensionRequestedAt || null;
+
+  const rawProposedDueAtMs =
+    row.extension_proposed_due_at_ms !== null && row.extension_proposed_due_at_ms !== undefined
+      ? Number(row.extension_proposed_due_at_ms)
+      : null;
+  const extensionProposedDueAtMs =
+    rawProposedDueAtMs && !Number.isNaN(rawProposedDueAtMs) && rawProposedDueAtMs > 0
+      ? rawProposedDueAtMs
+      : localMeta?.extensionProposedDueAtMs ?? null;
+
+  const extensionProposedDueAt =
+    row.extension_proposed_due_at || localMeta?.extensionProposedDueAt || null;
+
+  const extensionReason =
+    row.extension_reason || localMeta?.extensionReason || null;
+
+  const extensionReviewNote =
+    row.extension_review_note || localMeta?.extensionReviewNote || null;
+
+  const extensionReviewedAt =
+    row.extension_reviewed_at || localMeta?.extensionReviewedAt || null;
+
+  const effectiveDeadlineMs =
+    targetDueAtMs && targetDueAtMs > 0
+      ? targetDueAtMs
+      : createdAtMs > 0
+      ? createdAtMs + DELAY_THRESHOLD_MS
+      : 0;
+
   const computedDelayed = isDone
-    ? completedAtMs && createdAtMs > 0
-      ? completedAtMs - createdAtMs > DELAY_THRESHOLD_MS
+    ? completedAtMs && effectiveDeadlineMs > 0
+      ? completedAtMs > effectiveDeadlineMs
       : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)
-    : Boolean(createdAtMs > 0 && Date.now() - createdAtMs > DELAY_THRESHOLD_MS);
+    : Boolean(effectiveDeadlineMs > 0 && Date.now() > effectiveDeadlineMs);
 
   const unpackedQuery = unpackTitleAndDescription(
     row.query_text,
@@ -218,6 +292,15 @@ export function mapRowToQuery(row: QueryRow): Query {
     status,
     delayNotified: Boolean(row.delay_notified),
     rating: typeof row.rating === 'number' ? row.rating : null,
+    targetDueAt,
+    targetDueAtMs,
+    extensionStatus,
+    extensionRequestedAt,
+    extensionProposedDueAt,
+    extensionProposedDueAtMs,
+    extensionReason,
+    extensionReviewNote,
+    extensionReviewedAt,
   };
 }
 
@@ -374,7 +457,16 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('is_delayed') ||
     message.includes('manager_done_at') ||
     message.includes('manager_done_at_ms') ||
-    message.includes('rating')
+    message.includes('rating') ||
+    message.includes('target_due_at') ||
+    message.includes('target_due_at_ms') ||
+    message.includes('extension_status') ||
+    message.includes('extension_requested_at') ||
+    message.includes('extension_proposed_due_at') ||
+    message.includes('extension_proposed_due_at_ms') ||
+    message.includes('extension_reason') ||
+    message.includes('extension_review_note') ||
+    message.includes('extension_reviewed_at')
   );
 }
 
@@ -490,6 +582,15 @@ export async function updateQueryInDb(
     completedAtMs?: number | null;
     isDelayed?: boolean;
     rating?: number | null;
+    targetDueAt?: string | null;
+    targetDueAtMs?: number | null;
+    extensionStatus?: ExtensionStatus | null;
+    extensionRequestedAt?: string | null;
+    extensionProposedDueAt?: string | null;
+    extensionProposedDueAtMs?: number | null;
+    extensionReason?: string | null;
+    extensionReviewNote?: string | null;
+    extensionReviewedAt?: string | null;
   }
 ): Promise<{
   data: Query | null;
@@ -548,6 +649,33 @@ export async function updateQueryInDb(
   if (updates.rating !== undefined) {
     extendedUpdates.rating = updates.rating;
   }
+  if (updates.targetDueAt !== undefined) {
+    extendedUpdates.target_due_at = updates.targetDueAt;
+  }
+  if (updates.targetDueAtMs !== undefined) {
+    extendedUpdates.target_due_at_ms = updates.targetDueAtMs;
+  }
+  if (updates.extensionStatus !== undefined) {
+    extendedUpdates.extension_status = updates.extensionStatus;
+  }
+  if (updates.extensionRequestedAt !== undefined) {
+    extendedUpdates.extension_requested_at = updates.extensionRequestedAt;
+  }
+  if (updates.extensionProposedDueAt !== undefined) {
+    extendedUpdates.extension_proposed_due_at = updates.extensionProposedDueAt;
+  }
+  if (updates.extensionProposedDueAtMs !== undefined) {
+    extendedUpdates.extension_proposed_due_at_ms = updates.extensionProposedDueAtMs;
+  }
+  if (updates.extensionReason !== undefined) {
+    extendedUpdates.extension_reason = updates.extensionReason;
+  }
+  if (updates.extensionReviewNote !== undefined) {
+    extendedUpdates.extension_review_note = updates.extensionReviewNote;
+  }
+  if (updates.extensionReviewedAt !== undefined) {
+    extendedUpdates.extension_reviewed_at = updates.extensionReviewedAt;
+  }
 
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
@@ -568,13 +696,18 @@ export async function updateQueryInDb(
         }
       : extendedUpdates;
 
-  // Persist locally as well so delayed-on-completion and manager-done tracking work even before SQL migration is run
+  // Persist locally as well so delayed-on-completion, manager-done, and extension tracking work even before SQL migration is run
   if (
     updates.completedAt !== undefined ||
     updates.completedAtMs !== undefined ||
     updates.managerDoneAt !== undefined ||
     updates.managerDoneAtMs !== undefined ||
-    updates.isDelayed !== undefined
+    updates.isDelayed !== undefined ||
+    updates.targetDueAt !== undefined ||
+    updates.targetDueAtMs !== undefined ||
+    updates.extensionStatus !== undefined ||
+    updates.extensionProposedDueAt !== undefined ||
+    updates.extensionReason !== undefined
   ) {
     saveLocalCompletionMeta(queryId, {
       completedAt: updates.completedAt ?? null,
@@ -582,6 +715,15 @@ export async function updateQueryInDb(
       managerDoneAt: updates.managerDoneAt ?? null,
       managerDoneAtMs: updates.managerDoneAtMs ?? null,
       isDelayed: Boolean(updates.isDelayed),
+      targetDueAt: updates.targetDueAt ?? null,
+      targetDueAtMs: updates.targetDueAtMs ?? null,
+      extensionStatus: updates.extensionStatus ?? null,
+      extensionRequestedAt: updates.extensionRequestedAt ?? null,
+      extensionProposedDueAt: updates.extensionProposedDueAt ?? null,
+      extensionProposedDueAtMs: updates.extensionProposedDueAtMs ?? null,
+      extensionReason: updates.extensionReason ?? null,
+      extensionReviewNote: updates.extensionReviewNote ?? null,
+      extensionReviewedAt: updates.extensionReviewedAt ?? null,
     });
   }
 

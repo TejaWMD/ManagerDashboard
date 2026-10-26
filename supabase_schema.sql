@@ -74,7 +74,16 @@ CREATE TABLE IF NOT EXISTS public.queries (
   completed_at_ms BIGINT DEFAULT NULL,
   is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
   delay_notified BOOLEAN NOT NULL DEFAULT FALSE,
-  rating INTEGER DEFAULT NULL CHECK (rating >= 1 AND rating <= 5)
+  rating INTEGER DEFAULT NULL CHECK (rating >= 1 AND rating <= 5),
+  target_due_at TEXT DEFAULT NULL,
+  target_due_at_ms BIGINT DEFAULT NULL,
+  extension_status TEXT DEFAULT 'NONE',
+  extension_requested_at TEXT DEFAULT NULL,
+  extension_proposed_due_at TEXT DEFAULT NULL,
+  extension_proposed_due_at_ms BIGINT DEFAULT NULL,
+  extension_reason TEXT DEFAULT NULL,
+  extension_review_note TEXT DEFAULT NULL,
+  extension_reviewed_at TEXT DEFAULT NULL
 );
 
 -- Safely add new columns if upgrading an existing queries table
@@ -88,7 +97,16 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS manager_done_at_ms BIGINT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS delay_notified BOOLEAN NOT NULL DEFAULT FALSE,
-  ADD COLUMN IF NOT EXISTS rating INTEGER DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS rating INTEGER DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS target_due_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS target_due_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS extension_status TEXT DEFAULT 'NONE',
+  ADD COLUMN IF NOT EXISTS extension_requested_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS extension_proposed_due_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS extension_proposed_due_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS extension_reason TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS extension_review_note TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS extension_reviewed_at TEXT DEFAULT NULL;
 
 -- Backfill existing manager_done rows that do not have manager_done_at_ms yet
 UPDATE public.queries

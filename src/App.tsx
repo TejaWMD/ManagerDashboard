@@ -27,7 +27,10 @@ import {
   showWebNotification,
 } from './lib/notifications';
 import { dispatchQueryPushNotification } from './lib/pushDispatcher';
-import { checkAndNotifyDelayedQueries } from './lib/slaDelayChecker';
+import {
+  checkAndNotifyDelayedQueries,
+  resetDelayNotifiedLocally,
+} from './lib/slaDelayChecker';
 import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
 import { HomePage } from './components/HomePage/HomePage';
@@ -274,6 +277,32 @@ export const App: React.FC = () => {
                   );
                 }
               } else if (
+                updated.extensionStatus !== prevItem.extensionStatus &&
+                updated.extensionStatus
+              ) {
+                if (updated.extensionStatus === 'PENDING') {
+                  if (user.id === updated.accountManagerId || user.role === 'admin') {
+                    showWebNotification(
+                      '⏳ Extension Requested',
+                      `Manager ${updated.managerName} requested completion extension for ${updated.queryId}`
+                    );
+                  }
+                } else if (updated.extensionStatus === 'APPROVED') {
+                  if (user.id === updated.managerId || user.role === 'admin') {
+                    showWebNotification(
+                      '✅ Extension Approved',
+                      `Completion extension approved for ${updated.queryId}`
+                    );
+                  }
+                } else if (updated.extensionStatus === 'DECLINED') {
+                  if (user.id === updated.managerId || user.role === 'admin') {
+                    showWebNotification(
+                      '❌ Extension Declined',
+                      `Extension request for ${updated.queryId} was declined`
+                    );
+                  }
+                }
+              } else if (
                 updated.accountManagerRemarkTitle !==
                   prevItem.accountManagerRemarkTitle ||
                 updated.accountManagerRemark !== prevItem.accountManagerRemark
@@ -438,6 +467,15 @@ export const App: React.FC = () => {
         | 'accountManagerRemark'
         | 'accountManagerDone'
         | 'rating'
+        | 'targetDueAt'
+        | 'targetDueAtMs'
+        | 'extensionStatus'
+        | 'extensionRequestedAt'
+        | 'extensionProposedDueAt'
+        | 'extensionProposedDueAtMs'
+        | 'extensionReason'
+        | 'extensionReviewNote'
+        | 'extensionReviewedAt'
       >
     >
   ) => {
@@ -479,16 +517,30 @@ export const App: React.FC = () => {
       ? existing.completedAtMs || nowMs
       : null;
 
-    // Once delayed (>48h), it stays delayed even when both Manager Done & AM Done are checked
-    const wasAlreadyDelayed = isQueryDelayed(existing, nowMs);
+    // Effective target completion deadline
+    const effectiveDeadlineMs =
+      updates.targetDueAtMs !== undefined && updates.targetDueAtMs !== null
+        ? updates.targetDueAtMs
+        : existing.targetDueAtMs && existing.targetDueAtMs > 0
+        ? existing.targetDueAtMs
+        : createdMs > 0
+        ? createdMs + DELAY_THRESHOLD_MS
+        : 0;
+
+    // If an extension was approved, recalculate whether it is delayed against the extended target!
+    const wasAlreadyDelayed =
+      updates.extensionStatus === 'APPROVED'
+        ? false
+        : isQueryDelayed(existing, nowMs);
+
     const nextIsDelayed = nextIsCompleted
       ? Boolean(
           wasAlreadyDelayed ||
-            (createdMs > 0 &&
+            (effectiveDeadlineMs > 0 &&
               nextCompletedAtMs !== null &&
-              nextCompletedAtMs - createdMs > DELAY_THRESHOLD_MS)
+              nextCompletedAtMs > effectiveDeadlineMs)
         )
-      : Boolean(createdMs > 0 && nowMs - createdMs > DELAY_THRESHOLD_MS);
+      : Boolean(effectiveDeadlineMs > 0 && nowMs > effectiveDeadlineMs);
 
     const optimisticItem: Query = {
       ...existing,
@@ -551,6 +603,34 @@ export const App: React.FC = () => {
 
       // Dispatch desktop background push notifications to involved users & admin
       if (
+        updates.extensionStatus === 'PENDING' &&
+        existing.extensionStatus !== 'PENDING'
+      ) {
+        dispatchQueryPushNotification({
+          event: 'EXTENSION_REQUESTED',
+          query: data,
+          actor: currentUser,
+        });
+      } else if (
+        updates.extensionStatus === 'APPROVED' &&
+        existing.extensionStatus !== 'APPROVED'
+      ) {
+        resetDelayNotifiedLocally(queryId);
+        dispatchQueryPushNotification({
+          event: 'EXTENSION_APPROVED',
+          query: data,
+          actor: currentUser,
+        });
+      } else if (
+        updates.extensionStatus === 'DECLINED' &&
+        existing.extensionStatus !== 'DECLINED'
+      ) {
+        dispatchQueryPushNotification({
+          event: 'EXTENSION_DECLINED',
+          query: data,
+          actor: currentUser,
+        });
+      } else if (
         updates.managerDone !== undefined &&
         updates.managerDone !== existing.managerDone &&
         updates.managerDone
