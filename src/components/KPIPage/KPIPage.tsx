@@ -153,10 +153,11 @@ export const KPIPage: React.FC<KPIPageProps> = ({
 
       {/* 2. Unified 5-Card Balanced Grid (All cards full width, compact, fit to screen) */}
       <div className="kpi-five-cards-grid">
-        {/* Top 3 Manager KPI Cards */}
+        {/* Manager KPI Scorecards */}
         <section className="kpi-managers-row" aria-label="Manager KPI Scorecards">
           {managerStats.map((stat, idx) => {
-            const rankMedal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉';
+            const rankMedal =
+              idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🏅';
             const isMe = currentUser.id === stat.manager.id;
             const isSelected = selectedManagerId === stat.manager.id;
 

@@ -37,7 +37,7 @@ export const AUTHORIZED_USERS: UserAccount[] = [
   {
     id: 'mgr-1',
     name: 'Muugaa',
-    email: 'wmdklmuugaa@gmail.com',
+    email: 'cs4@malayanfood.com',
     password: '663489',
     role: 'manager',
     roleLabel: 'Manager',
@@ -47,7 +47,7 @@ export const AUTHORIZED_USERS: UserAccount[] = [
   {
     id: 'mgr-2',
     name: 'Awi',
-    email: 'wmdklawi@gmail.com',
+    email: 'cs3@malayanfood.com',
     password: '534220',
     role: 'manager',
     roleLabel: 'Manager',
@@ -57,11 +57,21 @@ export const AUTHORIZED_USERS: UserAccount[] = [
   {
     id: 'mgr-3',
     name: 'Jay',
-    email: 'wmdkljay@gmail.com',
+    email: 'wmgjay09@gmail.com',
     password: '019288',
     role: 'manager',
     roleLabel: 'Manager',
     avatarInitials: 'JY',
+    phone: '',
+  },
+  {
+    id: 'mgr-4',
+    name: 'Tamil',
+    email: 'info@malayanfood.com',
+    password: '750284',
+    role: 'manager',
+    roleLabel: 'Manager',
+    avatarInitials: 'TM',
     phone: '',
   },
 

@@ -182,7 +182,8 @@
 
 .kpi-managers-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: var(--card-gap);
   min-height: 0;
@@ -1207,6 +1208,27 @@
   .score-caption {
     letter-spacing: 0;
   }
+  .mgr-stats-capsules {
+    gap: 0.2rem;
+  }
+  .stat-capsule {
+    padding: 0.08rem;
+    border-radius: 12px;
+  }
+  .capsule-num {
+    font-size: var(--fs-sm);
+  }
+  .capsule-lbl {
+    font-size: var(--fs-xxs);
+  }
+  .mgr-score-block {
+    padding: 0.2rem 0.45rem;
+    gap: 0.25rem;
+  }
+  .mgr-rank-pill {
+    padding: 0.08rem 0.42rem;
+    gap: 0.15rem;
+  }
   .comp-bar-item {
     grid-template-columns: minmax(70px, 26%) 1fr auto;
     gap: 0.35rem;
@@ -1323,15 +1345,21 @@
     overflow-x: auto;
     overflow-y: hidden;
     scroll-snap-type: x mandatory;
-    scroll-padding: 0 0.1rem;
+    scroll-padding: 0 0.5rem;
     -webkit-overflow-scrolling: touch;
-    padding: 4px 4px 0.9rem;
+    padding: 4px 0.75rem 0.9rem 4px;
     margin: -4px -4px -0.5rem;
     width: calc(100% + 8px);
     scrollbar-width: none;
   }
   .kpi-managers-row::-webkit-scrollbar {
     display: none;
+  }
+  .kpi-managers-row::after {
+    content: '';
+    flex: 0 0 0.65rem;
+    height: 1px;
+    pointer-events: none;
   }
   .kpi-managers-row .kpi-mgr-box {
     flex: 0 0 62%;
@@ -1459,6 +1487,18 @@
   .kpi-screen-container {
     --card-pad: 0.65rem;
     --fs-xl: 2rem;
+  }
+  .kpi-managers-row .kpi-mgr-box {
+    flex: 0 0 92%;
+  }
+  .stat-capsule {
+    padding: 0.05rem;
+  }
+  .capsule-lbl {
+    font-size: 0.58rem;
+  }
+  .capsule-num {
+    font-size: 0.82rem;
   }
   .comp-pts-sub,
   .queue-speed-box {
