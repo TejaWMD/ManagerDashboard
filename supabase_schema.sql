@@ -106,7 +106,8 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS extension_proposed_due_at_ms BIGINT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS extension_reason TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS extension_review_note TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS extension_reviewed_at TEXT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS extension_reviewed_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS linked_appointment_id TEXT DEFAULT NULL;
 
 -- Backfill existing manager_done rows that do not have manager_done_at_ms yet
 UPDATE public.queries
@@ -253,3 +254,70 @@ CREATE POLICY "Allow full access to push_subscriptions"
   ON public.push_subscriptions FOR ALL
   USING (true)
   WITH CHECK (true);
+
+-- 7. Appointments Table (Scheduling & Cross-Team Discussions)
+CREATE TABLE IF NOT EXISTS public.appointments (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  agenda TEXT NOT NULL DEFAULT '',
+  requester_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE,
+  requester_name TEXT NOT NULL,
+  requester_email TEXT NOT NULL,
+  requester_role TEXT NOT NULL CHECK (requester_role IN ('account_manager', 'manager', 'admin')),
+  receiver_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE,
+  receiver_name TEXT NOT NULL,
+  receiver_email TEXT NOT NULL,
+  receiver_role TEXT NOT NULL CHECK (receiver_role IN ('account_manager', 'manager', 'admin')),
+  scheduled_at TEXT NOT NULL,
+  scheduled_at_ms BIGINT NOT NULL,
+  duration_minutes INTEGER NOT NULL DEFAULT 30,
+  meeting_type TEXT NOT NULL DEFAULT 'Online Call' CHECK (meeting_type IN ('Online Call', 'Office/Desk', 'Phone')),
+  meeting_location TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'CONFIRMED', 'RESCHEDULE_PROPOSED', 'DECLINED', 'CANCELLED', 'COMPLETED')),
+  reschedule_proposed_by TEXT DEFAULT NULL REFERENCES public.users(id) ON UPDATE CASCADE,
+  proposed_scheduled_at TEXT DEFAULT NULL,
+  proposed_scheduled_at_ms BIGINT DEFAULT NULL,
+  reschedule_reason TEXT DEFAULT NULL,
+  query_id TEXT DEFAULT NULL REFERENCES public.queries(query_id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  created_at_ms BIGINT NOT NULL,
+  updated_at TEXT DEFAULT NULL
+);
+
+-- Upgrade appointments table if columns exist
+ALTER TABLE public.appointments
+  ADD COLUMN IF NOT EXISTS agenda TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS meeting_location TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS query_id TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS reschedule_proposed_by TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS proposed_scheduled_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS proposed_scheduled_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS reschedule_reason TEXT DEFAULT NULL;
+
+-- Indexes for fast filtering
+CREATE INDEX IF NOT EXISTS idx_appointments_requester_id ON public.appointments(requester_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_receiver_id ON public.appointments(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_scheduled_at_ms ON public.appointments(scheduled_at_ms ASC);
+CREATE INDEX IF NOT EXISTS idx_appointments_status ON public.appointments(status);
+CREATE INDEX IF NOT EXISTS idx_appointments_query_id ON public.appointments(query_id);
+
+-- Enable RLS & Realtime for appointments
+ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow full access to appointments" ON public.appointments;
+CREATE POLICY "Allow full access to appointments"
+  ON public.appointments FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+ALTER TABLE public.appointments REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'appointments'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.appointments;
+  END IF;
+END $$;

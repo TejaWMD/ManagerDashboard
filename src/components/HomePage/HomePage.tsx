@@ -9,8 +9,10 @@ import {
   PageView,
   sortQueriesByStatusAndTimestamp,
   UserAccount,
+  Appointment,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
+import { AppointmentsSection } from '../Appointments/AppointmentsSection';
 import { generateWeeklyManagerReportPdf } from '../../lib/pdfReport';
 import {
   calculateAllManagersKpi,
@@ -26,6 +28,19 @@ interface HomePageProps {
   queries: Query[];
   onNavigate?: (page: PageView) => void;
   users?: UserAccount[];
+  appointments?: Appointment[];
+  onOpenBookAppointment?: (preselectedQueryId?: string | null, preselectedUserId?: string | null) => void;
+  onAcceptAppointment?: (appointmentId: string) => Promise<void>;
+  onRescheduleClick?: (appointment: Appointment) => void;
+  onAcceptReschedule?: (appointmentId: string) => Promise<void>;
+  onDeclineAppointment?: (appointmentId: string) => Promise<void>;
+  onCancelAppointment?: (appointmentId: string) => Promise<void>;
+  onEditAppointment?: (appointment: Appointment) => void;
+  onCancelAppointmentWithRemark?: (
+    appointmentId: string,
+    remark: string
+  ) => Promise<void>;
+  onOpenCreateQueryForAppointment?: (appointment: Appointment) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -33,6 +48,16 @@ export const HomePage: React.FC<HomePageProps> = ({
   queries,
   onNavigate,
   users,
+  appointments = [],
+  onOpenBookAppointment,
+  onAcceptAppointment = async () => {},
+  onRescheduleClick = () => {},
+  onAcceptReschedule = async () => {},
+  onDeclineAppointment = async () => {},
+  onCancelAppointment = async () => {},
+  onEditAppointment,
+  onCancelAppointmentWithRemark,
+  onOpenCreateQueryForAppointment,
 }) => {
   const userList = users && users.length > 0 ? users : AUTHORIZED_USERS;
   const senders = useMemo(
@@ -631,97 +656,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        {/* Panel 2: Dual Radial Gauges & Queue Split */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <h2 className="chart-card-title">Completion Rate</h2>
-            <span
-              className={`speed-status-badge ${
-                delayedCount === 0
-                  ? 'speed-status-badge--healthy'
-                  : 'speed-status-badge--warning'
-              }`}
-            >
-              {delayedCount === 0 ? 'On Track' : `${delayedCount} Overdue`}
-            </span>
-          </div>
-
-          <div className="gauges-split-body">
-            {/* Gauge 1: On-Time Completion Rate */}
-            <div className="gauge-unit">
-              <div className="donut-chart-box">
-                <svg className="donut-svg" viewBox="0 0 110 110">
-                  <circle
-                    className="donut-bg-circle"
-                    cx="55"
-                    cy="55"
-                    r={donutRadius}
-                  />
-                  <circle
-                    className={`donut-fill-circle ${
-                      onTimePct >= 90
-                        ? 'donut-fill-circle--healthy'
-                        : onTimePct >= 70
-                        ? 'donut-fill-circle--moderate'
-                        : 'donut-fill-circle--alert'
-                    }`}
-                    cx="55"
-                    cy="55"
-                    r={donutRadius}
-                    strokeDasharray={donutCircumference}
-                    strokeDashoffset={donutDashOffset}
-                  />
-                </svg>
-                <div className="donut-center-content">
-                  <span className="donut-center-pct">{onTimePct}%</span>
-                  <span className="donut-center-lbl">On-Time</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Gauge 2: Resolution Rate */}
-            <div className="gauge-unit">
-              <div className="donut-chart-box">
-                <svg className="donut-svg" viewBox="0 0 110 110">
-                  <circle
-                    className="donut-bg-circle"
-                    cx="55"
-                    cy="55"
-                    r={donutRadius}
-                  />
-                  <circle
-                    className="donut-fill-circle donut-fill-circle--moderate"
-                    cx="55"
-                    cy="55"
-                    r={donutRadius}
-                    strokeDasharray={donutCircumference}
-                    strokeDashoffset={doneDashOffset}
-                  />
-                </svg>
-                <div className="donut-center-content">
-                  <span className="donut-center-pct">{completionPct}%</span>
-                  <span className="donut-center-lbl">Resolved</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Queue Action Tiles */}
-            <div className="speed-action-tiles">
-              <div className="speed-action-tile">
-                <span className="tile-dot tile-dot--manager" />
-                <span className="tile-name">Mgr Queue</span>
-                <span className="tile-val tile-val--manager">{mgrQueueCount}</span>
-              </div>
-              <div className="speed-action-tile">
-                <span className="tile-dot tile-dot--am" />
-                <span className="tile-name">AM Queue</span>
-                <span className="tile-val tile-val--am">{amQueueCount}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Panel 3: Team Workload Comparative Chart */}
+        {/* Panel 2: Team Workload Comparative Chart */}
         <div className="chart-card">
           <div className="chart-card-header">
             <h2 className="chart-card-title">
@@ -789,82 +724,23 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        {/* Panel 4: Recent Queue Snapshot */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <h2 className="chart-card-title">Recent Queue</h2>
-            {onNavigate && (
-              <button
-                type="button"
-                className="chart-link-btn"
-                onClick={() => onNavigate('queries')}
-              >
-                View All &rarr;
-              </button>
-            )}
-          </div>
-
-          <div className="recent-list-container">
-            {recentQueries.map((item) => {
-              const isDone = isQueryDone(item);
-              const isLate = isQueryDelayed(item, nowMs);
-              const isMgrChecked = item.managerDone && !item.accountManagerDone;
-
-              return (
-                <div
-                  key={item.queryId}
-                  className="recent-row-item"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setViewingQuery(item)}
-                  title="Click to view query details"
-                >
-                  <span className="recent-id-badge">{item.queryId}</span>
-                  <div className="recent-people-tags">
-                    <span className="recent-person-chip">{item.accountManagerName}</span>
-                    <span className="recent-arrow">&rarr;</span>
-                    <span className="recent-person-chip">{item.managerName}</span>
-                  </div>
-                  <div className="recent-status-group">
-                    {isDone ? (
-                      <>
-                        <span className="recent-status-pill recent-status-pill--done">
-                          Done
-                        </span>
-                        {isLate && (
-                          <span className="recent-status-pill recent-status-pill--late">
-                            Overdue
-                          </span>
-                        )}
-                      </>
-                    ) : isMgrChecked ? (
-                      <>
-                        <span className="recent-status-pill recent-status-pill--mgr">
-                          Mgr Done
-                        </span>
-                        {isLate && (
-                          <span className="recent-status-pill recent-status-pill--late">
-                            Overdue
-                          </span>
-                        )}
-                      </>
-                    ) : isLate ? (
-                      <span className="recent-status-pill recent-status-pill--late">
-                        Overdue
-                      </span>
-                    ) : (
-                      <span className="recent-status-pill recent-status-pill--new">
-                        New
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {recentQueries.length === 0 && (
-              <div className="team-empty-state">No active records</div>
-            )}
-          </div>
-        </div>
+        {/* Panel 3: Appointments & Discussions (Replaces Completion Rate & Recent Queue) */}
+        <AppointmentsSection
+          currentUser={currentUser}
+          appointments={appointments}
+          queries={queries}
+          users={userList}
+          onOpenBookModal={() => onOpenBookAppointment?.(null, null)}
+          onAcceptAppointment={onAcceptAppointment}
+          onRescheduleClick={onRescheduleClick}
+          onAcceptReschedule={onAcceptReschedule}
+          onDeclineAppointment={onDeclineAppointment}
+          onCancelAppointment={onCancelAppointment}
+          onEditAppointment={onEditAppointment}
+          onCancelAppointmentWithRemark={onCancelAppointmentWithRemark}
+          onOpenCreateQueryForAppointment={onOpenCreateQueryForAppointment}
+          onViewQuery={setViewingQuery}
+        />
       </section>
 
       {/* View Query Details Pop-up Modal */}
@@ -1074,7 +950,24 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
               </div>
 
-              <div className="modal-actions">
+              <div className="modal-actions" style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                {onOpenBookAppointment && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      const q = activeViewingQuery;
+                      setViewingQuery(null);
+                      const targetUserId =
+                        currentUser.id === q.accountManagerId
+                          ? q.managerId
+                          : q.accountManagerId;
+                      onOpenBookAppointment(q.queryId, targetUserId);
+                    }}
+                  >
+                    📅 Book Appointment for this Query
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn-primary"

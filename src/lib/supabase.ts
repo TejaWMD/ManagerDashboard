@@ -6,8 +6,14 @@ import {
   DELAY_THRESHOLD_MS,
   getQueryDeadlineMs,
   UserAccount,
+  Appointment,
+  AppointmentAttendee,
+  AppointmentStatus,
+  MeetingType,
+  UserRole,
 } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
+import { INITIAL_APPOINTMENTS } from '../data/initialAppointments';
 
 export const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL || 'https://mjrqamakqqsqqmuvaqpw.supabase.co';
@@ -101,6 +107,7 @@ export interface QueryRow {
   extension_reason?: string | null;
   extension_review_note?: string | null;
   extension_reviewed_at?: string | null;
+  linked_appointment_id?: string | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -301,6 +308,7 @@ export function mapRowToQuery(row: QueryRow): Query {
     extensionReason,
     extensionReviewNote,
     extensionReviewedAt,
+    linkedAppointmentId: row.linked_appointment_id || null,
   };
 }
 
@@ -336,6 +344,7 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
     created_at: query.createdAt,
     created_at_ms: query.createdAtMs,
     rating: query.rating ?? null,
+    linked_appointment_id: query.linkedAppointmentId ?? null,
   };
 }
 
@@ -768,3 +777,312 @@ export async function updateQueryInDb(
     error: null,
   };
 }
+
+// ============================================================================
+// Appointments Database Interface & Realtime Helpers
+// ============================================================================
+
+export const STORAGE_KEY_APPOINTMENTS = 'wm_portal_appointments_v1';
+
+export interface AppointmentRow {
+  id: string;
+  title: string;
+  agenda?: string | null;
+  requester_id: string;
+  requester_name: string;
+  requester_email: string;
+  requester_role: string;
+  receiver_id?: string | null;
+  receiver_name?: string | null;
+  receiver_email?: string | null;
+  receiver_role?: string | null;
+  attendees_json?: string | null;
+  scheduled_at: string;
+  scheduled_at_ms: number;
+  duration_minutes?: number | null;
+  meeting_type?: string | null;
+  meeting_location?: string | null;
+  status: string;
+  reschedule_proposed_by?: string | null;
+  proposed_scheduled_at?: string | null;
+  proposed_scheduled_at_ms?: number | null;
+  reschedule_reason?: string | null;
+  cancellation_remark?: string | null;
+  cancelled_at?: string | null;
+  query_id?: string | null;
+  created_at: string;
+  created_at_ms: number;
+  updated_at?: string | null;
+}
+
+export function mapRowToAppointment(row: AppointmentRow): Appointment {
+  const scheduledAtMs =
+    Number(row.scheduled_at_ms) && !Number.isNaN(Number(row.scheduled_at_ms))
+      ? Number(row.scheduled_at_ms)
+      : row.scheduled_at
+      ? Date.parse(row.scheduled_at.replace(' ', 'T')) || 0
+      : 0;
+
+  const createdAtMs =
+    Number(row.created_at_ms) && !Number.isNaN(Number(row.created_at_ms))
+      ? Number(row.created_at_ms)
+      : row.created_at
+      ? Date.parse(row.created_at.replace(' ', 'T')) || Date.now()
+      : Date.now();
+
+  let parsedAttendees: AppointmentAttendee[] = [];
+  if (row.attendees_json) {
+    try {
+      const parsed = JSON.parse(row.attendees_json);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        parsedAttendees = parsed;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback if attendees_json wasn't set or is empty
+  if (parsedAttendees.length === 0 && row.receiver_id) {
+    parsedAttendees = [
+      {
+        id: row.receiver_id,
+        name: row.receiver_name || 'Attendee',
+        email: row.receiver_email || '',
+        role: (row.receiver_role as UserRole) || 'manager',
+      },
+    ];
+  }
+
+  const primaryReceiverName =
+    parsedAttendees.map((a) => a.name).join(', ') || row.receiver_name || '';
+
+  return {
+    id: row.id,
+    title: row.title,
+    agenda: row.agenda || '',
+    requesterId: row.requester_id,
+    requesterName: row.requester_name,
+    requesterEmail: row.requester_email,
+    requesterRole: (row.requester_role as UserRole) || 'account_manager',
+    attendees: parsedAttendees,
+    receiverId: parsedAttendees[0]?.id || row.receiver_id || '',
+    receiverName: primaryReceiverName,
+    receiverEmail: parsedAttendees[0]?.email || row.receiver_email || '',
+    receiverRole: parsedAttendees[0]?.role || (row.receiver_role as UserRole) || 'manager',
+    scheduledAt: row.scheduled_at,
+    scheduledAtMs,
+    durationMinutes: Number(row.duration_minutes) || 30,
+    meetingType: (row.meeting_type as MeetingType) || 'Online Call',
+    meetingLocation: row.meeting_location || '',
+    status: (row.status as AppointmentStatus) || 'PENDING',
+    rescheduleProposedBy: row.reschedule_proposed_by || null,
+    proposedScheduledAt: row.proposed_scheduled_at || null,
+    proposedScheduledAtMs: row.proposed_scheduled_at_ms
+      ? Number(row.proposed_scheduled_at_ms)
+      : null,
+    rescheduleReason: row.reschedule_reason || null,
+    cancellationRemark: row.cancellation_remark || null,
+    cancelledAt: row.cancelled_at || null,
+    queryId: row.query_id || null,
+    createdAt: row.created_at,
+    createdAtMs,
+    updatedAt: row.updated_at || null,
+  };
+}
+
+export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
+  const primaryAttendee = apt.attendees?.[0];
+  const combinedNames =
+    apt.attendees && apt.attendees.length > 0
+      ? apt.attendees.map((a) => a.name).join(', ')
+      : apt.receiverName || '';
+
+  return {
+    id: apt.id,
+    title: apt.title,
+    agenda: apt.agenda || '',
+    requester_id: apt.requesterId,
+    requester_name: apt.requesterName,
+    requester_email: apt.requesterEmail,
+    requester_role: apt.requesterRole,
+    receiver_id: primaryAttendee?.id || apt.receiverId || '',
+    receiver_name: combinedNames,
+    receiver_email: primaryAttendee?.email || apt.receiverEmail || '',
+    receiver_role: primaryAttendee?.role || apt.receiverRole || 'manager',
+    attendees_json: JSON.stringify(apt.attendees || []),
+    scheduled_at: apt.scheduledAt,
+    scheduled_at_ms: apt.scheduledAtMs,
+    duration_minutes: apt.durationMinutes || 30,
+    meeting_type: apt.meetingType || 'Online Call',
+    meeting_location: apt.meetingLocation || '',
+    status: apt.status || 'PENDING',
+    reschedule_proposed_by: apt.rescheduleProposedBy || null,
+    proposed_scheduled_at: apt.proposedScheduledAt || null,
+    proposed_scheduled_at_ms: apt.proposedScheduledAtMs || null,
+    reschedule_reason: apt.rescheduleReason || null,
+    cancellation_remark: apt.cancellationRemark || null,
+    cancelled_at: apt.cancelledAt || null,
+    query_id: apt.queryId || null,
+    created_at: apt.createdAt,
+    created_at_ms: apt.createdAtMs,
+    updated_at: apt.updatedAt || null,
+  };
+}
+
+export function readCachedAppointments(): Appointment[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_APPOINTMENTS);
+    if (!raw) return INITIAL_APPOINTMENTS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_APPOINTMENTS;
+  } catch {
+    return INITIAL_APPOINTMENTS;
+  }
+}
+
+export function writeCachedAppointments(list: Appointment[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify(list));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export async function fetchAppointmentsFromDb(): Promise<{
+  data: Appointment[];
+  tableMissing: boolean;
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('*')
+    .order('scheduled_at_ms', { ascending: true });
+
+  if (error) {
+    const isTableMissing =
+      error.code === '42P01' ||
+      error.message?.toLowerCase().includes('relation') ||
+      error.message?.toLowerCase().includes('appointments');
+
+    const cached = readCachedAppointments();
+    return {
+      data: cached,
+      tableMissing: isTableMissing,
+      error: error.message,
+    };
+  }
+
+  const rows = (data || []) as AppointmentRow[];
+  const mapped = rows.map(mapRowToAppointment);
+  writeCachedAppointments(mapped);
+
+  return {
+    data: mapped,
+    tableMissing: false,
+    error: null,
+  };
+}
+
+export async function insertAppointmentInDb(
+  appointment: Appointment
+): Promise<{ data: Appointment; error: string | null }> {
+  const row = mapAppointmentToRow(appointment);
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .insert([row])
+    .select('*')
+    .single();
+
+  if (error) {
+    console.warn('[Supabase] Failed to insert appointment to DB, persisting locally:', error.message);
+    const cached = readCachedAppointments();
+    const updated = [appointment, ...cached.filter((a) => a.id !== appointment.id)];
+    writeCachedAppointments(updated);
+    return { data: appointment, error: error.message };
+  }
+
+  const saved = mapRowToAppointment(data as AppointmentRow);
+  const cached = readCachedAppointments();
+  const updated = [saved, ...cached.filter((a) => a.id !== saved.id)];
+  writeCachedAppointments(updated);
+
+  return { data: saved, error: null };
+}
+
+export async function updateAppointmentInDb(
+  appointmentId: string,
+  updates: Partial<AppointmentRow>
+): Promise<{ data: Appointment | null; error: string | null }> {
+  const payload = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .update(payload)
+    .eq('id', appointmentId)
+    .select('*')
+    .single();
+
+  if (error) {
+    console.warn('[Supabase] Failed to update appointment in DB, updating locally:', error.message);
+    const cached = readCachedAppointments();
+    const existing = cached.find((a) => a.id === appointmentId);
+    if (!existing) {
+      return { data: null, error: error.message };
+    }
+    let parsedAttendees = existing.attendees;
+    if (updates.attendees_json !== undefined) {
+      try {
+        parsedAttendees = JSON.parse(updates.attendees_json || '[]');
+      } catch {
+        // Ignore
+      }
+    }
+    const updatedObj: Appointment = {
+      ...existing,
+      ...(updates.title !== undefined ? { title: updates.title } : {}),
+      ...(updates.agenda !== undefined ? { agenda: updates.agenda || '' } : {}),
+      ...(updates.attendees_json !== undefined ? { attendees: parsedAttendees } : {}),
+      ...(updates.scheduled_at !== undefined ? { scheduledAt: updates.scheduled_at } : {}),
+      ...(updates.scheduled_at_ms !== undefined ? { scheduledAtMs: updates.scheduled_at_ms } : {}),
+      ...(updates.meeting_type !== undefined ? { meetingType: updates.meeting_type as MeetingType } : {}),
+      ...(updates.meeting_location !== undefined ? { meetingLocation: updates.meeting_location || '' } : {}),
+      ...(updates.status !== undefined ? { status: updates.status as AppointmentStatus } : {}),
+      ...(updates.reschedule_proposed_by !== undefined ? { rescheduleProposedBy: updates.reschedule_proposed_by } : {}),
+      ...(updates.proposed_scheduled_at !== undefined ? { proposedScheduledAt: updates.proposed_scheduled_at } : {}),
+      ...(updates.proposed_scheduled_at_ms !== undefined ? { proposedScheduledAtMs: updates.proposed_scheduled_at_ms } : {}),
+      ...(updates.reschedule_reason !== undefined ? { rescheduleReason: updates.reschedule_reason } : {}),
+      ...(updates.cancellation_remark !== undefined ? { cancellationRemark: updates.cancellation_remark } : {}),
+      ...(updates.cancelled_at !== undefined ? { cancelledAt: updates.cancelled_at } : {}),
+      ...(updates.query_id !== undefined ? { queryId: updates.query_id } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+    const nextCached = cached.map((a) => (a.id === appointmentId ? updatedObj : a));
+    writeCachedAppointments(nextCached);
+    return { data: updatedObj, error: null };
+  }
+
+  const saved = mapRowToAppointment(data as AppointmentRow);
+  const cached = readCachedAppointments();
+  const nextCached = cached.map((a) => (a.id === appointmentId ? saved : a));
+  writeCachedAppointments(nextCached);
+
+  return { data: saved, error: null };
+}
+
+export function generateNextAppointmentId(existingList: Appointment[]): string {
+  let highest = 0;
+  for (const item of existingList) {
+    const numPart = item.id.replace('APT-', '');
+    const num = parseInt(numPart, 10);
+    if (!Number.isNaN(num) && num > highest) {
+      highest = num;
+    }
+  }
+  return `APT-${String(highest + 1).padStart(3, '0')}`;
+}
+

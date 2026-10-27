@@ -1636,3 +1636,16 @@
 .btn-approve-action:hover {
   background: #15803d;
 }
+
+.query-linked-apt-chip {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}

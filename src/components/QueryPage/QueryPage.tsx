@@ -8,6 +8,7 @@ import {
   isQueryPending,
   sortQueriesByStatusAndTimestamp,
   UserAccount,
+  Appointment,
 } from '../../types';
 import { AUTHORIZED_USERS } from '../../data/users';
 import wmdLogo from '../../assets/wmd-logo.jpg';
@@ -17,12 +18,16 @@ interface QueryPageProps {
   currentUser: UserAccount;
   queries: Query[];
   savingQueryId: string | null;
+  appointments?: Appointment[];
+  initialFollowupAppointment?: Appointment | null;
+  onOpenBookAppointment?: (preselectedQueryId?: string | null, preselectedUserId?: string | null) => void;
   onCreateQuery: (payload: {
     managerId: string;
     managerEmail: string;
     managerName: string;
     queryTitle: string;
     queryText: string;
+    linkedAppointmentId?: string | null;
   }) => Promise<void>;
   onUpdateQuery: (
     queryId: string,
@@ -68,6 +73,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   currentUser,
   queries,
   savingQueryId,
+  appointments = [],
+  initialFollowupAppointment,
+  onOpenBookAppointment,
   onCreateQuery,
   onUpdateQuery,
 }) => {
@@ -119,7 +127,30 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   );
   const [queryTitleInput, setQueryTitleInput] = useState<string>('');
   const [queryInput, setQueryInput] = useState<string>('');
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>('');
   const [isSubmittingNew, setIsSubmittingNew] = useState<boolean>(false);
+
+  // If redirected from an appointment follow-up action, prefill the create query modal
+  useEffect(() => {
+    if (initialFollowupAppointment) {
+      setShowCreateModal(true);
+      setQueryTitleInput(`Follow-up [${initialFollowupAppointment.id}]: ${initialFollowupAppointment.title}`);
+      setQueryInput(
+        `Discussion summary from appointment ${initialFollowupAppointment.id} held on ${initialFollowupAppointment.scheduledAt}.\n\nAgenda / Points discussed:\n${initialFollowupAppointment.agenda || 'N/A'}`
+      );
+      setSelectedAppointmentId(initialFollowupAppointment.id);
+
+      // Match target manager from the appointment
+      const mgr = managers.find(
+        (m) =>
+          m.id === initialFollowupAppointment.receiverId ||
+          m.id === initialFollowupAppointment.requesterId
+      );
+      if (mgr) {
+        setSelectedManagerId(mgr.id);
+      }
+    }
+  }, [initialFollowupAppointment, managers]);
 
   // Keep target manager selection in sync when modal opens
   const handleOpenCreateModal = () => {
@@ -397,10 +428,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         managerName: targetManager.name,
         queryTitle: queryTitleInput.trim(),
         queryText: queryInput.trim(),
+        linkedAppointmentId: selectedAppointmentId ? selectedAppointmentId : null,
       });
 
       setQueryTitleInput('');
       setQueryInput('');
+      setSelectedAppointmentId('');
       setShowCreateModal(false);
     } finally {
       setIsSubmittingNew(false);
@@ -756,6 +789,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       >
                         {item.queryId}
                       </span>
+                      {item.linkedAppointmentId && (
+                        <span
+                          className="query-linked-apt-chip"
+                          title={`Linked to appointment ${item.linkedAppointmentId}`}
+                        >
+                          📅 {item.linkedAppointmentId}
+                        </span>
+                      )}
                     </td>
 
                     {/* Sender Cell */}
@@ -1249,6 +1290,25 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 {/* <span className="form-helper-text">
                   Anyone submitting a query can only send it to managers.
                 </span> */}
+              </div>
+
+              <div className="cp-form-group">
+                <label htmlFor="select-appointment-link">Link to Appointment (Optional)</label>
+                <select
+                  id="select-appointment-link"
+                  value={selectedAppointmentId}
+                  onChange={(e) => setSelectedAppointmentId(e.target.value)}
+                >
+                  <option value="">-- No linked appointment --</option>
+                  {appointments.map((apt) => (
+                    <option key={apt.id} value={apt.id}>
+                      [{apt.id}] {apt.title} ({apt.scheduledAt})
+                    </option>
+                  ))}
+                </select>
+                <span className="form-helper-text" style={{ fontSize: '0.74rem', color: '#786e60' }}>
+                  Link this query to a prior meeting or discussion.
+                </span>
               </div>
 
               <div className="cp-form-group">
@@ -1770,7 +1830,24 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 </div>
               )}
 
-              <div className="modal-actions">
+              <div className="modal-actions" style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                {onOpenBookAppointment && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      const q = activeViewingQuery;
+                      setViewingQuery(null);
+                      const targetUserId =
+                        currentUser.id === q.accountManagerId
+                          ? q.managerId
+                          : q.accountManagerId;
+                      onOpenBookAppointment(q.queryId, targetUserId);
+                    }}
+                  >
+                    📅 Book Appointment for this Query
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn-primary"

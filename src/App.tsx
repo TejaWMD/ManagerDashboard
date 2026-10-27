@@ -9,24 +9,38 @@ import {
   isQueryDone,
   PageView,
   UserAccount,
+  Appointment,
+  belongsToAppointment,
 } from './types';
 import { AUTHORIZED_USERS } from './data/users';
 import { INITIAL_QUERIES } from './data/initialQueries';
+import { INITIAL_APPOINTMENTS } from './data/initialAppointments';
 import {
   QueryRow,
+  AppointmentRow,
   ensureUsersSeededInDb,
   fetchQueriesFromDb,
+  fetchAppointmentsFromDb,
   fetchUsersFromDb,
   insertQueryInDb,
+  insertAppointmentInDb,
   mapRowToQuery,
+  mapRowToAppointment,
   supabase,
   updateQueryInDb,
+  updateAppointmentInDb,
+  generateNextAppointmentId,
+  readCachedAppointments,
+  writeCachedAppointments,
 } from './lib/supabase';
 import {
   registerServiceWorker,
   showWebNotification,
 } from './lib/notifications';
-import { dispatchQueryPushNotification } from './lib/pushDispatcher';
+import {
+  dispatchQueryPushNotification,
+  dispatchAppointmentPushNotification,
+} from './lib/pushDispatcher';
 import {
   checkAndNotifyDelayedQueries,
   resetDelayNotifiedLocally,
@@ -36,6 +50,8 @@ import { Navbar } from './components/Navbar/Navbar';
 import { HomePage } from './components/HomePage/HomePage';
 import { QueryPage } from './components/QueryPage/QueryPage';
 import { KPIPage } from './components/KPIPage/KPIPage';
+import { BookAppointmentModal } from './components/Appointments/BookAppointmentModal';
+import { RescheduleAppointmentModal } from './components/Appointments/RescheduleAppointmentModal';
 import { NotificationModal } from './components/NotificationModal/NotificationModal';
 import { NotificationBanner } from './components/NotificationBanner/NotificationBanner';
 import sqlSchemaText from '../supabase_schema.sql?raw';
@@ -77,6 +93,14 @@ export const App: React.FC = () => {
   const [isNotifModalOpen, setIsNotifModalOpen] = useState<boolean>(false);
 
   const [queries, setQueries] = useState<Query[]>(INITIAL_QUERIES);
+  const [appointments, setAppointments] = useState<Appointment[]>(() => readCachedAppointments());
+  const [isBookAptModalOpen, setIsBookAptModalOpen] = useState<boolean>(false);
+  const [appointmentToEdit, setAppointmentToEdit] = useState<Appointment | null>(null);
+  const [bookAptPreselectedQueryId, setBookAptPreselectedQueryId] = useState<string | null>(null);
+  const [bookAptPreselectedUserId, setBookAptPreselectedUserId] = useState<string | null>(null);
+  const [rescheduleTargetApt, setRescheduleTargetApt] = useState<Appointment | null>(null);
+  const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState<boolean>(false);
+  const [pendingFollowupAppointment, setPendingFollowupAppointment] = useState<Appointment | null>(null);
   const [isLoadingDb, setIsLoadingDb] = useState<boolean>(true);
   const [dbTableMissing, setDbTableMissing] = useState<boolean>(false);
   const [dbError, setDbError] = useState<string | null>(null);
@@ -90,6 +114,8 @@ export const App: React.FC = () => {
   currentUserRef.current = currentUser;
   const queriesRef = useRef<Query[]>(queries);
   queriesRef.current = queries;
+  const appointmentsRef = useRef<Appointment[]>(appointments);
+  appointmentsRef.current = appointments;
 
   // Initialize Service Worker for Web Push and fetch updated user phone & keys
   useEffect(() => {
@@ -149,11 +175,23 @@ export const App: React.FC = () => {
     setIsLoadingDb(false);
   }, []);
 
+  const loadAppointments = useCallback(async () => {
+    try {
+      const res = await fetchAppointmentsFromDb();
+      if (res.data) {
+        setAppointments(res.data);
+      }
+    } catch {
+      // Graceful fallback to cached
+    }
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
       await Promise.all([
         loadQueries(),
+        loadAppointments(),
         fetchUsersFromDb().then((users) => {
           if (users && users.length > 0) {
             setAllUsers(users);
@@ -170,12 +208,13 @@ export const App: React.FC = () => {
         setIsRefreshing(false);
       }, 450);
     }
-  }, [loadQueries]);
+  }, [loadQueries, loadAppointments]);
 
   useEffect(() => {
     loadQueries();
+    loadAppointments();
 
-    const channel = supabase
+    const queryChannel = supabase
       .channel('public:queries')
       .on(
         'postgres_changes',
@@ -332,10 +371,77 @@ export const App: React.FC = () => {
       )
       .subscribe();
 
+    const aptChannel = supabase
+      .channel('public:appointments')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        (payload) => {
+          const user = currentUserRef.current;
+
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const incoming = mapRowToAppointment(payload.new as AppointmentRow);
+            setAppointments((prev) => {
+              if (prev.some((a) => a.id === incoming.id)) return prev;
+              const next = [incoming, ...prev];
+              writeCachedAppointments(next);
+              return next;
+            });
+
+            if (user && belongsToAppointment(incoming, user) && incoming.requesterId !== user.id) {
+              showWebNotification(
+                '📅 New Appointment Request',
+                `${incoming.requesterName} requested "${incoming.title}" on ${incoming.scheduledAt}`
+              );
+            }
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            const updated = mapRowToAppointment(payload.new as AppointmentRow);
+            setAppointments((prev) => {
+              const next = prev.map((a) => (a.id === updated.id ? updated : a));
+              writeCachedAppointments(next);
+              return next;
+            });
+
+            if (user && belongsToAppointment(updated, user)) {
+              if (updated.status === 'CONFIRMED') {
+                showWebNotification(
+                  '✅ Appointment Confirmed',
+                  `"${updated.title}" is confirmed for ${updated.scheduledAt}`
+                );
+              } else if (
+                updated.status === 'RESCHEDULE_PROPOSED' &&
+                updated.rescheduleProposedBy !== user.id
+              ) {
+                showWebNotification(
+                  '⏳ Reschedule Proposed',
+                  `New time proposed for "${updated.title}": ${updated.proposedScheduledAt || 'new date'}`
+                );
+              } else if (updated.status === 'CANCELLED') {
+                showWebNotification(
+                  '❌ Appointment Cancelled',
+                  `"${updated.title}" was cancelled.`
+                );
+              }
+            }
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            const deletedId = (payload.old as { id?: string }).id;
+            if (deletedId) {
+              setAppointments((prev) => {
+                const next = prev.filter((a) => a.id !== deletedId);
+                writeCachedAppointments(next);
+                return next;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(queryChannel);
+      supabase.removeChannel(aptChannel);
     };
-  }, [loadQueries]);
+  }, [loadQueries, loadAppointments]);
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
@@ -388,6 +494,7 @@ export const App: React.FC = () => {
     managerName: string;
     queryTitle: string;
     queryText: string;
+    linkedAppointmentId?: string | null;
   }) => {
     if (!currentUser) return;
     const now = new Date();
@@ -416,6 +523,7 @@ export const App: React.FC = () => {
       accountManagerRemark: '',
       accountManagerDone: false,
       status: 'Pending',
+      linkedAppointmentId: payload.linkedAppointmentId || null,
     };
 
     setQueries((prev) => {
@@ -696,6 +804,255 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleOpenBookAppointment = (
+    preselectedQueryId?: string | null,
+    preselectedUserId?: string | null
+  ) => {
+    setBookAptPreselectedQueryId(preselectedQueryId || null);
+    setBookAptPreselectedUserId(preselectedUserId || null);
+    setIsBookAptModalOpen(true);
+  };
+
+  const handleBookAppointment = async (
+    data: Omit<Appointment, 'id' | 'createdAt' | 'createdAtMs'>
+  ) => {
+    if (!currentUser) return;
+    const now = new Date();
+    const nextId = generateNextAppointmentId(appointments);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const createdAtStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(
+      now.getDate()
+    )} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+
+    const newAppointment: Appointment = {
+      ...data,
+      id: nextId,
+      createdAt: createdAtStr,
+      createdAtMs: now.getTime(),
+    };
+
+    setAppointments((prev) => [newAppointment, ...prev]);
+
+    // Save to Supabase (and cache)
+    await insertAppointmentInDb(newAppointment);
+
+    // Dual Push notification to recipient + admin
+    dispatchAppointmentPushNotification({
+      event: 'APPOINTMENT_REQUESTED',
+      appointment: newAppointment,
+      actor: currentUser,
+    });
+  };
+
+  const handleAcceptAppointment = async (appointmentId: string) => {
+    if (!currentUser) return;
+    const target = appointments.find((a) => a.id === appointmentId);
+    if (!target) return;
+
+    const updated = { ...target, status: 'CONFIRMED' as const };
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? updated : a))
+    );
+
+    await updateAppointmentInDb(appointmentId, { status: 'CONFIRMED' });
+
+    dispatchAppointmentPushNotification({
+      event: 'APPOINTMENT_ACCEPTED',
+      appointment: updated,
+      actor: currentUser,
+    });
+  };
+
+  const handleRescheduleClick = (appointment: Appointment) => {
+    setRescheduleTargetApt(appointment);
+    setIsRescheduleModalOpen(true);
+  };
+
+  const handleConfirmReschedule = async (
+    appointmentId: string,
+    proposedDateTime: string,
+    reason: string
+  ) => {
+    if (!currentUser) return;
+    const target = appointments.find((a) => a.id === appointmentId);
+    if (!target) return;
+
+    const proposedMs = Date.parse(proposedDateTime.replace(' ', 'T'));
+    const updated: Appointment = {
+      ...target,
+      status: 'RESCHEDULE_PROPOSED',
+      rescheduleProposedBy: currentUser.id,
+      proposedScheduledAt: proposedDateTime,
+      proposedScheduledAtMs: proposedMs,
+      rescheduleReason: reason,
+    };
+
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? updated : a))
+    );
+
+    await updateAppointmentInDb(appointmentId, {
+      status: 'RESCHEDULE_PROPOSED',
+      reschedule_proposed_by: currentUser.id,
+      proposed_scheduled_at: proposedDateTime,
+      proposed_scheduled_at_ms: proposedMs,
+      reschedule_reason: reason,
+    });
+
+    dispatchAppointmentPushNotification({
+      event: 'APPOINTMENT_RESCHEDULE_REQUESTED',
+      appointment: updated,
+      actor: currentUser,
+    });
+  };
+
+  const handleAcceptReschedule = async (appointmentId: string) => {
+    if (!currentUser) return;
+    const target = appointments.find((a) => a.id === appointmentId);
+    if (!target || !target.proposedScheduledAt) return;
+
+    const updated: Appointment = {
+      ...target,
+      status: 'CONFIRMED',
+      scheduledAt: target.proposedScheduledAt,
+      scheduledAtMs:
+        target.proposedScheduledAtMs ||
+        Date.parse(target.proposedScheduledAt.replace(' ', 'T')),
+      rescheduleProposedBy: null,
+      proposedScheduledAt: null,
+      proposedScheduledAtMs: null,
+      rescheduleReason: null,
+    };
+
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? updated : a))
+    );
+
+    await updateAppointmentInDb(appointmentId, {
+      status: 'CONFIRMED',
+      scheduled_at: updated.scheduledAt,
+      scheduled_at_ms: updated.scheduledAtMs,
+      reschedule_proposed_by: null,
+      proposed_scheduled_at: null,
+      proposed_scheduled_at_ms: null,
+      reschedule_reason: null,
+    });
+
+    dispatchAppointmentPushNotification({
+      event: 'APPOINTMENT_RESCHEDULE_ACCEPTED',
+      appointment: updated,
+      actor: currentUser,
+    });
+  };
+
+  const handleDeclineAppointment = async (appointmentId: string) => {
+    if (!currentUser) return;
+    const target = appointments.find((a) => a.id === appointmentId);
+    if (!target) return;
+
+    const updated: Appointment = { ...target, status: 'DECLINED' };
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? updated : a))
+    );
+
+    await updateAppointmentInDb(appointmentId, { status: 'DECLINED' });
+
+    dispatchAppointmentPushNotification({
+      event: 'APPOINTMENT_CANCELLED',
+      appointment: updated,
+      actor: currentUser,
+    });
+  };
+
+  const handleCancelAppointment = async (appointmentId: string) => {
+    if (!currentUser) return;
+    const target = appointments.find((a) => a.id === appointmentId);
+    if (!target) return;
+
+    const updated: Appointment = { ...target, status: 'CANCELLED' };
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? updated : a))
+    );
+
+    await updateAppointmentInDb(appointmentId, { status: 'CANCELLED' });
+
+    dispatchAppointmentPushNotification({
+      event: 'APPOINTMENT_CANCELLED',
+      appointment: updated,
+      actor: currentUser,
+    });
+  };
+
+  const handleEditAppointment = (appointment: Appointment) => {
+    setAppointmentToEdit(appointment);
+    setIsBookAptModalOpen(true);
+  };
+
+  const handleUpdateAppointment = async (
+    appointmentId: string,
+    updates: Partial<Appointment>
+  ) => {
+    if (!currentUser) return;
+    const existing = appointments.find((a) => a.id === appointmentId);
+    if (!existing) return;
+
+    const updated: Appointment = {
+      ...existing,
+      ...updates,
+    };
+
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? updated : a))
+    );
+
+    await updateAppointmentInDb(appointmentId, updates);
+
+    dispatchAppointmentPushNotification({
+      event: 'APPOINTMENT_UPDATED',
+      appointment: updated,
+      actor: currentUser,
+    });
+  };
+
+  const handleCancelAppointmentWithRemark = async (
+    appointmentId: string,
+    remark: string
+  ) => {
+    if (!currentUser) return;
+    const target = appointments.find((a) => a.id === appointmentId);
+    if (!target) return;
+
+    const nowIso = new Date().toISOString();
+    const updated: Appointment = {
+      ...target,
+      status: 'CANCELLED',
+      cancellationRemark: remark,
+      cancelledAt: nowIso,
+    };
+
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? updated : a))
+    );
+
+    await updateAppointmentInDb(appointmentId, {
+      status: 'CANCELLED',
+      cancellation_remark: remark,
+      cancelled_at: nowIso,
+    });
+
+    dispatchAppointmentPushNotification({
+      event: 'APPOINTMENT_CANCELLED',
+      appointment: updated,
+      actor: currentUser,
+    });
+  };
+
+  const handleOpenCreateQueryForAppointment = (appointment: Appointment) => {
+    setPendingFollowupAppointment(appointment);
+    setActivePage('queries');
+  };
+
   const handleCopySql = async () => {
     try {
       await navigator.clipboard.writeText(sqlSchemaText);
@@ -785,7 +1142,17 @@ export const App: React.FC = () => {
               currentUser={currentUser}
               queries={queries}
               users={allUsers}
+              appointments={appointments}
               onNavigate={setActivePage}
+              onOpenBookAppointment={handleOpenBookAppointment}
+              onAcceptAppointment={handleAcceptAppointment}
+              onRescheduleClick={handleRescheduleClick}
+              onAcceptReschedule={handleAcceptReschedule}
+              onDeclineAppointment={handleDeclineAppointment}
+              onCancelAppointment={handleCancelAppointment}
+              onEditAppointment={handleEditAppointment}
+              onCancelAppointmentWithRemark={handleCancelAppointmentWithRemark}
+              onOpenCreateQueryForAppointment={handleOpenCreateQueryForAppointment}
             />
           ) : activePage === 'kpi' ? (
             <KPIPage
@@ -799,12 +1166,44 @@ export const App: React.FC = () => {
               currentUser={currentUser}
               queries={queries}
               savingQueryId={savingQueryId}
+              appointments={appointments}
+              initialFollowupAppointment={pendingFollowupAppointment}
+              onOpenBookAppointment={handleOpenBookAppointment}
               onCreateQuery={handleCreateQuery}
               onUpdateQuery={handleUpdateQuery}
             />
           )}
         </main>
       </div>
+
+      <BookAppointmentModal
+        isOpen={isBookAptModalOpen}
+        onClose={() => {
+          setIsBookAptModalOpen(false);
+          setAppointmentToEdit(null);
+          setBookAptPreselectedQueryId(null);
+          setBookAptPreselectedUserId(null);
+        }}
+        currentUser={currentUser}
+        users={allUsers}
+        queries={queries}
+        preselectedQueryId={bookAptPreselectedQueryId}
+        preselectedUserId={bookAptPreselectedUserId}
+        appointmentToEdit={appointmentToEdit}
+        onBookAppointment={handleBookAppointment}
+        onUpdateAppointment={handleUpdateAppointment}
+      />
+
+      <RescheduleAppointmentModal
+        isOpen={isRescheduleModalOpen}
+        onClose={() => {
+          setIsRescheduleModalOpen(false);
+          setRescheduleTargetApt(null);
+        }}
+        appointment={rescheduleTargetApt}
+        currentUser={currentUser}
+        onConfirmReschedule={handleConfirmReschedule}
+      />
 
       <NotificationModal
         isOpen={isNotifModalOpen}

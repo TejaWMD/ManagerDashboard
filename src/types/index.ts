@@ -54,6 +54,64 @@ export interface Query {
   extensionReason?: string | null;
   extensionReviewNote?: string | null;
   extensionReviewedAt?: string | null;
+  linkedAppointmentId?: string | null; // e.g. 'APT-001' if query was raised following an appointment
+}
+
+export type MeetingType = 'Online Call' | 'Office/Desk' | 'Phone';
+
+export type AppointmentStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'RESCHEDULE_PROPOSED'
+  | 'DECLINED'
+  | 'CANCELLED'
+  | 'COMPLETED';
+
+export interface AppointmentAttendee {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  status?: AppointmentStatus;
+}
+
+export interface Appointment {
+  id: string; // e.g., 'APT-001'
+  title: string; // Subject / Topic
+  agenda: string; // Agenda / Discussion (Mandatory)
+  requesterId: string; // Foreign Key -> UserAccount.id
+  requesterName: string;
+  requesterEmail: string;
+  requesterRole: UserRole;
+  // Multiple attendees
+  attendees: AppointmentAttendee[];
+  receiverId?: string; // Fallback / Primary attendee
+  receiverName?: string;
+  receiverEmail?: string;
+  receiverRole?: UserRole;
+  scheduledAt: string; // e.g., '2026-10-28 14:30:00'
+  scheduledAtMs: number; // Epoch ms for time calculations & sorting
+  durationMinutes?: number; // Optional
+  meetingType: MeetingType; // 'Online Call' | 'Office/Desk' | 'Phone'
+  meetingLocation?: string; // Room, call link, or phone note
+  status: AppointmentStatus;
+  
+  // Reschedule tracking
+  rescheduleProposedBy?: string | null; // User ID who initiated the reschedule
+  proposedScheduledAt?: string | null;
+  proposedScheduledAtMs?: number | null;
+  rescheduleReason?: string | null;
+
+  // Cancellation tracking (Requester only with mandatory remark)
+  cancellationRemark?: string | null;
+  cancelledAt?: string | null;
+
+  // Bidirectional Query Link
+  queryId?: string | null; // e.g. 'QRY-001' if linked to an existing query
+
+  createdAt: string;
+  createdAtMs: number;
+  updatedAt?: string | null;
 }
 
 export const DELAY_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours (172,800,000 ms)
@@ -219,6 +277,67 @@ export function isQueryRelevantToUser(
     );
   }
   return true;
+}
+
+export function belongsToAppointment(
+  appointment: Appointment,
+  user: Pick<UserAccount, 'id' | 'email' | 'role'>
+): boolean {
+  if (user.role === 'admin') return true;
+  if (appointment.requesterId === user.id) return true;
+  if (
+    Boolean(user.email) &&
+    appointment.requesterEmail?.toLowerCase() === user.email.toLowerCase()
+  ) {
+    return true;
+  }
+  if (Array.isArray(appointment.attendees) && appointment.attendees.length > 0) {
+    return appointment.attendees.some(
+      (att) =>
+        att.id === user.id ||
+        (Boolean(user.email) &&
+          att.email?.toLowerCase() === user.email.toLowerCase())
+    );
+  }
+  return (
+    appointment.receiverId === user.id ||
+    (Boolean(user.email) &&
+      appointment.receiverEmail?.toLowerCase() === user.email.toLowerCase())
+  );
+}
+
+export function isAppointmentActionNeeded(
+  appointment: Appointment,
+  user: Pick<UserAccount, 'id'>
+): boolean {
+  if (appointment.status === 'PENDING') {
+    if (appointment.requesterId === user.id) return false;
+    if (Array.isArray(appointment.attendees) && appointment.attendees.length > 0) {
+      return appointment.attendees.some((a) => a.id === user.id);
+    }
+    return appointment.receiverId === user.id;
+  }
+  if (
+    appointment.status === 'RESCHEDULE_PROPOSED' &&
+    appointment.rescheduleProposedBy !== user.id
+  ) {
+    if (appointment.requesterId === user.id) return true;
+    if (Array.isArray(appointment.attendees) && appointment.attendees.length > 0) {
+      return appointment.attendees.some((a) => a.id === user.id);
+    }
+    return appointment.receiverId === user.id;
+  }
+  return false;
+}
+
+export function isAppointmentUpcoming(
+  appointment: Appointment,
+  nowMs = Date.now()
+): boolean {
+  if (appointment.status === 'CANCELLED' || appointment.status === 'DECLINED') {
+    return false;
+  }
+  return appointment.scheduledAtMs >= nowMs - 30 * 60 * 1000; // within 30 min ago or in the future
 }
 
 // -----------------------------------------------------------------------------

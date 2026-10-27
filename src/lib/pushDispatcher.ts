@@ -1,5 +1,5 @@
 // Notification Dispatcher & Role Matrix for WMD Query Portal
-import { Query, UserAccount } from '../types';
+import { Query, UserAccount, Appointment } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 import { supabase } from './supabase';
 import { showWebNotification } from './notifications';
@@ -242,3 +242,173 @@ export async function dispatchQueryPushNotification(
     return { success: false, recipientCount: recipientUserIds.length };
   }
 }
+
+// ============================================================================
+// Appointment Notifications
+// ============================================================================
+
+export type AppointmentNotificationEventType =
+  | 'APPOINTMENT_REQUESTED'
+  | 'APPOINTMENT_ACCEPTED'
+  | 'APPOINTMENT_RESCHEDULE_REQUESTED'
+  | 'APPOINTMENT_RESCHEDULE_ACCEPTED'
+  | 'APPOINTMENT_CANCELLED'
+  | 'APPOINTMENT_UPDATED';
+
+export interface DispatchAppointmentNotificationParams {
+  event: AppointmentNotificationEventType;
+  appointment: Appointment;
+  actor: UserAccount;
+  note?: string;
+}
+
+export function computeAppointmentRecipients(
+  event: AppointmentNotificationEventType,
+  appointment: Appointment,
+  actorId: string
+): string[] {
+  const adminIds = getAdminUserIds();
+  const rawRecipients: string[] = [];
+  const attendeeIds =
+    Array.isArray(appointment.attendees) && appointment.attendees.length > 0
+      ? appointment.attendees.map((a) => a.id)
+      : [appointment.receiverId || ''];
+
+  switch (event) {
+    case 'APPOINTMENT_REQUESTED':
+    case 'APPOINTMENT_UPDATED':
+      // Requester sent/updated -> Notify all Attendees + Admin
+      rawRecipients.push(...attendeeIds, ...adminIds);
+      break;
+
+    case 'APPOINTMENT_ACCEPTED':
+      // An attendee accepted -> Notify Requester + other attendees + Admin
+      rawRecipients.push(appointment.requesterId, ...attendeeIds, ...adminIds);
+      break;
+
+    case 'APPOINTMENT_RESCHEDULE_REQUESTED':
+      // Reschedule proposed -> Notify Requester + all attendees + Admin
+      rawRecipients.push(appointment.requesterId, ...attendeeIds, ...adminIds);
+      break;
+
+    case 'APPOINTMENT_RESCHEDULE_ACCEPTED':
+      // New time accepted -> Notify both parties (excluding actor) + Admin
+      rawRecipients.push(appointment.requesterId, ...attendeeIds, ...adminIds);
+      break;
+
+    case 'APPOINTMENT_CANCELLED':
+      // Requester cancelled -> Notify all Attendees + Admin
+      rawRecipients.push(...attendeeIds, ...adminIds);
+      break;
+  }
+
+  // Deduplicate and filter out the initiator
+  return Array.from(new Set(rawRecipients)).filter(
+    (id) => Boolean(id) && id !== actorId
+  );
+}
+
+export function formatAppointmentNotificationContent(
+  event: AppointmentNotificationEventType,
+  appointment: Appointment,
+  actor: UserAccount
+): { title: string; body: string } {
+  const timeLabel = appointment.scheduledAt;
+
+  switch (event) {
+    case 'APPOINTMENT_REQUESTED':
+      return {
+        title: `📅 New Appointment: ${appointment.title}`,
+        body: `${actor.name} scheduled a ${appointment.meetingType} on ${timeLabel}. Agenda: "${appointment.agenda.slice(0, 80)}"`,
+      };
+
+    case 'APPOINTMENT_ACCEPTED':
+      return {
+        title: `✅ Appointment Confirmed: ${appointment.title}`,
+        body: `${actor.name} confirmed the appointment for ${timeLabel}.`,
+      };
+
+    case 'APPOINTMENT_RESCHEDULE_REQUESTED':
+      return {
+        title: `⏳ Reschedule Requested: ${appointment.title}`,
+        body: `${actor.name} proposed a new time (${appointment.proposedScheduledAt || 'new date/time'}). Reason: "${appointment.rescheduleReason || 'Schedule conflict'}"`,
+      };
+
+    case 'APPOINTMENT_RESCHEDULE_ACCEPTED':
+      return {
+        title: `✅ Reschedule Confirmed: ${appointment.title}`,
+        body: `The new meeting time has been confirmed for ${timeLabel}.`,
+      };
+
+    case 'APPOINTMENT_UPDATED':
+      return {
+        title: `📝 Appointment Updated: ${appointment.title}`,
+        body: `${actor.name} updated the appointment details for ${timeLabel}.`,
+      };
+
+    case 'APPOINTMENT_CANCELLED':
+      return {
+        title: `❌ Appointment Cancelled: ${appointment.title}`,
+        body: `${actor.name} cancelled the appointment for ${timeLabel}. Remark: "${appointment.cancellationRemark || 'Cancelled after discussion'}"`,
+      };
+  }
+}
+
+export async function dispatchAppointmentPushNotification(
+  params: DispatchAppointmentNotificationParams
+): Promise<{ success: boolean; recipientCount: number }> {
+  const { event, appointment, actor } = params;
+
+  const recipientUserIds = computeAppointmentRecipients(event, appointment, actor.id);
+  if (recipientUserIds.length === 0) {
+    return { success: true, recipientCount: 0 };
+  }
+
+  const { title, body } = formatAppointmentNotificationContent(
+    event,
+    appointment,
+    actor
+  );
+
+  const payload = {
+    event,
+    appointmentId: appointment.id,
+    actorId: actor.id,
+    actorName: actor.name,
+    recipientUserIds,
+    title,
+    body,
+    icon: './portal-icon.svg',
+    badge: './portal-icon.svg',
+    tag: `wmd-${appointment.id}-${event.toLowerCase()}`,
+    data: {
+      appointmentId: appointment.id,
+      url: './',
+      event,
+    },
+  };
+
+  try {
+    // 1. Invoke Supabase Edge Function 'send-push'
+    const { data, error } = await supabase.functions.invoke('send-push', {
+      body: payload,
+    });
+
+    if (error) {
+      console.warn('[PushDispatcher] Supabase Edge Function error for appointment:', error.message);
+    } else {
+      console.log('[PushDispatcher] Appointment push result:', data);
+    }
+
+    // 2. Play chime and desktop notification
+    showWebNotification(title, body, payload.tag);
+
+    return { success: !error, recipientCount: recipientUserIds.length };
+  } catch (err) {
+    console.warn('[PushDispatcher] Failed to dispatch appointment notification:', err);
+    // Still trigger in-app notification
+    showWebNotification(title, body, payload.tag);
+    return { success: false, recipientCount: recipientUserIds.length };
+  }
+}
+
