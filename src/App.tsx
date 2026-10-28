@@ -627,6 +627,7 @@ export const App: React.FC = () => {
         | 'extensionReviewedAt'
         | 'isUrgent'
         | 'lastUrgentReminderAtMs'
+        | 'linkedAppointmentId'
       >
     >
   ) => {
@@ -761,6 +762,34 @@ export const App: React.FC = () => {
         persistQueriesCache(next);
         return next;
       });
+
+      // Synchronize appointment's queryId if linkedAppointmentId changed
+      if (updates.linkedAppointmentId !== undefined) {
+        const newLinkedAptId = updates.linkedAppointmentId;
+        const oldLinkedAptId = existing.linkedAppointmentId;
+
+        if (oldLinkedAptId && oldLinkedAptId !== newLinkedAptId) {
+          setAppointments((prev) => {
+            const next = prev.map((a) =>
+              a.id === oldLinkedAptId ? { ...a, queryId: null } : a
+            );
+            writeCachedAppointments(next);
+            return next;
+          });
+          updateAppointmentInDb(oldLinkedAptId, { queryId: null });
+        }
+
+        if (newLinkedAptId) {
+          setAppointments((prev) => {
+            const next = prev.map((a) =>
+              a.id === newLinkedAptId ? { ...a, queryId } : a
+            );
+            writeCachedAppointments(next);
+            return next;
+          });
+          updateAppointmentInDb(newLinkedAptId, { queryId });
+        }
+      }
 
       // Dispatch desktop background push notifications to involved users & admin
       if (

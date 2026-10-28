@@ -4,6 +4,7 @@ import {
   belongsToAppointment,
   belongsToManager,
   getLinkedAppointmentForQuery,
+  isUserParticipantInAppointment,
   Query,
   isQueryDelayed,
   isQueryDone,
@@ -57,6 +58,7 @@ interface QueryPageProps {
         | 'extensionReviewedAt'
         | 'isDelayed'
         | 'isUrgent'
+        | 'linkedAppointmentId'
       >
     >
   ) => Promise<void>;
@@ -150,7 +152,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       const mgr = managers.find(
         (m) =>
           m.id === initialFollowupAppointment.receiverId ||
-          m.id === initialFollowupAppointment.requesterId
+          m.id === initialFollowupAppointment.requesterId ||
+          (Array.isArray(initialFollowupAppointment.attendees) &&
+            initialFollowupAppointment.attendees.some((a) => a.id === m.id))
       );
       if (mgr) {
         setSelectedManagerId(mgr.id);
@@ -165,6 +169,32 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     }
     setShowCreateModal(true);
   };
+
+  // Manager currently selected in Create Query modal
+  const selectedManagerForCreation = useMemo(() => {
+    return managers.find((m) => m.id === selectedManagerId) || null;
+  }, [managers, selectedManagerId]);
+
+  // Requirement 1: In query list, if linking an existing appointment to the query,
+  // the receiving manager should be one of the attendees in the appointment.
+  const linkableAppointmentsForCreation = useMemo(() => {
+    if (!selectedManagerForCreation) return [];
+    return appointments.filter(
+      (apt) =>
+        belongsToAppointment(apt, currentUser) &&
+        isUserParticipantInAppointment(apt, selectedManagerForCreation)
+    );
+  }, [appointments, currentUser, selectedManagerForCreation]);
+
+  // If receiving manager changes and the selected appointment does not include this manager, clear selection
+  useEffect(() => {
+    if (selectedAppointmentId && selectedManagerForCreation) {
+      const apt = appointments.find((a) => a.id === selectedAppointmentId);
+      if (!apt || !isUserParticipantInAppointment(apt, selectedManagerForCreation)) {
+        setSelectedAppointmentId('');
+      }
+    }
+  }, [selectedManagerId, appointments, selectedManagerForCreation, selectedAppointmentId]);
 
   // Inline editing states
   const [editingSenderRemarkId, setEditingSenderRemarkId] = useState<string | null>(null);
@@ -317,6 +347,34 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     return getLinkedAppointmentForQuery(activeViewingQuery, appointments);
   }, [activeViewingQuery, appointments]);
 
+  // Linking an existing appointment to the currently viewed query
+  const [isLinkingExistingApt, setIsLinkingExistingApt] = useState<boolean>(false);
+  const [chosenExistingAptId, setChosenExistingAptId] = useState<string>('');
+  const [linkExistingError, setLinkExistingError] = useState<string | null>(null);
+  const [isSubmittingLinkApt, setIsSubmittingLinkApt] = useState<boolean>(false);
+
+  // Eligible existing appointments for the active viewing query:
+  // Must belong to currentUser AND receiving manager of activeViewingQuery must be an attendee/participant
+  const linkableAppointmentsForActiveQuery = useMemo(() => {
+    if (!activeViewingQuery) return [];
+    const receivingManager = {
+      id: activeViewingQuery.managerId,
+      email: activeViewingQuery.managerEmail,
+      name: activeViewingQuery.managerName,
+    };
+    return appointments.filter(
+      (apt) =>
+        belongsToAppointment(apt, currentUser) &&
+        isUserParticipantInAppointment(apt, receivingManager)
+    );
+  }, [activeViewingQuery, appointments, currentUser]);
+
+  useEffect(() => {
+    setIsLinkingExistingApt(false);
+    setChosenExistingAptId('');
+    setLinkExistingError(null);
+  }, [viewingQuery?.queryId]);
+
   // 1. Role-scoped queries
   // Account Managers see queries they created.
   // Managers see queries assigned to them AND queries they sent among themselves.
@@ -438,6 +496,17 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
     const targetManager = managers.find((m) => m.id === selectedManagerId);
     if (!targetManager) return;
+
+    // Requirement 1: If linking an existing appointment to the query, the receiving manager must be an attendee in the appointment
+    if (selectedAppointmentId) {
+      const linkedApt = appointments.find((a) => a.id === selectedAppointmentId);
+      if (!linkedApt || !isUserParticipantInAppointment(linkedApt, targetManager)) {
+        alert(
+          `The receiving manager (${targetManager.name}) must be one of the attendees in the linked appointment.`
+        );
+        return;
+      }
+    }
 
     setIsSubmittingNew(true);
     try {
@@ -1368,16 +1437,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   onChange={(e) => setSelectedAppointmentId(e.target.value)}
                 >
                   <option value="">-- No linked appointment --</option>
-                  {appointments
-                    .filter((apt) => belongsToAppointment(apt, currentUser))
-                    .map((apt) => (
-                      <option key={apt.id} value={apt.id}>
-                        [{apt.id}] {apt.title} ({apt.scheduledAt})
-                      </option>
-                    ))}
+                  {linkableAppointmentsForCreation.map((apt) => (
+                    <option key={apt.id} value={apt.id}>
+                      [{apt.id}] {apt.title} ({apt.scheduledAt})
+                    </option>
+                  ))}
                 </select>
                 <span className="form-helper-text" style={{ fontSize: '0.74rem', color: '#786e60' }}>
-                  Link this query to a prior meeting or discussion.
+                  {selectedManagerForCreation
+                    ? linkableAppointmentsForCreation.length > 0
+                      ? `Showing ${linkableAppointmentsForCreation.length} appointment(s) where Manager ${selectedManagerForCreation.name} is an attendee.`
+                      : `No appointments found where Manager ${selectedManagerForCreation.name} is an attendee.`
+                    : 'Select a manager above to view eligible appointments.'}
                 </span>
               </div>
 
@@ -1731,21 +1802,43 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               {activeViewingLinkedAppointment.title}
                             </strong>
                           </div>
-                          <span
-                            className={`apt-status-pill apt-status-pill--${activeViewingLinkedAppointment.status.toLowerCase()}`}
-                          >
-                            {activeViewingLinkedAppointment.status === 'CONFIRMED'
-                              ? 'Confirmed'
-                              : activeViewingLinkedAppointment.status === 'PENDING'
-                              ? 'Pending Acceptance'
-                              : activeViewingLinkedAppointment.status === 'RESCHEDULE_PROPOSED'
-                              ? 'Reschedule Proposed'
-                              : activeViewingLinkedAppointment.status === 'DECLINED'
-                              ? 'Declined'
-                              : activeViewingLinkedAppointment.status === 'CANCELLED'
-                              ? 'Cancelled'
-                              : 'Completed'}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            <span
+                              className={`apt-status-pill apt-status-pill--${activeViewingLinkedAppointment.status.toLowerCase()}`}
+                            >
+                              {activeViewingLinkedAppointment.status === 'CONFIRMED'
+                                ? 'Confirmed'
+                                : activeViewingLinkedAppointment.status === 'PENDING'
+                                ? 'Pending Acceptance'
+                                : activeViewingLinkedAppointment.status === 'RESCHEDULE_PROPOSED'
+                                ? 'Reschedule Proposed'
+                                : activeViewingLinkedAppointment.status === 'DECLINED'
+                                ? 'Declined'
+                                : activeViewingLinkedAppointment.status === 'CANCELLED'
+                                ? 'Cancelled'
+                                : 'Completed'}
+                            </span>
+                            <button
+                              type="button"
+                              style={{
+                                background: '#ffffff',
+                                border: '1px solid rgba(132, 73, 24, 0.25)',
+                                borderRadius: '4px',
+                                padding: '2px 8px',
+                                fontSize: '0.72rem',
+                                color: '#78350f',
+                                cursor: 'pointer',
+                              }}
+                              title="Unlink this appointment from the query"
+                              onClick={async () => {
+                                if (window.confirm(`Unlink appointment ${activeViewingLinkedAppointment.id} from query ${activeViewingQuery.queryId}?`)) {
+                                  await onUpdateQuery(activeViewingQuery.queryId, { linkedAppointmentId: null });
+                                }
+                              }}
+                            >
+                              Unlink
+                            </button>
+                          </div>
                         </div>
 
                         <div
@@ -2055,7 +2148,155 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 </div>
               )}
 
+              {/* Requirement 1: Link Existing Appointment in Query List (Query Details Modal) */}
+              {!activeViewingLinkedAppointment &&
+                !activeViewingQuery.linkedAppointmentId &&
+                isLinkingExistingApt && (
+                  <div className="query-view-section">
+                    <span className="query-view-section-label">Link Existing Appointment</span>
+                    <div
+                      className="query-view-content-box"
+                      style={{
+                        background: '#fefce8',
+                        border: '1px solid #fef08a',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.65rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.82rem', color: '#854d0e', fontWeight: 600 }}>
+                          Select an existing appointment where Manager <strong>{activeViewingQuery.managerName}</strong> is an attendee:
+                        </span>
+                        <button
+                          type="button"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '1.1rem',
+                            color: '#854d0e',
+                            lineHeight: 1,
+                          }}
+                          onClick={() => {
+                            setIsLinkingExistingApt(false);
+                            setLinkExistingError(null);
+                          }}
+                          aria-label="Close"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {linkableAppointmentsForActiveQuery.length === 0 ? (
+                        <div style={{ fontSize: '0.82rem', color: '#b91c1c', fontStyle: 'italic' }}>
+                          No eligible appointments found where Manager {activeViewingQuery.managerName} is an attendee.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <select
+                            style={{
+                              flex: 1,
+                              minWidth: '220px',
+                              padding: '0.4rem 0.6rem',
+                              borderRadius: '6px',
+                              border: '1px solid #d4cbbd',
+                              fontSize: '0.82rem',
+                              background: '#ffffff',
+                            }}
+                            value={chosenExistingAptId}
+                            onChange={(e) => {
+                              setChosenExistingAptId(e.target.value);
+                              setLinkExistingError(null);
+                            }}
+                          >
+                            <option value="">-- Select an appointment --</option>
+                            {linkableAppointmentsForActiveQuery.map((apt) => (
+                              <option key={apt.id} value={apt.id}>
+                                [{apt.id}] {apt.title} ({apt.scheduledAt})
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
+                            disabled={isSubmittingLinkApt || !chosenExistingAptId}
+                            onClick={async () => {
+                              if (!chosenExistingAptId) {
+                                setLinkExistingError('Please select an appointment.');
+                                return;
+                              }
+                              const targetApt = appointments.find((a) => a.id === chosenExistingAptId);
+                              if (
+                                !targetApt ||
+                                !isUserParticipantInAppointment(targetApt, {
+                                  id: activeViewingQuery.managerId,
+                                  email: activeViewingQuery.managerEmail,
+                                  name: activeViewingQuery.managerName,
+                                })
+                              ) {
+                                setLinkExistingError(
+                                  `The receiving manager (${activeViewingQuery.managerName}) must be one of the attendees in this appointment.`
+                                );
+                                return;
+                              }
+                              setIsSubmittingLinkApt(true);
+                              try {
+                                await onUpdateQuery(activeViewingQuery.queryId, {
+                                  linkedAppointmentId: chosenExistingAptId,
+                                });
+                                setIsLinkingExistingApt(false);
+                                setChosenExistingAptId('');
+                                setLinkExistingError(null);
+                              } finally {
+                                setIsSubmittingLinkApt(false);
+                              }
+                            }}
+                          >
+                            {isSubmittingLinkApt ? 'Linking...' : 'Confirm Link'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
+                            onClick={() => {
+                              setIsLinkingExistingApt(false);
+                              setLinkExistingError(null);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+
+                      {linkExistingError && (
+                        <div style={{ color: '#b91c1c', fontSize: '0.76rem', fontWeight: 600 }}>
+                          {linkExistingError}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               <div className="modal-actions" style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                {!activeViewingLinkedAppointment &&
+                  !activeViewingQuery.linkedAppointmentId &&
+                  !isLinkingExistingApt && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        setIsLinkingExistingApt(true);
+                        setLinkExistingError(null);
+                        if (linkableAppointmentsForActiveQuery.length > 0) {
+                          setChosenExistingAptId(linkableAppointmentsForActiveQuery[0].id);
+                        }
+                      }}
+                    >
+                      🔗 Link Existing Appointment
+                    </button>
+                  )}
                 {!activeViewingLinkedAppointment &&
                   !activeViewingQuery.linkedAppointmentId &&
                   onOpenBookAppointment && (

@@ -1318,6 +1318,12 @@
   color: #92400e;
 }
 
+.apt-role-tag--required {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
 .apt-attendee-email {
   font-size: 0.72rem;
   color: #786e60;

@@ -74,6 +74,17 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Identify the linked query (if any) and its receiving manager
+  const selectedLinkedQuery = useMemo(() => {
+    if (!selectedQueryId.trim()) return null;
+    return queries.find((q) => q.queryId === selectedQueryId.trim()) || null;
+  }, [queries, selectedQueryId]);
+
+  const receivingManagerId = selectedLinkedQuery?.managerId || null;
+  const isCurrentUserManager = Boolean(
+    receivingManagerId && currentUser.id === receivingManagerId
+  );
+
   // Initialize or reset form when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -95,7 +106,18 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
             : appointmentToEdit.receiverId
             ? [appointmentToEdit.receiverId]
             : [];
-        setSelectedUserIds(existingAttendeeIds);
+
+        // If the appointment is linked to a query, ensure the receiving manager is present in attendees
+        let resolvedAttendeeIds = [...existingAttendeeIds];
+        if (appointmentToEdit.queryId) {
+          const linkedQ = queries.find((q) => q.queryId === appointmentToEdit.queryId);
+          if (linkedQ && appointmentToEdit.requesterId !== linkedQ.managerId) {
+            if (!resolvedAttendeeIds.includes(linkedQ.managerId)) {
+              resolvedAttendeeIds.push(linkedQ.managerId);
+            }
+          }
+        }
+        setSelectedUserIds(resolvedAttendeeIds);
 
         // Convert scheduledAt to ISO local for datetime-local input
         const baseDate = new Date(
@@ -124,9 +146,10 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
           const q = queries.find((item) => item.queryId === preselectedQueryId);
           if (q) {
             setTitle(`Discussion: ${q.queryTitle || q.queryText.slice(0, 40)}`);
-            if (currentUser.id === q.accountManagerId) {
+            // Requirement 2: The receiving manager of the query must be one of the attendees
+            if (currentUser.id !== q.managerId) {
               setSelectedUserIds([q.managerId]);
-            } else if (currentUser.id === q.managerId) {
+            } else {
               setSelectedUserIds([q.accountManagerId]);
             }
           }
@@ -165,6 +188,18 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
 
   // Toggle user in multi-select
   const handleToggleUser = (userId: string) => {
+    if (
+      selectedLinkedQuery &&
+      !isCurrentUserManager &&
+      userId === receivingManagerId &&
+      selectedUserIds.includes(userId)
+    ) {
+      setErrorMessage(
+        `Manager ${selectedLinkedQuery.managerName} is the receiving manager of query ${selectedLinkedQuery.queryId} and must remain an attendee while this query is linked. To remove this manager, unlink the query below.`
+      );
+      return;
+    }
+    setErrorMessage(null);
     setSelectedUserIds((prev) =>
       prev.includes(userId)
         ? prev.filter((id) => id !== userId)
@@ -180,6 +215,10 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
   };
 
   const handleClearAttendees = () => {
+    if (selectedLinkedQuery && !isCurrentUserManager && receivingManagerId) {
+      setSelectedUserIds([receivingManagerId]);
+      return;
+    }
     setSelectedUserIds([]);
   };
 
@@ -197,6 +236,21 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    // Requirement 2: If linked to an existing query, the receiving manager of the query MUST be one of the attendees
+    if (selectedLinkedQuery) {
+      const isCreatorManager =
+        isEditMode && appointmentToEdit
+          ? appointmentToEdit.requesterId === selectedLinkedQuery.managerId
+          : currentUser.id === selectedLinkedQuery.managerId;
+
+      if (!isCreatorManager && !selectedUserIds.includes(selectedLinkedQuery.managerId)) {
+        setErrorMessage(
+          `The receiving manager (${selectedLinkedQuery.managerName}) of query ${selectedLinkedQuery.queryId} must be one of the attendees.`
+        );
+        return;
+      }
+    }
 
     if (selectedUserIds.length === 0) {
       setErrorMessage('Please select at least one attendee / participant.');
@@ -437,6 +491,14 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
                         <span className={`apt-role-tag apt-role-tag--${u.role}`}>
                           {u.roleLabel}
                         </span>
+                        {selectedLinkedQuery && !isCurrentUserManager && u.id === receivingManagerId && (
+                          <span
+                            className="apt-role-tag apt-role-tag--required"
+                            title={`Receiving manager of linked query ${selectedLinkedQuery.queryId}`}
+                          >
+                            Receiving Manager
+                          </span>
+                        )}
                       </div>
                       <span className="apt-attendee-email">{u.email}</span>
                     </div>
@@ -583,10 +645,19 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
               onChange={(e) => {
                 const qId = e.target.value;
                 setSelectedQueryId(qId);
-                if (qId && !title) {
+                setErrorMessage(null);
+                if (qId) {
                   const q = queries.find((item) => item.queryId === qId);
                   if (q) {
-                    setTitle(`Discussion: ${q.queryTitle || q.queryText.slice(0, 40)}`);
+                    if (!title.trim()) {
+                      setTitle(`Discussion: ${q.queryTitle || q.queryText.slice(0, 40)}`);
+                    }
+                    // Requirement 2: Ensure the receiving manager of the query is one of the attendees
+                    if (currentUser.id !== q.managerId) {
+                      setSelectedUserIds((prev) =>
+                        Array.from(new Set([...prev, q.managerId]))
+                      );
+                    }
                   }
                 }
               }}
@@ -598,6 +669,23 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
                 </option>
               ))}
             </select>
+            {selectedLinkedQuery && !isCurrentUserManager && (
+              <span
+                className="apt-form-hint"
+                style={{
+                  color: '#854d0e',
+                  background: '#fefce8',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid #fef08a',
+                  display: 'inline-block',
+                  marginTop: '0.45rem',
+                  fontSize: '0.74rem',
+                }}
+              >
+                📌 Linked query: <strong>{selectedLinkedQuery.queryId}</strong>. Receiving Manager <strong>{selectedLinkedQuery.managerName}</strong> is required and has been added to attendees.
+              </span>
+            )}
           </div>
 
           {/* Modal Actions Footer */}

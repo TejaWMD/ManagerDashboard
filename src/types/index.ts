@@ -368,6 +368,16 @@ export function belongsToAppointment(
   );
 }
 
+export function isUserParticipantInAppointment(
+  appointment: Appointment,
+  user: Pick<UserAccount, 'id' | 'email'> & { name?: string }
+): boolean {
+  return (
+    isUserAttendeeOfAppointment(appointment, user) ||
+    isUserRequesterOfAppointment(appointment, user)
+  );
+}
+
 export function isAppointmentActionNeeded(
   appointment: Appointment,
   user: Pick<UserAccount, 'id'> & { email?: string; name?: string; role?: UserRole }
