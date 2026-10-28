@@ -340,6 +340,15 @@ export async function showWebNotification(
   body: string,
   tag = 'wmd-query-alert'
 ): Promise<void> {
+  // If user disabled notifications, do not trigger sound, tab dot or system banner
+  try {
+    if (localStorage.getItem('wm_notifications_disabled') === 'true') {
+      return;
+    }
+  } catch {
+    // Ignore
+  }
+
   playNotificationChime();
   showTabNotificationDot();
 

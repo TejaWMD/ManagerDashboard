@@ -90,16 +90,34 @@ export async function checkPushStatus(userId: string): Promise<PushStatusInfo> {
   const hasBrowserSub = Boolean(sub);
 
   let isRegisteredInDb = false;
-  if (sub && userId) {
+  if (userId) {
     try {
       const { data, error } = await supabase
         .from('push_subscriptions')
         .select('endpoint')
-        .eq('user_id', userId)
-        .eq('endpoint', sub.endpoint);
+        .eq('user_id', userId);
 
       if (!error && Array.isArray(data) && data.length > 0) {
         isRegisteredInDb = true;
+
+        // If browser has an active subscription whose endpoint is not in Supabase yet,
+        // sync it automatically behind the scenes without prompting the user
+        if (sub && !data.some((row) => row.endpoint === sub.endpoint)) {
+          const rawKey = sub.getKey ? sub.getKey('p256dh') : null;
+          const rawAuth = sub.getKey ? sub.getKey('auth') : null;
+          const p256dh = rawKey ? btoa(String.fromCharCode(...new Uint8Array(rawKey))) : '';
+          const auth = rawAuth ? btoa(String.fromCharCode(...new Uint8Array(rawAuth))) : '';
+          supabase.from('push_subscriptions').upsert(
+            { user_id: userId, endpoint: sub.endpoint, p256dh, auth },
+            { onConflict: 'user_id,endpoint' }
+          ).catch((e) => console.warn('[Push] Silent sync error:', e));
+        }
+
+        try {
+          localStorage.removeItem('wm_notifications_disabled');
+        } catch {
+          // Ignore
+        }
       }
     } catch (err) {
       console.warn('[Push] Error checking DB subscription status:', err);
@@ -229,6 +247,12 @@ export async function subscribeUserToPush(
       };
     }
 
+    try {
+      localStorage.removeItem('wm_notifications_disabled');
+    } catch {
+      // Ignore
+    }
+
     return { success: true, subscription: sub };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -242,6 +266,12 @@ export async function unsubscribeUserFromPush(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    try {
+      localStorage.setItem('wm_notifications_disabled', 'true');
+    } catch {
+      // Ignore
+    }
+
     const sub = await getExistingPushSubscription();
     if (sub) {
       try {

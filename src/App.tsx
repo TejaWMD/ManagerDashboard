@@ -56,7 +56,6 @@ import { KPIPage } from './components/KPIPage/KPIPage';
 import { BookAppointmentModal } from './components/Appointments/BookAppointmentModal';
 import { RescheduleAppointmentModal } from './components/Appointments/RescheduleAppointmentModal';
 import { NotificationModal } from './components/NotificationModal/NotificationModal';
-import { NotificationBanner } from './components/NotificationBanner/NotificationBanner';
 import sqlSchemaText from '../supabase_schema.sql?raw';
 import './App.css';
 
@@ -1346,8 +1345,6 @@ export const App: React.FC = () => {
             </button>
           </div>
         )}
-
-        <NotificationBanner currentUser={currentUser} />
 
         <main className={`app-main-content app-main-content--${activePage}`}>
           {activePage === 'home' ? (

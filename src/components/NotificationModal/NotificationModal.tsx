@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserAccount } from '../../types';
 import {
-  getNotificationPermissionStatus,
   isSecureContextEnvironment,
   showWebNotification,
 } from '../../lib/notifications';
@@ -25,7 +24,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   currentUser,
 }) => {
   const [webPermission, setWebPermission] = useState<NotificationPermission | 'unsupported'>('default');
-  const [hasBrowserSub, setHasBrowserSub] = useState<boolean>(false);
   const [isRegisteredInDb, setIsRegisteredInDb] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [checking, setChecking] = useState<boolean>(true);
@@ -40,7 +38,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     try {
       const status = await checkPushStatus(currentUser.id);
       setWebPermission(status.permission);
-      setHasBrowserSub(status.hasBrowserSub);
       setIsRegisteredInDb(status.isRegisteredInDb);
     } finally {
       setChecking(false);
@@ -56,7 +53,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleEnableOrResync = async (forceRenew = false) => {
+  const handleEnablePush = async () => {
     setFeedback(null);
 
     if (!isSecure) {
@@ -72,14 +69,13 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       setFeedback({
         type: 'warning',
         message:
-          'Notifications are currently blocked. Click the lock/tune icon in your browser address bar and switch Notifications to "Allow", then reload the page.',
+          'Notifications are currently blocked by your browser. Click the lock/tune icon in your browser address bar and switch Notifications to "Allow", then reload the page.',
       });
       return;
     }
 
     setLoading(true);
-    // forceRenew = true unsubscribes any stale browser subscription and creates a fresh token in Supabase
-    const result = await subscribeUserToPush(currentUser.id, forceRenew);
+    const result = await subscribeUserToPush(currentUser.id, true);
     setLoading(false);
 
     await refreshStatus();
@@ -87,18 +83,18 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     if (result.success) {
       setFeedback({
         type: 'success',
-        message: 'Push subscription successfully saved to Supabase and active on this device!',
+        message: 'Notifications enabled successfully!',
       });
       showWebNotification(
         '🔔 Notifications Activated',
-        'Your device is now registered in Supabase to receive instant alerts.'
+        'Your device is now registered to receive alerts.'
       );
     } else {
       setFeedback({
         type: 'error',
         message:
           result.error ||
-          'Failed to register notifications in Supabase. Please verify your connection.',
+          'Failed to enable notifications. Please verify your connection.',
       });
     }
   };
@@ -113,12 +109,12 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     if (result.success) {
       setFeedback({
         type: 'warning',
-        message: 'Notifications disabled and removed from Supabase for this device.',
+        message: 'Notifications disabled. You will not receive alerts.',
       });
     } else {
       setFeedback({
         type: 'error',
-        message: result.error || 'Failed to unsubscribe.',
+        message: result.error || 'Failed to disable notifications.',
       });
     }
   };
@@ -170,9 +166,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
     }
   };
 
-  const isFullyActive = webPermission === 'granted' && isRegisteredInDb;
-  const isMissingInDb = webPermission === 'granted' && !isRegisteredInDb;
-
   return (
     <div className="notif-modal-overlay" onClick={onClose}>
       <div className="notif-modal" onClick={(e) => e.stopPropagation()}>
@@ -182,7 +175,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             <div>
               <h3>Browser Notification Settings</h3>
               <p className="notif-subtitle">
-                Manage desktop alerts &amp; Supabase push synchronization
+                Manage desktop alerts &amp; Supabase push notifications
               </p>
             </div>
           </div>
@@ -209,10 +202,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               <h4>Push Notification Status</h4>
               <span
                 className={`notif-status-badge notif-status-badge--${
-                  isFullyActive
+                  isRegisteredInDb
                     ? 'active'
-                    : isMissingInDb
-                    ? 'warning'
                     : webPermission === 'denied'
                     ? 'blocked'
                     : 'inactive'
@@ -220,75 +211,35 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
               >
                 {checking
                   ? 'Checking...'
-                  : isFullyActive
-                  ? '● Active & Synced'
-                  : isMissingInDb
-                  ? '⚠️ Missing in Supabase'
+                  : isRegisteredInDb
+                  ? '● Enabled'
                   : webPermission === 'denied'
                   ? '✕ Blocked in Browser'
                   : '○ Disabled'}
               </span>
             </div>
 
-            {isMissingInDb && (
-              <div className="notif-re-sync-box">
-                <strong>⚠️ Subscription Missing in Database:</strong>
-                <span>
-                  Your browser has notification permissions enabled, but your subscription was deleted or not found in Supabase.
-                  Click <strong>&ldquo;Re-Enable &amp; Save to Supabase&rdquo;</strong> below to restore your device subscription so you can receive alerts again.
-                </span>
-              </div>
-            )}
-
             <p className="notif-desc">
               When enabled, your device will receive desktop alerts whenever an urgent query is raised, a query is assigned, a solution remark is submitted, or a 24-hour urgent reminder is triggered.
             </p>
 
             <div className="notif-btn-row">
-              {isMissingInDb ? (
-                <>
-                  <button
-                    type="button"
-                    className="notif-btn notif-btn--primary"
-                    onClick={() => handleEnableOrResync(true)}
-                    disabled={loading}
-                  >
-                    {loading ? 'Saving to Supabase...' : '🔔 Re-Enable & Save to Supabase'}
-                  </button>
-                  <button
-                    type="button"
-                    className="notif-btn notif-btn--danger"
-                    onClick={handleDisablePush}
-                    disabled={loading}
-                  >
-                    Disable on this device
-                  </button>
-                </>
-              ) : isFullyActive ? (
+              {isRegisteredInDb ? (
                 <>
                   <button
                     type="button"
                     className="notif-btn notif-btn--danger"
                     onClick={handleDisablePush}
-                    disabled={loading}
-                    title="Stop receiving desktop notifications on this browser"
+                    disabled={loading || checking}
+                    title="Stop receiving desktop notifications on this device"
                   >
                     {loading ? 'Disabling...' : '❌ Disable Notifications'}
                   </button>
                   <button
                     type="button"
                     className="notif-btn notif-btn--secondary"
-                    onClick={() => handleEnableOrResync(true)}
-                    disabled={loading}
-                    title="Re-registers your subscription endpoint with Supabase"
-                  >
-                    {loading ? 'Syncing...' : '🔄 Re-Sync to Supabase'}
-                  </button>
-                  <button
-                    type="button"
-                    className="notif-btn notif-btn--secondary"
                     onClick={handleTestWebPush}
-                    disabled={loading}
+                    disabled={loading || checking}
                   >
                     🔔 Test Alert Sound
                   </button>
@@ -297,8 +248,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                 <button
                   type="button"
                   className="notif-btn notif-btn--primary"
-                  onClick={() => handleEnableOrResync(false)}
-                  disabled={loading}
+                  onClick={handleEnablePush}
+                  disabled={loading || checking}
                 >
                   {loading ? 'Activating...' : '🔔 Enable Notifications'}
                 </button>
