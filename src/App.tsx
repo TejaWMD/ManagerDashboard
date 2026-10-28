@@ -10,6 +10,8 @@ import {
   PageView,
   UserAccount,
   Appointment,
+  AppointmentAttendee,
+  AppointmentStatus,
   belongsToAppointment,
 } from './types';
 import { AUTHORIZED_USERS } from './data/users';
@@ -957,14 +959,79 @@ export const App: React.FC = () => {
     const target = appointments.find((a) => a.id === appointmentId);
     if (!target) return;
 
-    const updated = { ...target, status: 'CONFIRMED' as const };
+    // Normalize attendees list
+    const currentAttendees: AppointmentAttendee[] =
+      Array.isArray(target.attendees) && target.attendees.length > 0
+        ? target.attendees
+        : target.receiverId
+        ? [
+            {
+              id: target.receiverId,
+              name: target.receiverName || '',
+              email: target.receiverEmail || '',
+              role: target.receiverRole || 'manager',
+              status: target.status === 'CONFIRMED' ? 'CONFIRMED' : 'PENDING',
+            },
+          ]
+        : [];
+
+    const isAdmin = currentUser.role === 'admin';
+    const isMatchingAttendee = currentAttendees.some(
+      (att) =>
+        (att.id && att.id === currentUser.id) ||
+        (Boolean(att.email) &&
+          Boolean(currentUser.email) &&
+          att.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (Boolean(att.name) &&
+          Boolean(currentUser.name) &&
+          att.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+
+    // Mark current user (or all if admin not in attendees) as CONFIRMED
+    const nextAttendees: AppointmentAttendee[] = currentAttendees.map((att) => {
+      const isMatch =
+        (att.id && att.id === currentUser.id) ||
+        (Boolean(att.email) &&
+          Boolean(currentUser.email) &&
+          att.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (Boolean(att.name) &&
+          Boolean(currentUser.name) &&
+          att.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase());
+
+      if (isMatch || (isAdmin && !isMatchingAttendee)) {
+        return { ...att, status: 'CONFIRMED' as AppointmentStatus };
+      }
+      return {
+        ...att,
+        status: att.status || ('PENDING' as AppointmentStatus),
+      };
+    });
+
+    // Classification as CONFIRMED: EVERY attendee must accept
+    const allAttendeesConfirmed =
+      nextAttendees.length > 0 &&
+      nextAttendees.every((att) => att.status === 'CONFIRMED');
+
+    const nextStatus: AppointmentStatus = allAttendeesConfirmed
+      ? 'CONFIRMED'
+      : 'PENDING';
+
+    const updated: Appointment = {
+      ...target,
+      status: nextStatus,
+      attendees: nextAttendees,
+    };
+
     setAppointments((prev) => {
       const next = prev.map((a) => (a.id === appointmentId ? updated : a));
       writeCachedAppointments(next);
       return next;
     });
 
-    await updateAppointmentInDb(appointmentId, { status: 'CONFIRMED' });
+    await updateAppointmentInDb(appointmentId, {
+      status: nextStatus,
+      attendees: nextAttendees,
+    });
 
     dispatchAppointmentPushNotification({
       event: 'APPOINTMENT_ACCEPTED',

@@ -338,11 +338,27 @@ export function formatAppointmentNotificationContent(
         body: `${actor.name} scheduled a ${appointment.meetingType} on ${timeLabel}. Agenda: "${appointment.agenda.slice(0, 80)}"`,
       };
 
-    case 'APPOINTMENT_ACCEPTED':
+    case 'APPOINTMENT_ACCEPTED': {
+      const isConfirmed = appointment.status === 'CONFIRMED';
+      const confirmedCount = Array.isArray(appointment.attendees)
+        ? appointment.attendees.filter((a) => a.status === 'CONFIRMED').length
+        : 1;
+      const totalCount =
+        Array.isArray(appointment.attendees) && appointment.attendees.length > 0
+          ? appointment.attendees.length
+          : 1;
+
+      if (isConfirmed) {
+        return {
+          title: `✅ Appointment Confirmed: ${appointment.title}`,
+          body: `All ${totalCount} attendee(s) have accepted! Meeting confirmed for ${timeLabel}.`,
+        };
+      }
       return {
-        title: `✅ Appointment Confirmed: ${appointment.title}`,
-        body: `${actor.name} confirmed the appointment for ${timeLabel}.`,
+        title: `👍 Attendee Accepted: ${appointment.title}`,
+        body: `${actor.name} accepted the appointment (${confirmedCount}/${totalCount} accepted).`,
       };
+    }
 
     case 'APPOINTMENT_DECLINED':
       return {

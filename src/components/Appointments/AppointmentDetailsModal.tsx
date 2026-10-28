@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import {
   Appointment,
+  getAppointmentAcceptedCount,
   getLinkedQueryForAppointment,
+  hasUserAcceptedAppointment,
   isUserAttendeeOfAppointment,
   isUserRequesterOfAppointment,
   Query,
@@ -66,6 +68,14 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
   const canEditOrCancel = isRequester || isAdmin;
 
   const isAttendee = isUserAttendeeOfAppointment(appointment, currentUser);
+
+  const {
+    accepted: acceptedCount,
+    total: totalAttendees,
+    allAccepted,
+    hasMultipleAttendees,
+  } = getAppointmentAcceptedCount(appointment);
+  const hasCurrentAttendeeAccepted = hasUserAcceptedAppointment(appointment, currentUser);
 
   const linkedQuery = getLinkedQueryForAppointment(appointment, queries);
   const linkedQueryId = linkedQuery?.queryId || appointment.queryId;
@@ -151,7 +161,9 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
               {appointment.status === 'CONFIRMED'
                 ? 'Confirmed'
                 : appointment.status === 'PENDING'
-                ? 'Pending Acceptance'
+                ? hasMultipleAttendees
+                  ? `Pending (${acceptedCount}/${totalAttendees} accepted)`
+                  : 'Pending Acceptance'
                 : appointment.status === 'RESCHEDULE_PROPOSED'
                 ? 'Reschedule Proposed'
                 : appointment.status === 'DECLINED'
@@ -247,19 +259,48 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
               </div>
 
               <div className="apt-details-attendees-list">
-                <span className="apt-people-role-pill">Attendees:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                  <span className="apt-people-role-pill">Attendees:</span>
+                  {hasMultipleAttendees && (
+                    <span className="apt-attendees-progress-tag">
+                      {acceptedCount} of {totalAttendees} accepted
+                      {allAccepted ? ' (All Confirmed)' : ' (Awaiting all attendees)'}
+                    </span>
+                  )}
+                </div>
                 <div className="apt-details-attendees-chips">
                   {Array.isArray(appointment.attendees) && appointment.attendees.length > 0 ? (
-                    appointment.attendees.map((att) => (
-                      <span key={att.id} className="apt-attendee-badge-chip">
-                        <span className="apt-attendee-badge-name">
-                          {att.name} {att.id === currentUser.id ? '(You)' : ''}
+                    appointment.attendees.map((att) => {
+                      const isConfirmed =
+                        att.status === 'CONFIRMED' ||
+                        (appointment.status === 'CONFIRMED' && !att.status);
+                      const isDeclined = att.status === 'DECLINED';
+                      return (
+                        <span key={att.id} className="apt-attendee-badge-chip">
+                          <span className="apt-attendee-badge-name">
+                            {att.name} {att.id === currentUser.id ? '(You)' : ''}
+                          </span>
+                          <span className="apt-attendee-badge-role">
+                            {att.role === 'manager'
+                              ? 'Manager'
+                              : att.role === 'account_manager'
+                              ? 'Account Manager'
+                              : 'Admin'}
+                          </span>
+                          <span
+                            className={`apt-att-status-tag ${
+                              isConfirmed
+                                ? 'apt-att-status-tag--confirmed'
+                                : isDeclined
+                                ? 'apt-att-status-tag--declined'
+                                : 'apt-att-status-tag--pending'
+                            }`}
+                          >
+                            {isConfirmed ? '✓ Accepted' : isDeclined ? '✕ Declined' : '⏳ Pending'}
+                          </span>
                         </span>
-                        <span className="apt-attendee-badge-role">
-                          {att.role === 'manager' ? 'Manager' : att.role === 'account_manager' ? 'Account Manager' : 'Admin'}
-                        </span>
-                      </span>
-                    ))
+                      );
+                    })
                   ) : (
                     <span className="apt-attendee-badge-chip">
                       <span className="apt-attendee-badge-name">
@@ -415,17 +456,29 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
           {/* Attendee Actions (Accept / Reschedule) */}
           {isAttendee && appointment.status === 'PENDING' && !showCancelPrompt && (
             <>
-              <button
-                type="button"
-                className="apt-btn apt-btn--success"
-                disabled={isProcessingAction}
-                onClick={() => handleAction(onAcceptAppointment)}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                <span>Accept Meeting</span>
-              </button>
+              {hasCurrentAttendeeAccepted ? (
+                <div className="apt-already-accepted-pill">
+                  <span className="apt-already-accepted-icon">✓</span>
+                  <span>
+                    You accepted this meeting.
+                    {hasMultipleAttendees && !allAccepted
+                      ? ` Awaiting ${totalAttendees - acceptedCount} other attendee(s).`
+                      : ''}
+                  </span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="apt-btn apt-btn--success"
+                  disabled={isProcessingAction}
+                  onClick={() => handleAction(onAcceptAppointment)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>Accept Meeting</span>
+                </button>
+              )}
 
               <button
                 type="button"

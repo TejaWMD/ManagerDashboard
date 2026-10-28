@@ -284,11 +284,16 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
       .map((id) => {
         const u = users.find((user) => user.id === id);
         if (!u) return null;
+        const existingAtt =
+          isEditMode && appointmentToEdit?.attendees
+            ? appointmentToEdit.attendees.find((a) => a.id === id)
+            : null;
         return {
           id: u.id,
           name: u.name,
           email: u.email,
           role: u.role as UserRole,
+          status: existingAtt?.status || ('PENDING' as AppointmentStatus),
         };
       })
       .filter((a): a is AppointmentAttendee => Boolean(a));

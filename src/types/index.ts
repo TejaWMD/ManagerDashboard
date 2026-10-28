@@ -378,6 +378,73 @@ export function isUserParticipantInAppointment(
   );
 }
 
+export function getAppointmentAcceptedCount(appointment: Appointment): {
+  accepted: number;
+  total: number;
+  allAccepted: boolean;
+  hasMultipleAttendees: boolean;
+} {
+  const attendees =
+    Array.isArray(appointment.attendees) && appointment.attendees.length > 0
+      ? appointment.attendees
+      : appointment.receiverId
+      ? [
+          {
+            id: appointment.receiverId,
+            name: appointment.receiverName || '',
+            email: appointment.receiverEmail || '',
+            role: appointment.receiverRole || 'manager',
+            status: appointment.status === 'CONFIRMED' ? 'CONFIRMED' : 'PENDING',
+          } as AppointmentAttendee,
+        ]
+      : [];
+
+  const total = attendees.length;
+  if (total === 0) {
+    const isConf = appointment.status === 'CONFIRMED';
+    return {
+      accepted: isConf ? 1 : 0,
+      total: 1,
+      allAccepted: isConf,
+      hasMultipleAttendees: false,
+    };
+  }
+
+  const accepted = attendees.filter(
+    (a) => a.status === 'CONFIRMED' || (appointment.status === 'CONFIRMED' && !a.status)
+  ).length;
+
+  return {
+    accepted,
+    total,
+    allAccepted: total > 0 && accepted === total,
+    hasMultipleAttendees: total > 1,
+  };
+}
+
+export function hasUserAcceptedAppointment(
+  appointment: Appointment,
+  user: Pick<UserAccount, 'id' | 'email'> & { name?: string }
+): boolean {
+  if (appointment.status === 'CONFIRMED') return true;
+  if (!Array.isArray(appointment.attendees) || appointment.attendees.length === 0) {
+    return appointment.status === 'CONFIRMED';
+  }
+
+  const matched = appointment.attendees.find(
+    (att) =>
+      (att.id && user.id && att.id === user.id) ||
+      (Boolean(user.email) &&
+        Boolean(att.email) &&
+        att.email.toLowerCase() === user.email.toLowerCase()) ||
+      (Boolean(user.name) &&
+        Boolean(att.name) &&
+        att.name.trim().toLowerCase() === user.name!.trim().toLowerCase())
+  );
+
+  return Boolean(matched && (matched.status === 'CONFIRMED' || appointment.status === 'CONFIRMED'));
+}
+
 export function isAppointmentActionNeeded(
   appointment: Appointment,
   user: Pick<UserAccount, 'id'> & { email?: string; name?: string; role?: UserRole }
@@ -389,9 +456,14 @@ export function isAppointmentActionNeeded(
   };
 
   if (appointment.status === 'PENDING') {
-    if (user.role === 'admin') return true;
+    if (user.role === 'admin') {
+      const { allAccepted } = getAppointmentAcceptedCount(appointment);
+      return !allAccepted;
+    }
     if (isUserRequesterOfAppointment(appointment, userForMatch)) return false;
-    return isUserAttendeeOfAppointment(appointment, userForMatch);
+    if (!isUserAttendeeOfAppointment(appointment, userForMatch)) return false;
+    // An attendee only needs action if they haven't accepted yet
+    return !hasUserAcceptedAppointment(appointment, userForMatch);
   }
   if (
     appointment.status === 'RESCHEDULE_PROPOSED' &&

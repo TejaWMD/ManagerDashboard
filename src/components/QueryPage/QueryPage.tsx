@@ -1809,7 +1809,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               {activeViewingLinkedAppointment.status === 'CONFIRMED'
                                 ? 'Confirmed'
                                 : activeViewingLinkedAppointment.status === 'PENDING'
-                                ? 'Pending Acceptance'
+                                ? Array.isArray(activeViewingLinkedAppointment.attendees) &&
+                                  activeViewingLinkedAppointment.attendees.length > 1
+                                  ? `Pending (${
+                                      activeViewingLinkedAppointment.attendees.filter(
+                                        (a) => a.status === 'CONFIRMED'
+                                      ).length
+                                    }/${activeViewingLinkedAppointment.attendees.length} accepted)`
+                                  : 'Pending Acceptance'
                                 : activeViewingLinkedAppointment.status === 'RESCHEDULE_PROPOSED'
                                 ? 'Reschedule Proposed'
                                 : activeViewingLinkedAppointment.status === 'DECLINED'
@@ -1868,7 +1875,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           <strong>Attendees:</strong>{' '}
                           {Array.isArray(activeViewingLinkedAppointment.attendees) &&
                           activeViewingLinkedAppointment.attendees.length > 0
-                            ? activeViewingLinkedAppointment.attendees.map((a) => a.name).join(', ')
+                            ? activeViewingLinkedAppointment.attendees
+                                .map(
+                                  (a) =>
+                                    `${a.name}${
+                                      a.status === 'CONFIRMED'
+                                        ? ' (✓ Accepted)'
+                                        : a.status === 'DECLINED'
+                                        ? ' (✕ Declined)'
+                                        : ' (⏳ Pending)'
+                                    }`
+                                )
+                                .join(', ')
                             : activeViewingLinkedAppointment.receiverName}
                         </div>
 

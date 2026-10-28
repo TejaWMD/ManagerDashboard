@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import {
   Appointment,
   belongsToAppointment,
+  getAppointmentAcceptedCount,
   getLinkedQueryForAppointment,
+  hasUserAcceptedAppointment,
   isAppointmentActionNeeded,
   isAppointmentUpcoming,
   isUserAttendeeOfAppointment,
@@ -258,6 +260,13 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
             const relBadge = getRelativeTimeBadge(apt.scheduledAtMs);
             const linkedQuery = getLinkedQueryForAppointment(apt, queries);
             const linkedQueryId = linkedQuery?.queryId || apt.queryId;
+            const {
+              accepted: acceptedCount,
+              total: totalAttendees,
+              allAccepted,
+              hasMultipleAttendees,
+            } = getAppointmentAcceptedCount(apt);
+            const hasCurrentAttendeeAccepted = hasUserAcceptedAppointment(apt, currentUser);
 
             return (
               <div
@@ -289,7 +298,9 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                       {apt.status === 'CONFIRMED'
                         ? 'Confirmed'
                         : apt.status === 'PENDING'
-                        ? 'Pending Acceptance'
+                        ? hasMultipleAttendees
+                          ? `Pending (${acceptedCount}/${totalAttendees})`
+                          : 'Pending Acceptance'
                         : apt.status === 'RESCHEDULE_PROPOSED'
                         ? 'Reschedule Proposed'
                         : apt.status === 'DECLINED'
@@ -364,9 +375,14 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                     <span className="apt-participant-name">
                       {Array.isArray(apt.attendees) && apt.attendees.length > 0
                         ? apt.attendees
-                            .map(
-                              (a) => `${a.name}${a.id === currentUser.id ? ' (You)' : ''}`
-                            )
+                            .map((a) => {
+                              const isAttConfirmed =
+                                a.status === 'CONFIRMED' ||
+                                (apt.status === 'CONFIRMED' && !a.status);
+                              return `${a.name}${a.id === currentUser.id ? ' (You)' : ''}${
+                                isAttConfirmed ? ' ✓' : ''
+                              }`;
+                            })
                             .join(', ')
                         : `${apt.receiverName}${isAttendee ? ' (You)' : ''}`}
                     </span>
@@ -437,20 +453,32 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                   {/* Receiver pending response actions */}
                   {apt.status === 'PENDING' && isAttendee && (
                     <>
-                      <button
-                        type="button"
-                        className="apt-btn apt-btn--success apt-btn--sm"
-                        disabled={isBusy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAction(apt.id, onAcceptAppointment);
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        <span>Accept</span>
-                      </button>
+                      {hasCurrentAttendeeAccepted ? (
+                        <div className="apt-badge-accepted">
+                          <span className="apt-badge-accepted-icon">✓</span>
+                          <span>
+                            You Accepted
+                            {hasMultipleAttendees && !allAccepted
+                              ? ` (${acceptedCount}/${totalAttendees})`
+                              : ''}
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="apt-btn apt-btn--success apt-btn--sm"
+                          disabled={isBusy}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAction(apt.id, onAcceptAppointment);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <span>Accept</span>
+                        </button>
+                      )}
 
                       <button
                         type="button"
