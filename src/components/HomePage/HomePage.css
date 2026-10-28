@@ -1594,9 +1594,10 @@
   border-radius: 20px;
 }
 
+
 .report-preview-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
   background: #ffffff;
   padding: 0.65rem 0.85rem;
@@ -1622,6 +1623,7 @@
   font-weight: 600;
   color: #64748b;
 }
+
 
 .report-preview-notice {
   display: flex;

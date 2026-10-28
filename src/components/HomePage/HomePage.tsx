@@ -51,11 +51,11 @@ export const HomePage: React.FC<HomePageProps> = ({
   users,
   appointments = [],
   onOpenBookAppointment,
-  onAcceptAppointment = async () => {},
-  onRescheduleClick = () => {},
-  onAcceptReschedule = async () => {},
-  onDeclineAppointment = async () => {},
-  onCancelAppointment = async () => {},
+  onAcceptAppointment = async () => { },
+  onRescheduleClick = () => { },
+  onAcceptReschedule = async () => { },
+  onDeclineAppointment = async () => { },
+  onCancelAppointment = async () => { },
   onEditAppointment,
   onCancelAppointmentWithRemark,
   onOpenCreateQueryForAppointment,
@@ -273,8 +273,8 @@ export const HomePage: React.FC<HomePageProps> = ({
     currentUser.role === 'account_manager'
       ? 'Created'
       : currentUser.role === 'manager'
-      ? 'Received'
-      : 'Total';
+        ? 'Received'
+        : 'Total';
 
   // Team breakdown metrics
   const baseRoleQueries = useMemo(() => {
@@ -370,7 +370,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               className="admin-report-btn"
               onClick={() => setShowReportModal(true)}
               disabled={isGeneratingPdf}
-              title="Configure and download Executive KPI Summary Report as PDF"
+              title="Download Executive KPI Summary Report as PDF"
             >
               <svg
                 className="admin-report-btn-icon"
@@ -415,26 +415,26 @@ export const HomePage: React.FC<HomePageProps> = ({
 
           {(currentUser.role === 'account_manager' ||
             currentUser.role === 'admin') && (
-            <div className="hero-filter-item">
-              <label htmlFor="home-mgr-select" className="hero-filter-label">
-                Manager
-              </label>
-              <select
-                id="home-mgr-select"
-                aria-label="Filter by Manager"
-                className="admin-manager-select"
-                value={selectedManagerId}
-                onChange={(e) => setSelectedManagerId(e.target.value)}
-              >
-                <option value="ALL">All Managers</option>
-                {managers.map((mgr) => (
-                  <option key={mgr.id} value={mgr.id}>
-                    {mgr.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+              <div className="hero-filter-item">
+                <label htmlFor="home-mgr-select" className="hero-filter-label">
+                  Manager
+                </label>
+                <select
+                  id="home-mgr-select"
+                  aria-label="Filter by Manager"
+                  className="admin-manager-select"
+                  value={selectedManagerId}
+                  onChange={(e) => setSelectedManagerId(e.target.value)}
+                >
+                  <option value="ALL">All Managers</option>
+                  {managers.map((mgr) => (
+                    <option key={mgr.id} value={mgr.id}>
+                      {mgr.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
         </div>
 
         <div className="header-company-logo-badge" title="WMD">
@@ -669,28 +669,26 @@ export const HomePage: React.FC<HomePageProps> = ({
               {currentUser.role === 'account_manager'
                 ? 'Manager Metrics'
                 : teamTab === 'managers'
-                ? 'Peer Managers'
-                : 'Account Managers'}
+                  ? 'Peer Managers'
+                  : 'Account Managers'}
             </h2>
 
             {(currentUser.role === 'admin' || currentUser.role === 'manager') && (
               <div className="chart-mini-tabs">
                 <button
                   type="button"
-                  className={`chart-mini-tab ${
-                    teamTab === 'managers' ? 'chart-mini-tab--active' : ''
-                  }`}
+                  className={`chart-mini-tab ${teamTab === 'managers' ? 'chart-mini-tab--active' : ''
+                    }`}
                   onClick={() => setTeamTab('managers')}
                 >
                   Managers
                 </button>
                 <button
                   type="button"
-                  className={`chart-mini-tab ${
-                    teamTab === 'account_managers'
+                  className={`chart-mini-tab ${teamTab === 'account_managers'
                       ? 'chart-mini-tab--active'
                       : ''
-                  }`}
+                    }`}
                   onClick={() => setTeamTab('account_managers')}
                 >
                   AMs
@@ -917,14 +915,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                             {activeViewingLinkedAppointment.status === 'CONFIRMED'
                               ? 'Confirmed'
                               : activeViewingLinkedAppointment.status === 'PENDING'
-                              ? 'Pending Acceptance'
-                              : activeViewingLinkedAppointment.status === 'RESCHEDULE_PROPOSED'
-                              ? 'Reschedule Proposed'
-                              : activeViewingLinkedAppointment.status === 'DECLINED'
-                              ? 'Declined'
-                              : activeViewingLinkedAppointment.status === 'CANCELLED'
-                              ? 'Cancelled'
-                              : 'Completed'}
+                                ? 'Pending Acceptance'
+                                : activeViewingLinkedAppointment.status === 'RESCHEDULE_PROPOSED'
+                                  ? 'Reschedule Proposed'
+                                  : activeViewingLinkedAppointment.status === 'DECLINED'
+                                    ? 'Declined'
+                                    : activeViewingLinkedAppointment.status === 'CANCELLED'
+                                      ? 'Cancelled'
+                                      : 'Completed'}
                           </span>
                         </div>
 
@@ -954,7 +952,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                           <strong>Host:</strong> {activeViewingLinkedAppointment.requesterName} &rarr;{' '}
                           <strong>Attendees:</strong>{' '}
                           {Array.isArray(activeViewingLinkedAppointment.attendees) &&
-                          activeViewingLinkedAppointment.attendees.length > 0
+                            activeViewingLinkedAppointment.attendees.length > 0
                             ? activeViewingLinkedAppointment.attendees.map((a) => a.name).join(', ')
                             : activeViewingLinkedAppointment.receiverName}
                         </div>
@@ -995,25 +993,23 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div className="query-view-section-header">
                     <span className="query-view-section-label">Manager Remark</span>
                     <span
-                      className={`query-view-check-tag ${
-                        activeViewingQuery.managerDone
+                      className={`query-view-check-tag ${activeViewingQuery.managerDone
                           ? 'query-view-check-tag--done'
                           : ''
-                      }`}
+                        }`}
                     >
                       {activeViewingQuery.managerDone ? '✓ Mgr Done' : 'Unchecked'}
                     </span>
                   </div>
                   <div
-                    className={`query-view-remark-box ${
-                      !activeViewingQuery.managerRemarkTitle &&
-                      !activeViewingQuery.managerRemark
+                    className={`query-view-remark-box ${!activeViewingQuery.managerRemarkTitle &&
+                        !activeViewingQuery.managerRemark
                         ? 'query-view-remark-box--empty'
                         : ''
-                    }`}
+                      }`}
                   >
                     {activeViewingQuery.managerRemarkTitle ||
-                    activeViewingQuery.managerRemark ? (
+                      activeViewingQuery.managerRemark ? (
                       <>
                         <div className="query-view-field-block">
                           <span className="query-view-sub-label">Title</span>
@@ -1039,11 +1035,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div className="query-view-section-header">
                     <span className="query-view-section-label">Sender Remark</span>
                     <span
-                      className={`query-view-check-tag ${
-                        activeViewingQuery.accountManagerDone
+                      className={`query-view-check-tag ${activeViewingQuery.accountManagerDone
                           ? 'query-view-check-tag--done'
                           : ''
-                      }`}
+                        }`}
                     >
                       {activeViewingQuery.accountManagerDone
                         ? '✓ Sender Done'
@@ -1051,15 +1046,14 @@ export const HomePage: React.FC<HomePageProps> = ({
                     </span>
                   </div>
                   <div
-                    className={`query-view-remark-box ${
-                      !activeViewingQuery.accountManagerRemarkTitle &&
-                      !activeViewingQuery.accountManagerRemark
+                    className={`query-view-remark-box ${!activeViewingQuery.accountManagerRemarkTitle &&
+                        !activeViewingQuery.accountManagerRemark
                         ? 'query-view-remark-box--empty'
                         : ''
-                    }`}
+                      }`}
                   >
                     {activeViewingQuery.accountManagerRemarkTitle ||
-                    activeViewingQuery.accountManagerRemark ? (
+                      activeViewingQuery.accountManagerRemark ? (
                       <>
                         <div className="query-view-field-block">
                           <span className="query-view-sub-label">Title</span>
@@ -1116,213 +1110,250 @@ export const HomePage: React.FC<HomePageProps> = ({
       )}
 
       {/* Executive KPI Report Configuration & Download Modal (Admin Only) */}
-      {showReportModal && (
-        <div
-          className="modal-backdrop"
+      
+{showReportModal && (
+  <div
+    className="modal-backdrop"
+    onClick={() => setShowReportModal(false)}
+  >
+    <div
+      className="modal-dialog report-config-modal"
+      onClick={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="report-modal-title"
+    >
+      {/* Modal Header */}
+      <div className="modal-header">
+        <div className="modal-header-text">
+          <div className="report-modal-icon-badge">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="report-modal-icon"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+          </div>
+
+          <div>
+            <h3
+              id="report-modal-title"
+              className="report-modal-title"
+            >
+              Executive KPI Summary Report
+            </h3>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="modal-close-btn"
           onClick={() => setShowReportModal(false)}
+          aria-label="Close report configuration"
         >
-          <div
-            className="modal-dialog report-config-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="report-modal-title"
+          &times;
+        </button>
+      </div>
+
+      {/* Modal Body */}
+      <div className="report-modal-body">
+        {/* Reporting Period Selector */}
+        <div className="report-section-label">
+          <span>Select Reporting Period:</span>
+        </div>
+
+        <div className="report-period-grid">
+          <button
+            type="button"
+            className={`report-period-option ${
+              reportTimeWindow === "7d"
+                ? "report-period-option--active"
+                : ""
+            }`}
+            onClick={() => setReportTimeWindow("7d")}
           >
-            <div className="modal-header">
-              <div className="modal-header-text">
-                <div className="report-modal-icon-badge">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="report-modal-icon"
-                  >
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <polyline points="10 9 9 9 8 9" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 id="report-modal-title" className="report-modal-title">
-                    Executive KPI Summary Report
-                  </h3>
-                  <p className="report-modal-sub">
-                    2-page briefing document formatted for Director weekly submission.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => setShowReportModal(false)}
-                aria-label="Close report configuration"
-              >
-                &times;
-              </button>
+            <div className="period-option-radio">
+              <span className="radio-dot" />
             </div>
 
-            <div className="report-modal-body">
-              {/* Period Selector Radio Options */}
-              <div className="report-section-label">
-                <span>Select Reporting Period:</span>
-              </div>
-              <div className="report-period-grid">
-                <button
-                  type="button"
-                  className={`report-period-option ${
-                    reportTimeWindow === '7d' ? 'report-period-option--active' : ''
-                  }`}
-                  onClick={() => setReportTimeWindow('7d')}
-                >
-                  <div className="period-option-radio">
-                    <span className="radio-dot" />
-                  </div>
-                  <div className="period-option-text">
-                    <span className="period-option-title">Last 7 Days (Weekly)</span>
-                    <span className="period-option-desc">Official weekly director submission (Recommended)</span>
-                  </div>
-                </button>
+            <div className="period-option-text">
+              <span className="period-option-title">
+                Last 7 Days (Weekly)
+              </span>
+            </div>
+          </button>
 
-                <button
-                  type="button"
-                  className={`report-period-option ${
-                    reportTimeWindow === '14d' ? 'report-period-option--active' : ''
-                  }`}
-                  onClick={() => setReportTimeWindow('14d')}
-                >
-                  <div className="period-option-radio">
-                    <span className="radio-dot" />
-                  </div>
-                  <div className="period-option-text">
-                    <span className="period-option-title">Last 14 Days (Bi-Weekly)</span>
-                    <span className="period-option-desc">Two-week operational trend comparison</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  className={`report-period-option ${
-                    reportTimeWindow === '30d' ? 'report-period-option--active' : ''
-                  }`}
-                  onClick={() => setReportTimeWindow('30d')}
-                >
-                  <div className="period-option-radio">
-                    <span className="radio-dot" />
-                  </div>
-                  <div className="period-option-text">
-                    <span className="period-option-title">Last 30 Days (Monthly)</span>
-                    <span className="period-option-desc">Comprehensive monthly operations audit</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  className={`report-period-option ${
-                    reportTimeWindow === 'all' ? 'report-period-option--active' : ''
-                  }`}
-                  onClick={() => setReportTimeWindow('all')}
-                >
-                  <div className="period-option-radio">
-                    <span className="radio-dot" />
-                  </div>
-                  <div className="period-option-text">
-                    <span className="period-option-title">All-Time Cumulative</span>
-                    <span className="period-option-desc">Full historical record since portal inception</span>
-                  </div>
-                </button>
-              </div>
-
-              {/* Scope & Parameter Preview Card */}
-              <div className="report-preview-box">
-                <div className="report-preview-header">
-                  <span className="preview-header-lbl">Report Scope & Parameters</span>
-                  <span className="preview-header-period">{previewRangeStr}</span>
-                </div>
-                <div className="report-preview-stats">
-                  <div className="preview-stat-item">
-                    <span className="preview-stat-val">{managers.length}</span>
-                    <span className="preview-stat-lbl">Managers Evaluated</span>
-                  </div>
-                  <div className="preview-stat-item">
-                    <span className="preview-stat-val">{scopedReportQueriesCount}</span>
-                    <span className="preview-stat-lbl">Queries in Period</span>
-                  </div>
-                  <div className="preview-stat-item">
-                    <span className="preview-stat-val">2 Pages</span>
-                    <span className="preview-stat-lbl">Portrait Briefing</span>
-                  </div>
-                </div>
-                <div className="report-preview-notice">
-                  <span className="preview-notice-icon">🔒</span>
-                  <span>General Tracking Mode: Confidential query bodies & internal remarks are withheld to allow transparent team-wide distribution.</span>
-                </div>
-              </div>
+          <button
+            type="button"
+            className={`report-period-option ${
+              reportTimeWindow === "14d"
+                ? "report-period-option--active"
+                : ""
+            }`}
+            onClick={() => setReportTimeWindow("14d")}
+          >
+            <div className="period-option-radio">
+              <span className="radio-dot" />
             </div>
 
-            <div className="modal-actions report-modal-actions">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setShowReportModal(false)}
-                disabled={isGeneratingPdf}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-primary report-generate-btn"
-                onClick={() => handleDownloadPdfReport(reportTimeWindow)}
-                disabled={isGeneratingPdf}
-              >
-                {isGeneratingPdf ? (
-                  <>
-                    <svg
-                      className="admin-report-spinner"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    >
-                      <circle
-                        cx="12"
-                        cy="12"
-                        r="9"
-                        strokeDasharray="28"
-                        strokeDashoffset="10"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <span>Generating Executive PDF...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="admin-report-btn-icon"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="12" y1="18" x2="12" y2="12" />
-                      <polyline points="9 15 12 18 15 15" />
-                    </svg>
-                    <span>Download 2-Page Executive PDF</span>
-                  </>
-                )}
-              </button>
+            <div className="period-option-text">
+              <span className="period-option-title">
+                Last 14 Days (Bi-Weekly)
+              </span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className={`report-period-option ${
+              reportTimeWindow === "30d"
+                ? "report-period-option--active"
+                : ""
+            }`}
+            onClick={() => setReportTimeWindow("30d")}
+          >
+            <div className="period-option-radio">
+              <span className="radio-dot" />
+            </div>
+
+            <div className="period-option-text">
+              <span className="period-option-title">
+                Last 30 Days (Monthly)
+              </span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className={`report-period-option ${
+              reportTimeWindow === "all"
+                ? "report-period-option--active"
+                : ""
+            }`}
+            onClick={() => setReportTimeWindow("all")}
+          >
+            <div className="period-option-radio">
+              <span className="radio-dot" />
+            </div>
+
+            <div className="period-option-text">
+              <span className="period-option-title">
+                All-Time Cumulative
+              </span>
+            </div>
+          </button>
+        </div>
+
+        {/* Report Scope & Parameters */}
+        <div className="report-preview-box">
+          <div className="report-preview-header">
+            <span className="preview-header-lbl">
+              Report Scope & Parameters
+            </span>
+
+            <span className="preview-header-period">
+              {previewRangeStr}
+            </span>
+          </div>
+
+          {/* Two Statistics Only */}
+          <div className="report-preview-stats">
+            <div className="preview-stat-item">
+              <span className="preview-stat-val">
+                {managers.length}
+              </span>
+
+              <span className="preview-stat-lbl">
+                Managers Evaluated
+              </span>
+            </div>
+
+            <div className="preview-stat-item">
+              <span className="preview-stat-val">
+                {scopedReportQueriesCount}
+              </span>
+
+              <span className="preview-stat-lbl">
+                Queries in Period
+              </span>
             </div>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Modal Actions */}
+      <div className="modal-actions report-modal-actions">
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => setShowReportModal(false)}
+          disabled={isGeneratingPdf}
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          className="btn-primary report-generate-btn"
+          onClick={() => handleDownloadPdfReport(reportTimeWindow)}
+          disabled={isGeneratingPdf}
+        >
+          {isGeneratingPdf ? (
+            <>
+              <svg
+                className="admin-report-spinner"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  strokeDasharray="28"
+                  strokeDashoffset="10"
+                  strokeLinecap="round"
+                />
+              </svg>
+
+              <span>Generating Report...</span>
+            </>
+          ) : (
+            <>
+              <svg
+                className="admin-report-btn-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="12" y1="18" x2="12" y2="12" />
+                <polyline points="9 15 12 18 15 15" />
+              </svg>
+
+              <span>Download Report</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
 };
