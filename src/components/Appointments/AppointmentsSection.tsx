@@ -2,8 +2,11 @@ import React, { useMemo, useState } from 'react';
 import {
   Appointment,
   belongsToAppointment,
+  getLinkedQueryForAppointment,
   isAppointmentActionNeeded,
   isAppointmentUpcoming,
+  isUserAttendeeOfAppointment,
+  isUserRequesterOfAppointment,
   Query,
   UserAccount,
 } from '../../types';
@@ -248,17 +251,13 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
           </div>
         ) : (
           filteredAppointments.map((apt) => {
-            const isRequester = currentUser.id === apt.requesterId;
-            const isAttendee =
-              Array.isArray(apt.attendees) && apt.attendees.length > 0
-                ? apt.attendees.some((a) => a.id === currentUser.id)
-                : currentUser.id === apt.receiverId;
+            const isRequester = isUserRequesterOfAppointment(apt, currentUser);
+            const isAttendee = isUserAttendeeOfAppointment(apt, currentUser);
             const needsAction = isAppointmentActionNeeded(apt, currentUser);
             const isBusy = actionInProgressId === apt.id;
             const relBadge = getRelativeTimeBadge(apt.scheduledAtMs);
-            const linkedQuery = apt.queryId
-              ? queries.find((q) => q.queryId === apt.queryId)
-              : null;
+            const linkedQuery = getLinkedQueryForAppointment(apt, queries);
+            const linkedQueryId = linkedQuery?.queryId || apt.queryId;
 
             return (
               <div
@@ -383,12 +382,12 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                 )}
 
                 {/* Linked Query Link */}
-                {apt.queryId && (
+                {linkedQueryId && (
                   <div className="apt-linked-query-box">
                     <span className="apt-linked-query-icon">🔗</span>
                     <span className="apt-linked-query-text">
-                      Linked Query: <strong>{apt.queryId}</strong>
-                      {linkedQuery ? ` — ${linkedQuery.queryTitle || linkedQuery.queryText.slice(0, 45)}` : ''}
+                      Linked Query: <strong>{linkedQueryId}</strong>
+                      {linkedQuery ? ` — ${linkedQuery.queryTitle || linkedQuery.queryText.slice(0, 60)}` : ''}
                     </span>
                     {linkedQuery && onViewQuery && (
                       <button
@@ -520,8 +519,8 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                       </>
                     )}
 
-                  {/* Confirmed actions: Follow-up query */}
-                  {apt.status === 'CONFIRMED' && onOpenCreateQueryForAppointment && (
+                  {/* Confirmed actions: Follow-up query (only if not already linked to a query) */}
+                  {apt.status === 'CONFIRMED' && !linkedQueryId && onOpenCreateQueryForAppointment && (
                     <button
                       type="button"
                       className="apt-btn apt-btn--query-followup apt-btn--sm"

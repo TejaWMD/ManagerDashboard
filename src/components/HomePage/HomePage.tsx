@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   belongsToAccountManager,
   belongsToManager,
+  getLinkedAppointmentForQuery,
   Query,
   isQueryDelayed,
   isQueryDone,
@@ -97,6 +98,11 @@ export const HomePage: React.FC<HomePageProps> = ({
       viewingQuery
     );
   }, [queries, viewingQuery]);
+
+  const activeViewingLinkedAppointment = useMemo(() => {
+    if (!activeViewingQuery) return null;
+    return getLinkedAppointmentForQuery(activeViewingQuery, appointments);
+  }, [activeViewingQuery, appointments]);
 
   // Dynamic preview range string for report modal
   const previewRangeStr = useMemo(() => {
@@ -858,6 +864,117 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
               </div>
 
+              {(activeViewingLinkedAppointment || activeViewingQuery.linkedAppointmentId) && (
+                <div className="query-view-section">
+                  <span className="query-view-section-label">Linked Appointment</span>
+                  <div
+                    className="query-view-content-box"
+                    style={{
+                      background: 'rgba(132, 73, 24, 0.05)',
+                      border: '1px solid rgba(132, 73, 24, 0.22)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.6rem',
+                    }}
+                  >
+                    {activeViewingLinkedAppointment ? (
+                      <>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '0.5rem',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span className="apt-id-pill">
+                              📅 {activeViewingLinkedAppointment.id}
+                            </span>
+                            <strong style={{ fontSize: '0.94rem', color: '#1c1813' }}>
+                              {activeViewingLinkedAppointment.title}
+                            </strong>
+                          </div>
+                          <span
+                            className={`apt-status-pill apt-status-pill--${activeViewingLinkedAppointment.status.toLowerCase()}`}
+                          >
+                            {activeViewingLinkedAppointment.status === 'CONFIRMED'
+                              ? 'Confirmed'
+                              : activeViewingLinkedAppointment.status === 'PENDING'
+                              ? 'Pending Acceptance'
+                              : activeViewingLinkedAppointment.status === 'RESCHEDULE_PROPOSED'
+                              ? 'Reschedule Proposed'
+                              : activeViewingLinkedAppointment.status === 'DECLINED'
+                              ? 'Declined'
+                              : activeViewingLinkedAppointment.status === 'CANCELLED'
+                              ? 'Cancelled'
+                              : 'Completed'}
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '0.85rem',
+                            fontSize: '0.82rem',
+                            color: '#4b4339',
+                          }}
+                        >
+                          <span>
+                            <strong>Scheduled:</strong> {activeViewingLinkedAppointment.scheduledAt}
+                          </span>
+                          <span>
+                            <strong>Type:</strong> {activeViewingLinkedAppointment.meetingType}
+                          </span>
+                          {activeViewingLinkedAppointment.meetingLocation && (
+                            <span>
+                              <strong>Location:</strong> {activeViewingLinkedAppointment.meetingLocation}
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ fontSize: '0.82rem', color: '#4b4339' }}>
+                          <strong>Host:</strong> {activeViewingLinkedAppointment.requesterName} &rarr;{' '}
+                          <strong>Attendees:</strong>{' '}
+                          {Array.isArray(activeViewingLinkedAppointment.attendees) &&
+                          activeViewingLinkedAppointment.attendees.length > 0
+                            ? activeViewingLinkedAppointment.attendees.map((a) => a.name).join(', ')
+                            : activeViewingLinkedAppointment.receiverName}
+                        </div>
+
+                        {activeViewingLinkedAppointment.agenda && (
+                          <div
+                            style={{
+                              fontSize: '0.82rem',
+                              color: '#3a3228',
+                              background: '#ffffff',
+                              padding: '0.55rem 0.75rem',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(190, 179, 161, 0.35)',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            <strong>Agenda:</strong> {activeViewingLinkedAppointment.agenda}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span className="apt-id-pill">
+                          📅 {activeViewingQuery.linkedAppointmentId}
+                        </span>
+                        <span style={{ fontSize: '0.85rem', color: '#4b4339' }}>
+                          Linked to Appointment {activeViewingQuery.linkedAppointmentId}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="query-view-remarks-grid">
                 <div className="query-view-section">
                   <div className="query-view-section-header">
@@ -951,23 +1068,25 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
 
               <div className="modal-actions" style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                {onOpenBookAppointment && (
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      const q = activeViewingQuery;
-                      setViewingQuery(null);
-                      const targetUserId =
-                        currentUser.id === q.accountManagerId
-                          ? q.managerId
-                          : q.accountManagerId;
-                      onOpenBookAppointment(q.queryId, targetUserId);
-                    }}
-                  >
-                    📅 Book Appointment for this Query
-                  </button>
-                )}
+                {!activeViewingLinkedAppointment &&
+                  !activeViewingQuery.linkedAppointmentId &&
+                  onOpenBookAppointment && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        const q = activeViewingQuery;
+                        setViewingQuery(null);
+                        const targetUserId =
+                          currentUser.id === q.accountManagerId
+                            ? q.managerId
+                            : q.accountManagerId;
+                        onOpenBookAppointment(q.queryId, targetUserId);
+                      }}
+                    >
+                      📅 Book Appointment for this Query
+                    </button>
+                  )}
                 <button
                   type="button"
                   className="btn-primary"

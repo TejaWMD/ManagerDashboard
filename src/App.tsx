@@ -14,7 +14,6 @@ import {
 } from './types';
 import { AUTHORIZED_USERS } from './data/users';
 import { INITIAL_QUERIES } from './data/initialQueries';
-import { INITIAL_APPOINTMENTS } from './data/initialAppointments';
 import {
   QueryRow,
   AppointmentRow,
@@ -396,6 +395,7 @@ export const App: React.FC = () => {
             }
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             const updated = mapRowToAppointment(payload.new as AppointmentRow);
+            const prevApt = appointmentsRef.current.find((a) => a.id === updated.id);
             setAppointments((prev) => {
               const next = prev.map((a) => (a.id === updated.id ? updated : a));
               writeCachedAppointments(next);
@@ -403,7 +403,7 @@ export const App: React.FC = () => {
             });
 
             if (user && belongsToAppointment(updated, user)) {
-              if (updated.status === 'CONFIRMED') {
+              if (updated.status === 'CONFIRMED' && prevApt?.status !== 'CONFIRMED') {
                 showWebNotification(
                   '✅ Appointment Confirmed',
                   `"${updated.title}" is confirmed for ${updated.scheduledAt}`
@@ -416,10 +416,28 @@ export const App: React.FC = () => {
                   '⏳ Reschedule Proposed',
                   `New time proposed for "${updated.title}": ${updated.proposedScheduledAt || 'new date'}`
                 );
-              } else if (updated.status === 'CANCELLED') {
+              } else if (updated.status === 'DECLINED' && prevApt?.status !== 'DECLINED') {
+                showWebNotification(
+                  '❌ Appointment Declined',
+                  `"${updated.title}" was declined.`
+                );
+              } else if (updated.status === 'CANCELLED' && prevApt?.status !== 'CANCELLED') {
                 showWebNotification(
                   '❌ Appointment Cancelled',
-                  `"${updated.title}" was cancelled.`
+                  `"${updated.title}" was cancelled.${updated.cancellationRemark ? ` Remark: "${updated.cancellationRemark}"` : ''}`
+                );
+              } else if (
+                prevApt &&
+                prevApt.status === updated.status &&
+                (prevApt.title !== updated.title ||
+                  prevApt.scheduledAt !== updated.scheduledAt ||
+                  prevApt.agenda !== updated.agenda ||
+                  prevApt.meetingLocation !== updated.meetingLocation ||
+                  prevApt.queryId !== updated.queryId)
+              ) {
+                showWebNotification(
+                  '📝 Appointment Updated',
+                  `"${updated.title}" details were updated for ${updated.scheduledAt}.`
                 );
               }
             }
@@ -551,6 +569,19 @@ export const App: React.FC = () => {
         persistQueriesCache(next);
         return next;
       });
+
+      // Bidirectionally link the appointment to this created query if linkedAppointmentId was specified
+      if (payload.linkedAppointmentId) {
+        const linkedAptId = payload.linkedAppointmentId;
+        setAppointments((prev) => {
+          const next = prev.map((a) =>
+            a.id === linkedAptId ? { ...a, queryId: data.queryId } : a
+          );
+          writeCachedAppointments(next);
+          return next;
+        });
+        updateAppointmentInDb(linkedAptId, { queryId: data.queryId });
+      }
 
       // Dispatch desktop background push notification to assigned Manager & Admin
       dispatchQueryPushNotification({
@@ -832,15 +863,40 @@ export const App: React.FC = () => {
       createdAtMs: now.getTime(),
     };
 
-    setAppointments((prev) => [newAppointment, ...prev]);
+    setAppointments((prev) => {
+      const next = [newAppointment, ...prev];
+      writeCachedAppointments(next);
+      return next;
+    });
 
     // Save to Supabase (and cache)
-    await insertAppointmentInDb(newAppointment);
+    const { data: savedApt } = await insertAppointmentInDb(newAppointment);
+    const finalApt = savedApt || newAppointment;
+    if (savedApt && savedApt.id !== newAppointment.id) {
+      setAppointments((prev) => {
+        const next = prev.map((a) => (a.id === newAppointment.id ? savedApt : a));
+        writeCachedAppointments(next);
+        return next;
+      });
+    }
+
+    // Bidirectionally link the query to this appointment if queryId is specified
+    if (finalApt.queryId) {
+      const targetQueryId = finalApt.queryId;
+      setQueries((prev) => {
+        const next = prev.map((q) =>
+          q.queryId === targetQueryId ? { ...q, linkedAppointmentId: finalApt.id } : q
+        );
+        persistQueriesCache(next);
+        return next;
+      });
+      updateQueryInDb(targetQueryId, { linkedAppointmentId: finalApt.id });
+    }
 
     // Dual Push notification to recipient + admin
     dispatchAppointmentPushNotification({
       event: 'APPOINTMENT_REQUESTED',
-      appointment: newAppointment,
+      appointment: finalApt,
       actor: currentUser,
     });
   };
@@ -851,9 +907,11 @@ export const App: React.FC = () => {
     if (!target) return;
 
     const updated = { ...target, status: 'CONFIRMED' as const };
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === appointmentId ? updated : a))
-    );
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === appointmentId ? updated : a));
+      writeCachedAppointments(next);
+      return next;
+    });
 
     await updateAppointmentInDb(appointmentId, { status: 'CONFIRMED' });
 
@@ -888,9 +946,11 @@ export const App: React.FC = () => {
       rescheduleReason: reason,
     };
 
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === appointmentId ? updated : a))
-    );
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === appointmentId ? updated : a));
+      writeCachedAppointments(next);
+      return next;
+    });
 
     await updateAppointmentInDb(appointmentId, {
       status: 'RESCHEDULE_PROPOSED',
@@ -925,9 +985,11 @@ export const App: React.FC = () => {
       rescheduleReason: null,
     };
 
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === appointmentId ? updated : a))
-    );
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === appointmentId ? updated : a));
+      writeCachedAppointments(next);
+      return next;
+    });
 
     await updateAppointmentInDb(appointmentId, {
       status: 'CONFIRMED',
@@ -952,14 +1014,16 @@ export const App: React.FC = () => {
     if (!target) return;
 
     const updated: Appointment = { ...target, status: 'DECLINED' };
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === appointmentId ? updated : a))
-    );
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === appointmentId ? updated : a));
+      writeCachedAppointments(next);
+      return next;
+    });
 
     await updateAppointmentInDb(appointmentId, { status: 'DECLINED' });
 
     dispatchAppointmentPushNotification({
-      event: 'APPOINTMENT_CANCELLED',
+      event: 'APPOINTMENT_DECLINED',
       appointment: updated,
       actor: currentUser,
     });
@@ -971,9 +1035,11 @@ export const App: React.FC = () => {
     if (!target) return;
 
     const updated: Appointment = { ...target, status: 'CANCELLED' };
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === appointmentId ? updated : a))
-    );
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === appointmentId ? updated : a));
+      writeCachedAppointments(next);
+      return next;
+    });
 
     await updateAppointmentInDb(appointmentId, { status: 'CANCELLED' });
 
@@ -1002,11 +1068,38 @@ export const App: React.FC = () => {
       ...updates,
     };
 
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === appointmentId ? updated : a))
-    );
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === appointmentId ? updated : a));
+      writeCachedAppointments(next);
+      return next;
+    });
 
     await updateAppointmentInDb(appointmentId, updates);
+
+    // Bidirectionally sync query's linkedAppointmentId if queryId changed
+    if (updates.queryId !== undefined && updates.queryId !== existing.queryId) {
+      const oldQueryId = existing.queryId;
+      const newQueryId = updates.queryId;
+      setQueries((prev) => {
+        const next = prev.map((q) => {
+          if (oldQueryId && q.queryId === oldQueryId && q.linkedAppointmentId === appointmentId) {
+            return { ...q, linkedAppointmentId: null };
+          }
+          if (newQueryId && q.queryId === newQueryId) {
+            return { ...q, linkedAppointmentId: appointmentId };
+          }
+          return q;
+        });
+        persistQueriesCache(next);
+        return next;
+      });
+      if (oldQueryId) {
+        updateQueryInDb(oldQueryId, { linkedAppointmentId: null });
+      }
+      if (newQueryId) {
+        updateQueryInDb(newQueryId, { linkedAppointmentId: appointmentId });
+      }
+    }
 
     dispatchAppointmentPushNotification({
       event: 'APPOINTMENT_UPDATED',
@@ -1031,9 +1124,11 @@ export const App: React.FC = () => {
       cancelledAt: nowIso,
     };
 
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === appointmentId ? updated : a))
-    );
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === appointmentId ? updated : a));
+      writeCachedAppointments(next);
+      return next;
+    });
 
     await updateAppointmentInDb(appointmentId, {
       status: 'CANCELLED',

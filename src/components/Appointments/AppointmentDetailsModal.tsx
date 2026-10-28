@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { Appointment, Query, UserAccount } from '../../types';
+import {
+  Appointment,
+  getLinkedQueryForAppointment,
+  isUserAttendeeOfAppointment,
+  isUserRequesterOfAppointment,
+  Query,
+  UserAccount,
+} from '../../types';
 import './Appointments.css';
 
 interface AppointmentDetailsModalProps {
@@ -54,18 +61,14 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
 
   if (!isOpen || !appointment) return null;
 
-  const isRequester = currentUser.id === appointment.requesterId;
+  const isRequester = isUserRequesterOfAppointment(appointment, currentUser);
   const isAdmin = currentUser.role === 'admin';
   const canEditOrCancel = isRequester || isAdmin;
 
-  const isAttendee =
-    Array.isArray(appointment.attendees) && appointment.attendees.length > 0
-      ? appointment.attendees.some((a) => a.id === currentUser.id)
-      : appointment.receiverId === currentUser.id;
+  const isAttendee = isUserAttendeeOfAppointment(appointment, currentUser);
 
-  const linkedQuery = appointment.queryId
-    ? queries.find((q) => q.queryId === appointment.queryId)
-    : null;
+  const linkedQuery = getLinkedQueryForAppointment(appointment, queries);
+  const linkedQueryId = linkedQuery?.queryId || appointment.queryId;
 
   // Format date & time
   const formatDateTime = (scheduledAt: string, scheduledAtMs: number) => {
@@ -281,15 +284,15 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
           </div>
 
           {/* Section 4: Linked Query (if any) */}
-          {appointment.queryId && (
+          {linkedQueryId && (
             <div className="apt-details-section">
               <span className="apt-details-label">Linked Query</span>
               <div className="apt-details-query-card">
                 <div className="apt-details-query-info">
-                  <span className="apt-details-query-id">{appointment.queryId}</span>
+                  <span className="apt-details-query-id">{linkedQueryId}</span>
                   <span className="apt-details-query-title">
                     {linkedQuery
-                      ? linkedQuery.queryTitle || linkedQuery.queryText.slice(0, 70)
+                      ? linkedQuery.queryTitle || linkedQuery.queryText
                       : 'Referenced ticket'}
                   </span>
                 </div>
@@ -473,8 +476,8 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
               </>
             )}
 
-          {/* Follow-up Query Shortcut */}
-          {appointment.status === 'CONFIRMED' && onOpenCreateQueryForAppointment && !showCancelPrompt && (
+          {/* Follow-up Query Shortcut (only if not already linked to a query) */}
+          {appointment.status === 'CONFIRMED' && !linkedQueryId && onOpenCreateQueryForAppointment && !showCancelPrompt && (
             <button
               type="button"
               className="apt-btn apt-btn--query-followup"

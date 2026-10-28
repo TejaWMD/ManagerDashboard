@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Appointment,
   AppointmentAttendee,
+  belongsToAccountManager,
+  belongsToManager,
   MeetingType,
   Query,
   UserAccount,
@@ -46,9 +48,18 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
     return users.filter((u) => u.id !== currentUser.id);
   }, [users, currentUser.id]);
 
+  // Only allow the sender to link queries that they are a part of (sent to them or created by them)
   const availableQueries = useMemo(() => {
-    return queries.slice(0, 50);
-  }, [queries]);
+    return queries
+      .filter((q) => {
+        if (currentUser.role === 'admin') return true;
+        return (
+          belongsToAccountManager(q, currentUser) ||
+          belongsToManager(q, currentUser)
+        );
+      })
+      .slice(0, 50);
+  }, [queries, currentUser]);
 
   // Multiple selected attendees
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);

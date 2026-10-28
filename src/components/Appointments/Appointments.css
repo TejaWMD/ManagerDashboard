@@ -1330,7 +1330,21 @@
    Appointment Details Modal
    -------------------------------------------------------------------------- */
 .apt-details-modal {
-  max-width: 620px;
+  max-width: 740px;
+  width: 96%;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.apt-details-modal .apt-modal-header {
+  flex-shrink: 0;
+}
+
+.apt-details-modal .apt-modal-title {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .apt-details-title-row {
@@ -1341,16 +1355,27 @@
 }
 
 .apt-details-body {
-  padding: 1.15rem 1.35rem;
+  padding: 1.2rem 1.4rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.apt-details-modal .apt-modal-footer {
+  padding: 0.95rem 1.4rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-top: 1.5px solid rgba(239, 237, 206, 0.95);
+  gap: 0.6rem;
 }
 
 .apt-details-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.75rem;
 }
 
@@ -1362,6 +1387,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  min-width: 0;
 }
 
 .apt-details-label {
@@ -1377,8 +1403,12 @@
   font-weight: 700;
   color: #1f1b16;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.4rem;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 
 .apt-details-val svg {
@@ -1386,17 +1416,19 @@
   height: 16px;
   color: var(--c-russet, #8c4a24);
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .apt-details-section {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  min-width: 0;
 }
 
 .apt-details-location-box {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.45rem;
   background: #fbfaf7;
   border: 1px solid rgba(193, 128, 54, 0.2);
@@ -1404,6 +1436,10 @@
   padding: 0.55rem 0.8rem;
   font-size: 0.82rem;
   color: #2b261f;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 
 .apt-details-location-box svg {
@@ -1411,11 +1447,13 @@
   height: 15px;
   color: var(--c-russet, #8c4a24);
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .apt-details-link {
   color: #2563eb;
   word-break: break-all;
+  overflow-wrap: anywhere;
   text-decoration: underline;
 }
 
@@ -1433,10 +1471,12 @@
 .apt-details-host-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
   font-size: 0.82rem;
   padding-bottom: 0.55rem;
   border-bottom: 1px dashed rgba(193, 128, 54, 0.2);
+  word-break: break-word;
 }
 
 .apt-people-role-pill {
@@ -1462,6 +1502,7 @@
 .apt-details-person-email {
   font-size: 0.74rem;
   color: #786e60;
+  word-break: break-all;
 }
 
 .apt-details-attendees-list {
@@ -1479,6 +1520,7 @@
 .apt-attendee-badge-chip {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4rem;
   background: #ffffff;
   border: 1px solid rgba(193, 128, 54, 0.25);
@@ -1505,6 +1547,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .apt-mandatory-tag {
@@ -1529,6 +1573,7 @@
   color: #2b261f;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* Linked Query Card */
@@ -1536,18 +1581,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
   border-radius: 8px;
-  padding: 0.6rem 0.85rem;
+  padding: 0.65rem 0.9rem;
 }
 
 .apt-details-query-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  flex: 1;
+  gap: 3px;
+  flex: 1 1 220px;
   min-width: 0;
 }
 
@@ -1558,12 +1604,13 @@
 }
 
 .apt-details-query-title {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: #1e3a8a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 .apt-details-query-btn {

@@ -279,53 +279,105 @@ export function isQueryRelevantToUser(
   return true;
 }
 
-export function belongsToAppointment(
+export function isUserRequesterOfAppointment(
   appointment: Appointment,
-  user: Pick<UserAccount, 'id' | 'email' | 'role'>
+  user: Pick<UserAccount, 'id' | 'email'> & { name?: string }
 ): boolean {
-  if (user.role === 'admin') return true;
-  if (appointment.requesterId === user.id) return true;
+  if (appointment.requesterId && user.id && appointment.requesterId === user.id) {
+    return true;
+  }
   if (
     Boolean(user.email) &&
-    appointment.requesterEmail?.toLowerCase() === user.email.toLowerCase()
+    Boolean(appointment.requesterEmail) &&
+    appointment.requesterEmail.toLowerCase() === user.email.toLowerCase()
   ) {
     return true;
   }
-  if (Array.isArray(appointment.attendees) && appointment.attendees.length > 0) {
-    return appointment.attendees.some(
-      (att) =>
-        att.id === user.id ||
-        (Boolean(user.email) &&
-          att.email?.toLowerCase() === user.email.toLowerCase())
-    );
+  if (
+    Boolean(user.name) &&
+    Boolean(appointment.requesterName) &&
+    appointment.requesterName.trim().toLowerCase() === user.name!.trim().toLowerCase()
+  ) {
+    return true;
   }
+  return false;
+}
+
+export function isUserAttendeeOfAppointment(
+  appointment: Appointment,
+  user: Pick<UserAccount, 'id' | 'email'> & { name?: string }
+): boolean {
+  if (Array.isArray(appointment.attendees) && appointment.attendees.length > 0) {
+    const matchedInAttendees = appointment.attendees.some(
+      (att) =>
+        (att.id && user.id && att.id === user.id) ||
+        (Boolean(user.email) &&
+          Boolean(att.email) &&
+          att.email.toLowerCase() === user.email.toLowerCase()) ||
+        (Boolean(user.name) &&
+          Boolean(att.name) &&
+          att.name.trim().toLowerCase() === user.name!.trim().toLowerCase())
+    );
+    if (matchedInAttendees) return true;
+  }
+
+  if (appointment.receiverId && user.id && appointment.receiverId === user.id) {
+    return true;
+  }
+  if (
+    Boolean(user.email) &&
+    Boolean(appointment.receiverEmail) &&
+    appointment.receiverEmail!.toLowerCase() === user.email.toLowerCase()
+  ) {
+    return true;
+  }
+  if (Boolean(user.name) && Boolean(appointment.receiverName)) {
+    const names = appointment.receiverName!
+      .split(',')
+      .map((n) => n.trim().toLowerCase())
+      .filter(Boolean);
+    if (names.includes(user.name!.trim().toLowerCase())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function belongsToAppointment(
+  appointment: Appointment,
+  user: Pick<UserAccount, 'id' | 'email' | 'role'> & { name?: string }
+): boolean {
+  if (user.role === 'admin') return true;
   return (
-    appointment.receiverId === user.id ||
-    (Boolean(user.email) &&
-      appointment.receiverEmail?.toLowerCase() === user.email.toLowerCase())
+    isUserRequesterOfAppointment(appointment, user) ||
+    isUserAttendeeOfAppointment(appointment, user)
   );
 }
 
 export function isAppointmentActionNeeded(
   appointment: Appointment,
-  user: Pick<UserAccount, 'id'>
+  user: Pick<UserAccount, 'id'> & { email?: string; name?: string; role?: UserRole }
 ): boolean {
+  const userForMatch = {
+    id: user.id,
+    email: user.email || '',
+    name: user.name,
+  };
+
   if (appointment.status === 'PENDING') {
-    if (appointment.requesterId === user.id) return false;
-    if (Array.isArray(appointment.attendees) && appointment.attendees.length > 0) {
-      return appointment.attendees.some((a) => a.id === user.id);
-    }
-    return appointment.receiverId === user.id;
+    if (user.role === 'admin') return true;
+    if (isUserRequesterOfAppointment(appointment, userForMatch)) return false;
+    return isUserAttendeeOfAppointment(appointment, userForMatch);
   }
   if (
     appointment.status === 'RESCHEDULE_PROPOSED' &&
     appointment.rescheduleProposedBy !== user.id
   ) {
-    if (appointment.requesterId === user.id) return true;
-    if (Array.isArray(appointment.attendees) && appointment.attendees.length > 0) {
-      return appointment.attendees.some((a) => a.id === user.id);
-    }
-    return appointment.receiverId === user.id;
+    if (user.role === 'admin') return true;
+    return (
+      isUserRequesterOfAppointment(appointment, userForMatch) ||
+      isUserAttendeeOfAppointment(appointment, userForMatch)
+    );
   }
   return false;
 }
@@ -334,10 +386,54 @@ export function isAppointmentUpcoming(
   appointment: Appointment,
   nowMs = Date.now()
 ): boolean {
-  if (appointment.status === 'CANCELLED' || appointment.status === 'DECLINED') {
+  if (
+    appointment.status === 'CANCELLED' ||
+    appointment.status === 'DECLINED' ||
+    appointment.status === 'COMPLETED'
+  ) {
     return false;
   }
-  return appointment.scheduledAtMs >= nowMs - 30 * 60 * 1000; // within 30 min ago or in the future
+  if (
+    appointment.status === 'PENDING' ||
+    appointment.status === 'RESCHEDULE_PROPOSED'
+  ) {
+    return true;
+  }
+  const effectiveTimeMs = Math.max(
+    appointment.scheduledAtMs || 0,
+    appointment.proposedScheduledAtMs || 0
+  );
+  return effectiveTimeMs >= nowMs - 30 * 60 * 1000; // within 30 min ago or in the future
+}
+
+export function getLinkedAppointmentForQuery(
+  query: Query | null | undefined,
+  appointments: Appointment[]
+): Appointment | null {
+  if (!query || !Array.isArray(appointments)) return null;
+  return (
+    appointments.find(
+      (apt) =>
+        (Boolean(query.linkedAppointmentId) &&
+          apt.id === query.linkedAppointmentId) ||
+        (Boolean(apt.queryId) && apt.queryId === query.queryId)
+    ) || null
+  );
+}
+
+export function getLinkedQueryForAppointment(
+  appointment: Appointment | null | undefined,
+  queries: Query[]
+): Query | null {
+  if (!appointment || !Array.isArray(queries)) return null;
+  return (
+    queries.find(
+      (q) =>
+        (Boolean(appointment.queryId) && q.queryId === appointment.queryId) ||
+        (Boolean(q.linkedAppointmentId) &&
+          q.linkedAppointmentId === appointment.id)
+    ) || null
+  );
 }
 
 // -----------------------------------------------------------------------------

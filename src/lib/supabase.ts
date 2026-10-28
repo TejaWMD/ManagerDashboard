@@ -13,7 +13,6 @@ import {
   UserRole,
 } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
-import { INITIAL_APPOINTMENTS } from '../data/initialAppointments';
 
 export const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL || 'https://mjrqamakqqsqqmuvaqpw.supabase.co';
@@ -28,11 +27,11 @@ const OLD_COMPLETION_META_KEY = 'wm_portal_completion_meta_v1';
 const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v2';
 
 interface LocalCompletionMeta {
-  completedAt: string | null;
-  completedAtMs: number | null;
+  completedAt?: string | null;
+  completedAtMs?: number | null;
   managerDoneAt?: string | null;
   managerDoneAtMs?: number | null;
-  isDelayed: boolean;
+  isDelayed?: boolean;
   targetDueAt?: string | null;
   targetDueAtMs?: number | null;
   extensionStatus?: ExtensionStatus | null;
@@ -42,6 +41,7 @@ interface LocalCompletionMeta {
   extensionReason?: string | null;
   extensionReviewNote?: string | null;
   extensionReviewedAt?: string | null;
+  linkedAppointmentId?: string | null;
 }
 
 function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
@@ -58,7 +58,7 @@ function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
 
 export function saveLocalCompletionMeta(
   queryId: string,
-  meta: LocalCompletionMeta
+  meta: Partial<LocalCompletionMeta>
 ): void {
   try {
     const current = readLocalCompletionMetaMap();
@@ -308,7 +308,8 @@ export function mapRowToQuery(row: QueryRow): Query {
     extensionReason,
     extensionReviewNote,
     extensionReviewedAt,
-    linkedAppointmentId: row.linked_appointment_id || null,
+    linkedAppointmentId:
+      row.linked_appointment_id || localMeta?.linkedAppointmentId || null,
   };
 }
 
@@ -344,7 +345,6 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
     created_at: query.createdAt,
     created_at_ms: query.createdAtMs,
     rating: query.rating ?? null,
-    linked_appointment_id: query.linkedAppointmentId ?? null,
   };
 }
 
@@ -475,7 +475,8 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('extension_proposed_due_at_ms') ||
     message.includes('extension_reason') ||
     message.includes('extension_review_note') ||
-    message.includes('extension_reviewed_at')
+    message.includes('extension_reviewed_at') ||
+    message.includes('linked_appointment_id')
   );
 }
 
@@ -508,7 +509,16 @@ export async function insertQueryInDb(query: Query): Promise<{
     manager_done_at: query.managerDoneAt ?? null,
     manager_done_at_ms: query.managerDoneAtMs ?? null,
     is_delayed: Boolean(query.isDelayed),
+    linked_appointment_id: query.linkedAppointmentId ?? null,
   };
+  if (query.linkedAppointmentId) {
+    saveLocalCompletionMeta(query.queryId, {
+      completedAt: query.completedAt ?? null,
+      completedAtMs: query.completedAtMs ?? null,
+      isDelayed: Boolean(query.isDelayed),
+      linkedAppointmentId: query.linkedAppointmentId,
+    });
+  }
 
   const rowToInsert: QueryRow =
     titleColumnsSupported !== false
@@ -586,7 +596,7 @@ export async function updateQueryInDb(
     accountManagerRemarkTitle?: string;
     accountManagerRemark?: string;
     accountManagerDone?: boolean;
-    status: QueryStatus;
+    status?: QueryStatus;
     completedAt?: string | null;
     completedAtMs?: number | null;
     isDelayed?: boolean;
@@ -600,14 +610,16 @@ export async function updateQueryInDb(
     extensionReason?: string | null;
     extensionReviewNote?: string | null;
     extensionReviewedAt?: string | null;
+    linkedAppointmentId?: string | null;
   }
 ): Promise<{
   data: Query | null;
   error: string | null;
 }> {
-  const baseUpdates: Record<string, unknown> = {
-    status: updates.status,
-  };
+  const baseUpdates: Record<string, unknown> = {};
+  if (updates.status !== undefined) {
+    baseUpdates.status = updates.status;
+  }
 
   if (updates.queryTitle !== undefined || updates.queryText !== undefined) {
     baseUpdates.query_text = packTitleAndDescription(
@@ -685,6 +697,9 @@ export async function updateQueryInDb(
   if (updates.extensionReviewedAt !== undefined) {
     extendedUpdates.extension_reviewed_at = updates.extensionReviewedAt;
   }
+  if (updates.linkedAppointmentId !== undefined) {
+    extendedUpdates.linked_appointment_id = updates.linkedAppointmentId;
+  }
 
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
@@ -716,23 +731,27 @@ export async function updateQueryInDb(
     updates.targetDueAtMs !== undefined ||
     updates.extensionStatus !== undefined ||
     updates.extensionProposedDueAt !== undefined ||
-    updates.extensionReason !== undefined
+    updates.extensionReason !== undefined ||
+    updates.linkedAppointmentId !== undefined
   ) {
     saveLocalCompletionMeta(queryId, {
-      completedAt: updates.completedAt ?? null,
-      completedAtMs: updates.completedAtMs ?? null,
-      managerDoneAt: updates.managerDoneAt ?? null,
-      managerDoneAtMs: updates.managerDoneAtMs ?? null,
-      isDelayed: Boolean(updates.isDelayed),
-      targetDueAt: updates.targetDueAt ?? null,
-      targetDueAtMs: updates.targetDueAtMs ?? null,
-      extensionStatus: updates.extensionStatus ?? null,
-      extensionRequestedAt: updates.extensionRequestedAt ?? null,
-      extensionProposedDueAt: updates.extensionProposedDueAt ?? null,
-      extensionProposedDueAtMs: updates.extensionProposedDueAtMs ?? null,
-      extensionReason: updates.extensionReason ?? null,
-      extensionReviewNote: updates.extensionReviewNote ?? null,
-      extensionReviewedAt: updates.extensionReviewedAt ?? null,
+      ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
+      ...(updates.completedAtMs !== undefined ? { completedAtMs: updates.completedAtMs } : {}),
+      ...(updates.managerDoneAt !== undefined ? { managerDoneAt: updates.managerDoneAt } : {}),
+      ...(updates.managerDoneAtMs !== undefined ? { managerDoneAtMs: updates.managerDoneAtMs } : {}),
+      ...(updates.isDelayed !== undefined ? { isDelayed: Boolean(updates.isDelayed) } : {}),
+      ...(updates.targetDueAt !== undefined ? { targetDueAt: updates.targetDueAt } : {}),
+      ...(updates.targetDueAtMs !== undefined ? { targetDueAtMs: updates.targetDueAtMs } : {}),
+      ...(updates.extensionStatus !== undefined ? { extensionStatus: updates.extensionStatus } : {}),
+      ...(updates.extensionRequestedAt !== undefined ? { extensionRequestedAt: updates.extensionRequestedAt } : {}),
+      ...(updates.extensionProposedDueAt !== undefined ? { extensionProposedDueAt: updates.extensionProposedDueAt } : {}),
+      ...(updates.extensionProposedDueAtMs !== undefined ? { extensionProposedDueAtMs: updates.extensionProposedDueAtMs } : {}),
+      ...(updates.extensionReason !== undefined ? { extensionReason: updates.extensionReason } : {}),
+      ...(updates.extensionReviewNote !== undefined ? { extensionReviewNote: updates.extensionReviewNote } : {}),
+      ...(updates.extensionReviewedAt !== undefined ? { extensionReviewedAt: updates.extensionReviewedAt } : {}),
+      ...(updates.linkedAppointmentId !== undefined
+        ? { linkedAppointmentId: updates.linkedAppointmentId }
+        : {}),
     });
   }
 
@@ -758,12 +777,19 @@ export async function updateQueryInDb(
   }
 
   if (error && isMissingExtendedColumnError(error.message)) {
-    const retryBase = await supabase
-      .from('queries')
-      .update(baseUpdates)
-      .eq('query_id', queryId)
-      .select('*')
-      .single();
+    const retryBase =
+      Object.keys(baseUpdates).length > 0
+        ? await supabase
+            .from('queries')
+            .update(baseUpdates)
+            .eq('query_id', queryId)
+            .select('*')
+            .single()
+        : await supabase
+            .from('queries')
+            .select('*')
+            .eq('query_id', queryId)
+            .single();
     data = retryBase.data;
     error = retryBase.error;
   }
@@ -782,7 +808,7 @@ export async function updateQueryInDb(
 // Appointments Database Interface & Realtime Helpers
 // ============================================================================
 
-export const STORAGE_KEY_APPOINTMENTS = 'wm_portal_appointments_v1';
+export const STORAGE_KEY_APPOINTMENTS = 'wm_portal_appointments_v2';
 
 export interface AppointmentRow {
   id: string;
@@ -815,6 +841,53 @@ export interface AppointmentRow {
   updated_at?: string | null;
 }
 
+const APT_META_SEPARATOR = '\n<<<WMD_APT_META>>>\n';
+
+interface PackedAppointmentMeta {
+  attendees?: AppointmentAttendee[];
+  cancellationRemark?: string | null;
+  cancelledAt?: string | null;
+  queryId?: string | null;
+}
+
+export function packAppointmentAgenda(
+  agenda?: string | null,
+  meta?: PackedAppointmentMeta
+): string {
+  const cleanAgenda = (agenda ?? '').split(APT_META_SEPARATOR)[0].trim();
+  if (
+    !meta ||
+    ((!meta.attendees || meta.attendees.length === 0) &&
+      !meta.cancellationRemark &&
+      !meta.cancelledAt &&
+      !meta.queryId)
+  ) {
+    return cleanAgenda;
+  }
+  return `${cleanAgenda}${APT_META_SEPARATOR}${JSON.stringify(meta)}`;
+}
+
+export function unpackAppointmentAgenda(rawAgenda?: string | null): {
+  agenda: string;
+  meta: PackedAppointmentMeta;
+} {
+  const raw = rawAgenda ?? '';
+  if (raw.includes(APT_META_SEPARATOR)) {
+    const [cleanAgenda, ...rest] = raw.split(APT_META_SEPARATOR);
+    const metaJson = rest.join(APT_META_SEPARATOR);
+    try {
+      const parsed = JSON.parse(metaJson) as PackedAppointmentMeta;
+      return {
+        agenda: cleanAgenda.trim(),
+        meta: parsed && typeof parsed === 'object' ? parsed : {},
+      };
+    } catch {
+      return { agenda: cleanAgenda.trim(), meta: {} };
+    }
+  }
+  return { agenda: raw.trim(), meta: {} };
+}
+
 export function mapRowToAppointment(row: AppointmentRow): Appointment {
   const scheduledAtMs =
     Number(row.scheduled_at_ms) && !Number.isNaN(Number(row.scheduled_at_ms))
@@ -830,6 +903,10 @@ export function mapRowToAppointment(row: AppointmentRow): Appointment {
       ? Date.parse(row.created_at.replace(' ', 'T')) || Date.now()
       : Date.now();
 
+  const { agenda: unpackedAgenda, meta: packedMeta } = unpackAppointmentAgenda(
+    row.agenda
+  );
+
   let parsedAttendees: AppointmentAttendee[] = [];
   if (row.attendees_json) {
     try {
@@ -842,16 +919,52 @@ export function mapRowToAppointment(row: AppointmentRow): Appointment {
     }
   }
 
-  // Fallback if attendees_json wasn't set or is empty
-  if (parsedAttendees.length === 0 && row.receiver_id) {
-    parsedAttendees = [
-      {
-        id: row.receiver_id,
-        name: row.receiver_name || 'Attendee',
-        email: row.receiver_email || '',
-        role: (row.receiver_role as UserRole) || 'manager',
-      },
-    ];
+  if (
+    parsedAttendees.length === 0 &&
+    Array.isArray(packedMeta.attendees) &&
+    packedMeta.attendees.length > 0
+  ) {
+    parsedAttendees = packedMeta.attendees;
+  }
+
+  // Fallback if attendees_json / packed meta wasn't set: reconstruct from receiver_name & receiver_id
+  if (parsedAttendees.length === 0) {
+    if (row.receiver_name && row.receiver_name.includes(',')) {
+      const names = row.receiver_name
+        .split(',')
+        .map((n) => n.trim())
+        .filter(Boolean);
+      const matchedUsers: AppointmentAttendee[] = [];
+      for (const name of names) {
+        const found = AUTHORIZED_USERS.find(
+          (u) => u.name.toLowerCase() === name.toLowerCase()
+        );
+        if (found) {
+          matchedUsers.push({
+            id: found.id,
+            name: found.name,
+            email: found.email,
+            role: found.role,
+          });
+        }
+      }
+      if (matchedUsers.length > 0) {
+        parsedAttendees = matchedUsers;
+      }
+    }
+
+    if (parsedAttendees.length === 0 && row.receiver_id) {
+      const foundById = AUTHORIZED_USERS.find((u) => u.id === row.receiver_id);
+      parsedAttendees = [
+        {
+          id: row.receiver_id,
+          name: row.receiver_name || foundById?.name || 'Attendee',
+          email: row.receiver_email || foundById?.email || '',
+          role:
+            (row.receiver_role as UserRole) || foundById?.role || 'manager',
+        },
+      ];
+    }
   }
 
   const primaryReceiverName =
@@ -860,7 +973,7 @@ export function mapRowToAppointment(row: AppointmentRow): Appointment {
   return {
     id: row.id,
     title: row.title,
-    agenda: row.agenda || '',
+    agenda: unpackedAgenda,
     requesterId: row.requester_id,
     requesterName: row.requester_name,
     requesterEmail: row.requester_email,
@@ -869,7 +982,10 @@ export function mapRowToAppointment(row: AppointmentRow): Appointment {
     receiverId: parsedAttendees[0]?.id || row.receiver_id || '',
     receiverName: primaryReceiverName,
     receiverEmail: parsedAttendees[0]?.email || row.receiver_email || '',
-    receiverRole: parsedAttendees[0]?.role || (row.receiver_role as UserRole) || 'manager',
+    receiverRole:
+      parsedAttendees[0]?.role ||
+      (row.receiver_role as UserRole) ||
+      'manager',
     scheduledAt: row.scheduled_at,
     scheduledAtMs,
     durationMinutes: Number(row.duration_minutes) || 30,
@@ -882,9 +998,10 @@ export function mapRowToAppointment(row: AppointmentRow): Appointment {
       ? Number(row.proposed_scheduled_at_ms)
       : null,
     rescheduleReason: row.reschedule_reason || null,
-    cancellationRemark: row.cancellation_remark || null,
-    cancelledAt: row.cancelled_at || null,
-    queryId: row.query_id || null,
+    cancellationRemark:
+      row.cancellation_remark || packedMeta.cancellationRemark || null,
+    cancelledAt: row.cancelled_at || packedMeta.cancelledAt || null,
+    queryId: row.query_id || packedMeta.queryId || null,
     createdAt: row.created_at,
     createdAtMs,
     updatedAt: row.updated_at || null,
@@ -898,10 +1015,17 @@ export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
       ? apt.attendees.map((a) => a.name).join(', ')
       : apt.receiverName || '';
 
+  const packedAgenda = packAppointmentAgenda(apt.agenda, {
+    attendees: apt.attendees || [],
+    cancellationRemark: apt.cancellationRemark || null,
+    cancelledAt: apt.cancelledAt || null,
+    queryId: apt.queryId || null,
+  });
+
   return {
     id: apt.id,
     title: apt.title,
-    agenda: apt.agenda || '',
+    agenda: packedAgenda,
     requester_id: apt.requesterId,
     requester_name: apt.requesterName,
     requester_email: apt.requesterEmail,
@@ -910,7 +1034,6 @@ export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
     receiver_name: combinedNames,
     receiver_email: primaryAttendee?.email || apt.receiverEmail || '',
     receiver_role: primaryAttendee?.role || apt.receiverRole || 'manager',
-    attendees_json: JSON.stringify(apt.attendees || []),
     scheduled_at: apt.scheduledAt,
     scheduled_at_ms: apt.scheduledAtMs,
     duration_minutes: apt.durationMinutes || 30,
@@ -921,8 +1044,6 @@ export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
     proposed_scheduled_at: apt.proposedScheduledAt || null,
     proposed_scheduled_at_ms: apt.proposedScheduledAtMs || null,
     reschedule_reason: apt.rescheduleReason || null,
-    cancellation_remark: apt.cancellationRemark || null,
-    cancelled_at: apt.cancelledAt || null,
     query_id: apt.queryId || null,
     created_at: apt.createdAt,
     created_at_ms: apt.createdAtMs,
@@ -932,17 +1053,19 @@ export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
 
 export function readCachedAppointments(): Appointment[] {
   try {
+    localStorage.removeItem('wm_portal_appointments_v1');
     const raw = localStorage.getItem(STORAGE_KEY_APPOINTMENTS);
-    if (!raw) return INITIAL_APPOINTMENTS;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_APPOINTMENTS;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return INITIAL_APPOINTMENTS;
+    return [];
   }
 }
 
 export function writeCachedAppointments(list: Appointment[]): void {
   try {
+    localStorage.removeItem('wm_portal_appointments_v1');
     localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify(list));
   } catch {
     // Ignore storage quota errors
@@ -984,16 +1107,66 @@ export async function fetchAppointmentsFromDb(): Promise<{
   };
 }
 
+async function computeNextAppointmentIdFromDb(): Promise<string> {
+  const { data } = await supabase.from('appointments').select('id');
+  let maxNum = 0;
+  for (const row of (data || []) as { id?: string }[]) {
+    const match = row.id?.match(/APT-(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!Number.isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+  return `APT-${String(maxNum + 1).padStart(3, '0')}`;
+}
+
 export async function insertAppointmentInDb(
   appointment: Appointment
 ): Promise<{ data: Appointment; error: string | null }> {
   const row = mapAppointmentToRow(appointment);
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('appointments')
     .insert([row])
     .select('*')
     .single();
+
+  // Retry if foreign key on query_id fails (e.g. linked query only exists locally)
+  if (error && (error.code === '23503' || error.message?.includes('query_id'))) {
+    const retryWithoutQueryFk = await supabase
+      .from('appointments')
+      .insert([{ ...row, query_id: null }])
+      .select('*')
+      .single();
+    data = retryWithoutQueryFk.data;
+    error = retryWithoutQueryFk.error;
+  }
+
+  // Retry if foreign key on users fails
+  if (error && error.code === '23503') {
+    await ensureUsersSeededInDb();
+    const retryAfterSeed = await supabase
+      .from('appointments')
+      .insert([{ ...row, query_id: null }])
+      .select('*')
+      .single();
+    data = retryAfterSeed.data;
+    error = retryAfterSeed.error;
+  }
+
+  // Handle duplicate ID collision automatically
+  if (error && (error.code === '23505' || error.message?.includes('duplicate key'))) {
+    const nextId = await computeNextAppointmentIdFromDb();
+    const retryDuplicate = await supabase
+      .from('appointments')
+      .insert([{ ...row, id: nextId }])
+      .select('*')
+      .single();
+    data = retryDuplicate.data;
+    error = retryDuplicate.error;
+  }
 
   if (error) {
     console.warn('[Supabase] Failed to insert appointment to DB, persisting locally:', error.message);
@@ -1013,61 +1186,141 @@ export async function insertAppointmentInDb(
 
 export async function updateAppointmentInDb(
   appointmentId: string,
-  updates: Partial<AppointmentRow>
+  updates: Partial<AppointmentRow> & Partial<Appointment>
 ): Promise<{ data: Appointment | null; error: string | null }> {
-  const payload = {
-    ...updates,
-    updated_at: new Date().toISOString(),
-  };
+  const cached = readCachedAppointments();
+  const existing = cached.find((a) => a.id === appointmentId);
 
-  const { data, error } = await supabase
+  const mergedApt: Appointment | null = existing
+    ? {
+        ...existing,
+        ...(updates.title !== undefined ? { title: updates.title } : {}),
+        ...(updates.agenda !== undefined ? { agenda: updates.agenda || '' } : {}),
+        ...(updates.attendees !== undefined ? { attendees: updates.attendees } : {}),
+        ...(updates.receiverId !== undefined ? { receiverId: updates.receiverId } : {}),
+        ...(updates.receiver_id !== undefined ? { receiverId: updates.receiver_id || '' } : {}),
+        ...(updates.receiverName !== undefined ? { receiverName: updates.receiverName } : {}),
+        ...(updates.receiver_name !== undefined ? { receiverName: updates.receiver_name || '' } : {}),
+        ...(updates.receiverEmail !== undefined ? { receiverEmail: updates.receiverEmail } : {}),
+        ...(updates.receiver_email !== undefined ? { receiverEmail: updates.receiver_email || '' } : {}),
+        ...(updates.receiverRole !== undefined ? { receiverRole: updates.receiverRole } : {}),
+        ...(updates.receiver_role !== undefined
+          ? { receiverRole: updates.receiver_role as UserRole }
+          : {}),
+        ...(updates.scheduledAt !== undefined ? { scheduledAt: updates.scheduledAt } : {}),
+        ...(updates.scheduled_at !== undefined ? { scheduledAt: updates.scheduled_at } : {}),
+        ...(updates.scheduledAtMs !== undefined ? { scheduledAtMs: updates.scheduledAtMs } : {}),
+        ...(updates.scheduled_at_ms !== undefined ? { scheduledAtMs: updates.scheduled_at_ms } : {}),
+        ...(updates.meetingType !== undefined ? { meetingType: updates.meetingType } : {}),
+        ...(updates.meeting_type !== undefined
+          ? { meetingType: updates.meeting_type as MeetingType }
+          : {}),
+        ...(updates.meetingLocation !== undefined
+          ? { meetingLocation: updates.meetingLocation }
+          : {}),
+        ...(updates.meeting_location !== undefined
+          ? { meetingLocation: updates.meeting_location || '' }
+          : {}),
+        ...(updates.status !== undefined
+          ? { status: updates.status as AppointmentStatus }
+          : {}),
+        ...(updates.rescheduleProposedBy !== undefined
+          ? { rescheduleProposedBy: updates.rescheduleProposedBy }
+          : {}),
+        ...(updates.reschedule_proposed_by !== undefined
+          ? { rescheduleProposedBy: updates.reschedule_proposed_by }
+          : {}),
+        ...(updates.proposedScheduledAt !== undefined
+          ? { proposedScheduledAt: updates.proposedScheduledAt }
+          : {}),
+        ...(updates.proposed_scheduled_at !== undefined
+          ? { proposedScheduledAt: updates.proposed_scheduled_at }
+          : {}),
+        ...(updates.proposedScheduledAtMs !== undefined
+          ? { proposedScheduledAtMs: updates.proposedScheduledAtMs }
+          : {}),
+        ...(updates.proposed_scheduled_at_ms !== undefined
+          ? { proposedScheduledAtMs: updates.proposed_scheduled_at_ms }
+          : {}),
+        ...(updates.rescheduleReason !== undefined
+          ? { rescheduleReason: updates.rescheduleReason }
+          : {}),
+        ...(updates.reschedule_reason !== undefined
+          ? { rescheduleReason: updates.reschedule_reason }
+          : {}),
+        ...(updates.cancellationRemark !== undefined
+          ? { cancellationRemark: updates.cancellationRemark }
+          : {}),
+        ...(updates.cancellation_remark !== undefined
+          ? { cancellationRemark: updates.cancellation_remark }
+          : {}),
+        ...(updates.cancelledAt !== undefined
+          ? { cancelledAt: updates.cancelledAt }
+          : {}),
+        ...(updates.cancelled_at !== undefined
+          ? { cancelledAt: updates.cancelled_at }
+          : {}),
+        ...(updates.queryId !== undefined ? { queryId: updates.queryId } : {}),
+        ...(updates.query_id !== undefined ? { queryId: updates.query_id } : {}),
+        updatedAt: new Date().toISOString(),
+      }
+    : null;
+
+  const dbPayload: Record<string, unknown> = mergedApt
+    ? {
+        ...mapAppointmentToRow(mergedApt),
+        updated_at: mergedApt.updatedAt,
+      }
+    : {
+        ...(updates.status !== undefined ? { status: updates.status } : {}),
+        ...(updates.scheduled_at !== undefined ? { scheduled_at: updates.scheduled_at } : {}),
+        ...(updates.scheduled_at_ms !== undefined
+          ? { scheduled_at_ms: updates.scheduled_at_ms }
+          : {}),
+        ...(updates.reschedule_proposed_by !== undefined
+          ? { reschedule_proposed_by: updates.reschedule_proposed_by }
+          : {}),
+        ...(updates.proposed_scheduled_at !== undefined
+          ? { proposed_scheduled_at: updates.proposed_scheduled_at }
+          : {}),
+        ...(updates.proposed_scheduled_at_ms !== undefined
+          ? { proposed_scheduled_at_ms: updates.proposed_scheduled_at_ms }
+          : {}),
+        ...(updates.reschedule_reason !== undefined
+          ? { reschedule_reason: updates.reschedule_reason }
+          : {}),
+        updated_at: new Date().toISOString(),
+      };
+
+  let { data, error } = await supabase
     .from('appointments')
-    .update(payload)
+    .update(dbPayload)
     .eq('id', appointmentId)
     .select('*')
     .single();
 
+  if (error && (error.code === '23503' || error.message?.includes('query_id'))) {
+    const retryWithoutQueryFk = await supabase
+      .from('appointments')
+      .update({ ...dbPayload, query_id: null })
+      .eq('id', appointmentId)
+      .select('*')
+      .single();
+    data = retryWithoutQueryFk.data;
+    error = retryWithoutQueryFk.error;
+  }
+
   if (error) {
     console.warn('[Supabase] Failed to update appointment in DB, updating locally:', error.message);
-    const cached = readCachedAppointments();
-    const existing = cached.find((a) => a.id === appointmentId);
-    if (!existing) {
+    if (!mergedApt) {
       return { data: null, error: error.message };
     }
-    let parsedAttendees = existing.attendees;
-    if (updates.attendees_json !== undefined) {
-      try {
-        parsedAttendees = JSON.parse(updates.attendees_json || '[]');
-      } catch {
-        // Ignore
-      }
-    }
-    const updatedObj: Appointment = {
-      ...existing,
-      ...(updates.title !== undefined ? { title: updates.title } : {}),
-      ...(updates.agenda !== undefined ? { agenda: updates.agenda || '' } : {}),
-      ...(updates.attendees_json !== undefined ? { attendees: parsedAttendees } : {}),
-      ...(updates.scheduled_at !== undefined ? { scheduledAt: updates.scheduled_at } : {}),
-      ...(updates.scheduled_at_ms !== undefined ? { scheduledAtMs: updates.scheduled_at_ms } : {}),
-      ...(updates.meeting_type !== undefined ? { meetingType: updates.meeting_type as MeetingType } : {}),
-      ...(updates.meeting_location !== undefined ? { meetingLocation: updates.meeting_location || '' } : {}),
-      ...(updates.status !== undefined ? { status: updates.status as AppointmentStatus } : {}),
-      ...(updates.reschedule_proposed_by !== undefined ? { rescheduleProposedBy: updates.reschedule_proposed_by } : {}),
-      ...(updates.proposed_scheduled_at !== undefined ? { proposedScheduledAt: updates.proposed_scheduled_at } : {}),
-      ...(updates.proposed_scheduled_at_ms !== undefined ? { proposedScheduledAtMs: updates.proposed_scheduled_at_ms } : {}),
-      ...(updates.reschedule_reason !== undefined ? { rescheduleReason: updates.reschedule_reason } : {}),
-      ...(updates.cancellation_remark !== undefined ? { cancellationRemark: updates.cancellation_remark } : {}),
-      ...(updates.cancelled_at !== undefined ? { cancelledAt: updates.cancelled_at } : {}),
-      ...(updates.query_id !== undefined ? { queryId: updates.query_id } : {}),
-      updatedAt: new Date().toISOString(),
-    };
-    const nextCached = cached.map((a) => (a.id === appointmentId ? updatedObj : a));
+    const nextCached = cached.map((a) => (a.id === appointmentId ? mergedApt : a));
     writeCachedAppointments(nextCached);
-    return { data: updatedObj, error: null };
+    return { data: mergedApt, error: null };
   }
 
   const saved = mapRowToAppointment(data as AppointmentRow);
-  const cached = readCachedAppointments();
   const nextCached = cached.map((a) => (a.id === appointmentId ? saved : a));
   writeCachedAppointments(nextCached);
 

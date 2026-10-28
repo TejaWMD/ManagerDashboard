@@ -44,52 +44,24 @@ export function computeTargetRecipients(
 
   switch (event) {
     case 'NEW_QUERY':
-      // AM submits query -> Notify Manager + Admin
-      rawRecipients.push(query.managerId, ...adminIds);
+      // Sender submits query -> Notify Manager + Account Manager + Admin
+      rawRecipients.push(query.managerId, query.accountManagerId, ...adminIds);
       break;
 
     case 'MANAGER_REMARK':
-      // Manager submits remark -> Notify Account Manager + Admin
-      rawRecipients.push(query.accountManagerId, ...adminIds);
-      break;
-
     case 'MANAGER_DONE':
-      // Manager checks Done -> Notify Account Manager + Admin
-      rawRecipients.push(query.accountManagerId, ...adminIds);
-      break;
-
     case 'AM_REMARK':
-      // AM submits remark -> Notify Manager + Admin
-      rawRecipients.push(query.managerId, ...adminIds);
-      break;
-
     case 'AM_DONE':
-      // AM checks Done (Query completed) -> Notify Manager + Admin
-      rawRecipients.push(query.managerId, ...adminIds);
-      break;
-
     case 'QUERY_DELAYED':
-      // Past completion target -> Notify Manager, Account Manager + Admin
+    case 'EXTENSION_REQUESTED':
+    case 'EXTENSION_APPROVED':
+    case 'EXTENSION_DECLINED':
+      // Notify all involved parties (Manager + Account Manager/Sender) + Admin
       rawRecipients.push(
         query.managerId,
         query.accountManagerId,
         ...adminIds
       );
-      break;
-
-    case 'EXTENSION_REQUESTED':
-      // Manager requests completion date extension -> Notify Account Manager (Sender) + Admin
-      rawRecipients.push(query.accountManagerId, ...adminIds);
-      break;
-
-    case 'EXTENSION_APPROVED':
-      // AM approves extension -> Notify Manager + Admin
-      rawRecipients.push(query.managerId, ...adminIds);
-      break;
-
-    case 'EXTENSION_DECLINED':
-      // AM declines extension -> Notify Manager + Admin
-      rawRecipients.push(query.managerId, ...adminIds);
       break;
 
     case 'TEST':
@@ -250,6 +222,7 @@ export async function dispatchQueryPushNotification(
 export type AppointmentNotificationEventType =
   | 'APPOINTMENT_REQUESTED'
   | 'APPOINTMENT_ACCEPTED'
+  | 'APPOINTMENT_DECLINED'
   | 'APPOINTMENT_RESCHEDULE_REQUESTED'
   | 'APPOINTMENT_RESCHEDULE_ACCEPTED'
   | 'APPOINTMENT_CANCELLED'
@@ -263,44 +236,59 @@ export interface DispatchAppointmentNotificationParams {
 }
 
 export function computeAppointmentRecipients(
-  event: AppointmentNotificationEventType,
+  _event: AppointmentNotificationEventType,
   appointment: Appointment,
   actorId: string
 ): string[] {
   const adminIds = getAdminUserIds();
-  const rawRecipients: string[] = [];
-  const attendeeIds =
-    Array.isArray(appointment.attendees) && appointment.attendees.length > 0
-      ? appointment.attendees.map((a) => a.id)
-      : [appointment.receiverId || ''];
+  const attendeeIds: string[] = [];
 
-  switch (event) {
-    case 'APPOINTMENT_REQUESTED':
-    case 'APPOINTMENT_UPDATED':
-      // Requester sent/updated -> Notify all Attendees + Admin
-      rawRecipients.push(...attendeeIds, ...adminIds);
-      break;
-
-    case 'APPOINTMENT_ACCEPTED':
-      // An attendee accepted -> Notify Requester + other attendees + Admin
-      rawRecipients.push(appointment.requesterId, ...attendeeIds, ...adminIds);
-      break;
-
-    case 'APPOINTMENT_RESCHEDULE_REQUESTED':
-      // Reschedule proposed -> Notify Requester + all attendees + Admin
-      rawRecipients.push(appointment.requesterId, ...attendeeIds, ...adminIds);
-      break;
-
-    case 'APPOINTMENT_RESCHEDULE_ACCEPTED':
-      // New time accepted -> Notify both parties (excluding actor) + Admin
-      rawRecipients.push(appointment.requesterId, ...attendeeIds, ...adminIds);
-      break;
-
-    case 'APPOINTMENT_CANCELLED':
-      // Requester cancelled -> Notify all Attendees + Admin
-      rawRecipients.push(...attendeeIds, ...adminIds);
-      break;
+  if (Array.isArray(appointment.attendees) && appointment.attendees.length > 0) {
+    for (const att of appointment.attendees) {
+      if (att.id) {
+        attendeeIds.push(att.id);
+      } else {
+        const matched = AUTHORIZED_USERS.find(
+          (u) =>
+            (att.email && u.email.toLowerCase() === att.email.toLowerCase()) ||
+            (att.name && u.name.toLowerCase() === att.name.toLowerCase())
+        );
+        if (matched) attendeeIds.push(matched.id);
+      }
+    }
   }
+
+  if (appointment.receiverId) {
+    attendeeIds.push(appointment.receiverId);
+  } else if (appointment.receiverEmail || appointment.receiverName) {
+    const matchedReceiver = AUTHORIZED_USERS.find(
+      (u) =>
+        (appointment.receiverEmail &&
+          u.email.toLowerCase() === appointment.receiverEmail.toLowerCase()) ||
+        (appointment.receiverName &&
+          u.name.toLowerCase() === appointment.receiverName.toLowerCase())
+    );
+    if (matchedReceiver) attendeeIds.push(matchedReceiver.id);
+  }
+
+  let requesterId = appointment.requesterId;
+  if (!requesterId && (appointment.requesterEmail || appointment.requesterName)) {
+    const matchedRequester = AUTHORIZED_USERS.find(
+      (u) =>
+        (appointment.requesterEmail &&
+          u.email.toLowerCase() === appointment.requesterEmail.toLowerCase()) ||
+        (appointment.requesterName &&
+          u.name.toLowerCase() === appointment.requesterName.toLowerCase())
+    );
+    if (matchedRequester) requesterId = matchedRequester.id;
+  }
+
+  // Always notify all involved people (requester + all attendees) AND all admins
+  const rawRecipients: string[] = [
+    requesterId,
+    ...attendeeIds,
+    ...adminIds,
+  ];
 
   // Deduplicate and filter out the initiator
   return Array.from(new Set(rawRecipients)).filter(
@@ -328,6 +316,12 @@ export function formatAppointmentNotificationContent(
         body: `${actor.name} confirmed the appointment for ${timeLabel}.`,
       };
 
+    case 'APPOINTMENT_DECLINED':
+      return {
+        title: `❌ Appointment Declined: ${appointment.title}`,
+        body: `${actor.name} declined the appointment for ${timeLabel}.`,
+      };
+
     case 'APPOINTMENT_RESCHEDULE_REQUESTED':
       return {
         title: `⏳ Reschedule Requested: ${appointment.title}`,
@@ -337,7 +331,7 @@ export function formatAppointmentNotificationContent(
     case 'APPOINTMENT_RESCHEDULE_ACCEPTED':
       return {
         title: `✅ Reschedule Confirmed: ${appointment.title}`,
-        body: `The new meeting time has been confirmed for ${timeLabel}.`,
+        body: `${actor.name} confirmed the new meeting time for ${timeLabel}.`,
       };
 
     case 'APPOINTMENT_UPDATED':
@@ -400,14 +394,17 @@ export async function dispatchAppointmentPushNotification(
       console.log('[PushDispatcher] Appointment push result:', data);
     }
 
-    // 2. Play chime and desktop notification
-    showWebNotification(title, body, payload.tag);
+    // 2. Fallback in-app display if current user is among recipients
+    if (recipientUserIds.includes(actor.id)) {
+      showWebNotification(title, body, payload.tag);
+    }
 
     return { success: !error, recipientCount: recipientUserIds.length };
   } catch (err) {
     console.warn('[PushDispatcher] Failed to dispatch appointment notification:', err);
-    // Still trigger in-app notification
-    showWebNotification(title, body, payload.tag);
+    if (recipientUserIds.includes(actor.id)) {
+      showWebNotification(title, body, payload.tag);
+    }
     return { success: false, recipientCount: recipientUserIds.length };
   }
 }
