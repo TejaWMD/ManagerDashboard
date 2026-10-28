@@ -61,9 +61,64 @@ export async function getExistingPushSubscription(): Promise<PushSubscription | 
   }
 }
 
+export interface PushStatusInfo {
+  supported: boolean;
+  permission: NotificationPermission | 'unsupported';
+  hasBrowserSub: boolean;
+  isRegisteredInDb: boolean;
+  endpoint?: string;
+}
+
+// Queries both browser and Supabase to determine subscription synchronization status
+export async function checkPushStatus(userId: string): Promise<PushStatusInfo> {
+  const supported = isPushNotificationSupported();
+  if (!supported) {
+    return {
+      supported: false,
+      permission: 'unsupported',
+      hasBrowserSub: false,
+      isRegisteredInDb: false,
+    };
+  }
+
+  const permission =
+    typeof window !== 'undefined' && 'Notification' in window
+      ? Notification.permission
+      : 'default';
+
+  const sub = await getExistingPushSubscription();
+  const hasBrowserSub = Boolean(sub);
+
+  let isRegisteredInDb = false;
+  if (sub && userId) {
+    try {
+      const { data, error } = await supabase
+        .from('push_subscriptions')
+        .select('endpoint')
+        .eq('user_id', userId)
+        .eq('endpoint', sub.endpoint);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        isRegisteredInDb = true;
+      }
+    } catch (err) {
+      console.warn('[Push] Error checking DB subscription status:', err);
+    }
+  }
+
+  return {
+    supported,
+    permission,
+    hasBrowserSub,
+    isRegisteredInDb,
+    endpoint: sub?.endpoint,
+  };
+}
+
 // Subscribe the user's browser to Desktop Web Push and save the token to Supabase
 export async function subscribeUserToPush(
-  userId: string
+  userId: string,
+  forceRenew: boolean = false
 ): Promise<{ success: boolean; subscription?: PushSubscription; error?: string }> {
   if (!isPushNotificationSupported()) {
     return {
@@ -97,6 +152,17 @@ export async function subscribeUserToPush(
 
     // 3. Get existing or subscribe anew with VAPID applicationServerKey
     let sub = await reg.pushManager.getSubscription();
+
+    // If forceRenew is requested (e.g. after database data was wiped), unsubscribe first to get a fresh subscription
+    if (forceRenew && sub) {
+      try {
+        await sub.unsubscribe();
+      } catch (err) {
+        console.warn('[Push] Error unsubscribing prior subscription during renew:', err);
+      }
+      sub = null;
+    }
+
     if (!sub) {
       const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer;
       sub = await reg.pushManager.subscribe({
@@ -116,7 +182,10 @@ export async function subscribeUserToPush(
       : '';
 
     // 5. Save/Update subscription in Supabase database
-    const { error: dbError } = await supabase.from('push_subscriptions').upsert(
+    let savedSuccessfully = false;
+    let saveErrorMessage = '';
+
+    const { error: upsertError } = await supabase.from('push_subscriptions').upsert(
       {
         user_id: userId,
         endpoint: sub.endpoint,
@@ -126,10 +195,17 @@ export async function subscribeUserToPush(
       { onConflict: 'user_id,endpoint' }
     );
 
-    if (dbError) {
-      console.warn('[Push] Failed to store subscription in DB:', dbError.message);
-      // Non-blocking fallback: try inserting
-      await supabase.from('push_subscriptions').insert([
+    if (!upsertError) {
+      savedSuccessfully = true;
+    } else {
+      console.warn('[Push] Upsert failed, falling back to delete + insert:', upsertError.message);
+      // Fallback: Delete any duplicate record for this user and endpoint then insert
+      await supabase
+        .from('push_subscriptions')
+        .delete()
+        .match({ user_id: userId, endpoint: sub.endpoint });
+
+      const { error: insertError } = await supabase.from('push_subscriptions').insert([
         {
           user_id: userId,
           endpoint: sub.endpoint,
@@ -137,6 +213,20 @@ export async function subscribeUserToPush(
           auth,
         },
       ]);
+
+      if (!insertError) {
+        savedSuccessfully = true;
+      } else {
+        saveErrorMessage = insertError.message || upsertError.message;
+        console.error('[Push] Failed to insert subscription:', saveErrorMessage);
+      }
+    }
+
+    if (!savedSuccessfully) {
+      return {
+        success: false,
+        error: `Browser notification enabled, but could not save subscription to Supabase: ${saveErrorMessage}`,
+      };
     }
 
     return { success: true, subscription: sub };
@@ -154,12 +244,19 @@ export async function unsubscribeUserFromPush(
   try {
     const sub = await getExistingPushSubscription();
     if (sub) {
-      await sub.unsubscribe();
-      await supabase
-        .from('push_subscriptions')
-        .delete()
-        .match({ user_id: userId, endpoint: sub.endpoint });
+      try {
+        await sub.unsubscribe();
+      } catch (err) {
+        console.warn('[Push] Unsubscribe on pushManager failed:', err);
+      }
     }
+
+    // Remove all subscriptions for this user from database
+    await supabase
+      .from('push_subscriptions')
+      .delete()
+      .eq('user_id', userId);
+
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

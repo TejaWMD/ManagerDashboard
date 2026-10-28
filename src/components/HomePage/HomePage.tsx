@@ -774,12 +774,27 @@ export const HomePage: React.FC<HomePageProps> = ({
                         <span className="table-status-pill table-status-pill--completed">
                           Completed
                         </span>
+                        {activeViewingQuery.isUrgent && (
+                          <span className="table-status-pill table-status-pill--urgent-tag">
+                            Urgent
+                          </span>
+                        )}
                         {isQueryDelayed(activeViewingQuery, nowMs) && (
                           <span className="table-status-pill table-status-pill--delayed">
                             Delayed
                           </span>
                         )}
                       </>
+                    ) : activeViewingQuery.isUrgent ? (
+                      activeViewingQuery.managerDone && !activeViewingQuery.accountManagerDone ? (
+                        <span className="table-status-pill table-status-pill--urgent-mgr">
+                          🚨 Urgent - Mgr Checked
+                        </span>
+                      ) : (
+                        <span className="table-status-pill table-status-pill--urgent">
+                          🚨 URGENT (Due Now)
+                        </span>
+                      )
                     ) : activeViewingQuery.managerDone &&
                       !activeViewingQuery.accountManagerDone ? (
                       <>

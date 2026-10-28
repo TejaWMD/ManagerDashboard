@@ -42,7 +42,9 @@ import {
 } from './lib/pushDispatcher';
 import {
   checkAndNotifyDelayedQueries,
+  checkAndNotifyUrgentReminders,
   resetDelayNotifiedLocally,
+  clearUrgentReminderLocally,
 } from './lib/slaDelayChecker';
 import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
@@ -126,14 +128,16 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Monitor for SLA delay breaches and dispatch push notifications
+  // Monitor for SLA delay breaches and urgent 24h reminders and dispatch push notifications
   useEffect(() => {
     if (queries.length === 0) return;
     checkAndNotifyDelayedQueries(queries);
+    checkAndNotifyUrgentReminders(queries);
 
     const delayTimer = window.setInterval(() => {
       if (queriesRef.current.length > 0) {
         checkAndNotifyDelayedQueries(queriesRef.current);
+        checkAndNotifyUrgentReminders(queriesRef.current);
       }
     }, 60 * 1000); // Check every minute
 
@@ -251,13 +255,17 @@ export const App: React.FC = () => {
 
               if (user.role === 'admin') {
                 showWebNotification(
-                  '🚨 New Query Created',
-                  `${senderLabel} submitted ${incoming.queryId} to Manager ${incoming.managerName}`
+                  incoming.isUrgent ? '🚨 URGENT Query Created (Immediate)' : '🚨 New Query Created',
+                  incoming.isUrgent
+                    ? `[URGENT] ${senderLabel} submitted ${incoming.queryId} to Manager ${incoming.managerName} - Immediate Action Required!`
+                    : `${senderLabel} submitted ${incoming.queryId} to Manager ${incoming.managerName}`
                 );
               } else if (user.id === incoming.managerId) {
                 showWebNotification(
-                  '🚨 New Query Assigned',
-                  `${senderLabel} assigned ${incoming.queryId} to you`
+                  incoming.isUrgent ? '🚨 URGENT Query Assigned (Immediate)' : '🚨 New Query Assigned',
+                  incoming.isUrgent
+                    ? `[URGENT] ${senderLabel} assigned ${incoming.queryId} to you! Requires immediate response.`
+                    : `${senderLabel} assigned ${incoming.queryId} to you`
                 );
               }
             }
@@ -513,6 +521,7 @@ export const App: React.FC = () => {
     queryTitle: string;
     queryText: string;
     linkedAppointmentId?: string | null;
+    isUrgent?: boolean;
   }) => {
     if (!currentUser) return;
     const now = new Date();
@@ -542,6 +551,7 @@ export const App: React.FC = () => {
       accountManagerDone: false,
       status: 'Pending',
       linkedAppointmentId: payload.linkedAppointmentId || null,
+      isUrgent: Boolean(payload.isUrgent),
     };
 
     setQueries((prev) => {
@@ -615,6 +625,8 @@ export const App: React.FC = () => {
         | 'extensionReason'
         | 'extensionReviewNote'
         | 'extensionReviewedAt'
+        | 'isUrgent'
+        | 'lastUrgentReminderAtMs'
       >
     >
   ) => {
@@ -672,7 +684,13 @@ export const App: React.FC = () => {
         ? false
         : isQueryDelayed(existing, nowMs);
 
-    const nextIsDelayed = nextIsCompleted
+    const isUrgentQuery =
+      updates.isUrgent !== undefined ? Boolean(updates.isUrgent) : Boolean(existing.isUrgent);
+
+    // Urgent queries have no delay threshold and are never classified as delayed
+    const nextIsDelayed = isUrgentQuery
+      ? false
+      : nextIsCompleted
       ? Boolean(
           wasAlreadyDelayed ||
             (effectiveDeadlineMs > 0 &&
@@ -680,6 +698,10 @@ export const App: React.FC = () => {
               nextCompletedAtMs > effectiveDeadlineMs)
         )
       : Boolean(effectiveDeadlineMs > 0 && nowMs > effectiveDeadlineMs);
+
+    if (nextIsCompleted && isUrgentQuery) {
+      clearUrgentReminderLocally(queryId);
+    }
 
     const optimisticItem: Query = {
       ...existing,

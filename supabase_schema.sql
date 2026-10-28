@@ -83,7 +83,9 @@ CREATE TABLE IF NOT EXISTS public.queries (
   extension_proposed_due_at_ms BIGINT DEFAULT NULL,
   extension_reason TEXT DEFAULT NULL,
   extension_review_note TEXT DEFAULT NULL,
-  extension_reviewed_at TEXT DEFAULT NULL
+  extension_reviewed_at TEXT DEFAULT NULL,
+  is_urgent BOOLEAN NOT NULL DEFAULT FALSE,
+  last_urgent_reminder_at_ms BIGINT DEFAULT NULL
 );
 
 -- Safely add new columns if upgrading an existing queries table
@@ -107,7 +109,9 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS extension_reason TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS extension_review_note TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS extension_reviewed_at TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS linked_appointment_id TEXT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS linked_appointment_id TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS is_urgent BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS last_urgent_reminder_at_ms BIGINT DEFAULT NULL;
 
 -- Backfill existing manager_done rows that do not have manager_done_at_ms yet
 UPDATE public.queries

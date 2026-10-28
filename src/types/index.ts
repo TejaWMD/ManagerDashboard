@@ -55,6 +55,8 @@ export interface Query {
   extensionReviewNote?: string | null;
   extensionReviewedAt?: string | null;
   linkedAppointmentId?: string | null; // e.g. 'APT-001' if query was raised following an appointment
+  isUrgent?: boolean; // Flag indicating query is urgent (immediate response required, no 48h delay threshold)
+  lastUrgentReminderAtMs?: number | null; // Epoch ms of the latest 24h reminder notification sent to receiver
 }
 
 export type MeetingType = 'Online Call' | 'Office/Desk' | 'Phone';
@@ -121,12 +123,19 @@ export function isQueryDone(query: Query): boolean {
 }
 
 export function getQueryStageRank(query: Query): number {
-  // 0: both unchecked (top priority)
-  // 1: only checked by manager (middle priority)
-  // 2: checked by both (completed - bottom)
+  // 2: checked by both (completed - bottom, whether normal or urgent)
   if (query.managerDone && query.accountManagerDone) {
     return 2;
   }
+  // Urgent queries stay on top of the query list until completed
+  // -2: Urgent both unchecked (top priority)
+  // -1: Urgent manager done, awaiting sender verification
+  if (query.isUrgent) {
+    return query.managerDone ? -1 : -2;
+  }
+  // Normal queries:
+  // 0: both unchecked (top normal priority)
+  // 1: only checked by manager (middle priority)
   if (query.managerDone && !query.accountManagerDone) {
     return 1;
   }
@@ -198,6 +207,11 @@ export function isQueryDelayed(
   query: Query,
   nowMs: number = Date.now()
 ): boolean {
+  // Urgent queries do not have a 48h delay threshold and are never classified as delayed
+  if (query.isUrgent) {
+    return false;
+  }
+
   if (query.isDelayed === true) {
     return true;
   }

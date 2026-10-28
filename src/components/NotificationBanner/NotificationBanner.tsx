@@ -3,7 +3,7 @@ import { UserAccount } from '../../types';
 import {
   isPushNotificationSupported,
   subscribeUserToPush,
-  getExistingPushSubscription,
+  checkPushStatus,
 } from '../../lib/pushSubscription';
 import { showWebNotification } from '../../lib/notifications';
 import './NotificationBanner.css';
@@ -18,6 +18,7 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
   const [isSupported, setIsSupported] = useState<boolean>(true);
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [hasSubscription, setHasSubscription] = useState<boolean>(false);
+  const [isMissingInDb, setIsMissingInDb] = useState<boolean>(false);
   const [dismissed, setDismissed] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem('wm_notif_banner_dismissed') === 'true';
@@ -37,15 +38,26 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
 
     if (supported && typeof window !== 'undefined' && 'Notification' in window) {
       setPermission(Notification.permission);
-      getExistingPushSubscription().then((sub) => {
-        setHasSubscription(Boolean(sub));
+      checkPushStatus(currentUser.id).then((status) => {
+        setHasSubscription(status.hasBrowserSub && status.isRegisteredInDb);
+        setIsMissingInDb(status.hasBrowserSub && !status.isRegisteredInDb);
       });
     } else {
       setPermission('unsupported');
     }
   }, [currentUser.id]);
 
-  if (!isSupported || dismissed || hasSubscription || permission === 'granted') {
+  if (!isSupported || dismissed) {
+    return null;
+  }
+
+  // If already subscribed and properly synced in DB, don't show prompt
+  if (hasSubscription && !isMissingInDb) {
+    return null;
+  }
+
+  // If permission is granted and NOT missing in DB, don't show prompt
+  if (permission === 'granted' && !isMissingInDb) {
     return null;
   }
 
@@ -53,20 +65,21 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
     setLoading(true);
     setFeedback(null);
 
-    const result = await subscribeUserToPush(currentUser.id);
+    // If missing in DB, forceRenew to regenerate fresh token and save in Supabase
+    const result = await subscribeUserToPush(currentUser.id, isMissingInDb);
     setLoading(false);
 
     if (result.success) {
       setHasSubscription(true);
+      setIsMissingInDb(false);
       setPermission('granted');
       setFeedback({
         type: 'success',
-        message: 'Notifications enabled successfully!',
+        message: 'Notifications registered and synced successfully!',
       });
-      // Show greeting alert
       showWebNotification(
         '🔔 Notifications Activated',
-        `Welcome ${currentUser.name}! You will now receive background alerts for queries and updates.`
+        `Welcome ${currentUser.name}! Your device is registered to receive instant alerts.`
       );
       setTimeout(() => setDismissed(true), 3500);
     } else {
@@ -97,13 +110,15 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
   return (
     <div className="notif-banner" role="region" aria-label="Notification Prompt">
       <div className="notif-banner-content">
-        <div className="notif-banner-icon-box">🔔</div>
+        <div className="notif-banner-icon-box">{isMissingInDb ? '⚠️' : '🔔'}</div>
         <div className="notif-banner-text-box">
           <div className="notif-banner-title">
-            Enable Notifications Alerts
+            {isMissingInDb ? 'Push Notifications Disconnected' : 'Enable Notifications Alerts'}
           </div>
           <div className="notif-banner-desc">
-            Stay alerted on new queries, manager remarks, and delay alerts even when your browser tab is closed.
+            {isMissingInDb
+              ? 'Your device subscription was removed from Supabase. Re-sync now so you can continue receiving desktop alerts.'
+              : 'Stay alerted on new queries, urgent tasks, manager remarks, and delay alerts even when your browser tab is closed.'}
           </div>
           {feedback && (
             <div className={`notif-banner-feedback notif-banner-feedback--${feedback.type}`}>
@@ -119,7 +134,7 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
           onClick={handleEnable}
           disabled={loading}
         >
-          {loading ? 'Activating...' : 'Enable Alerts'}
+          {loading ? 'Activating...' : isMissingInDb ? '🔄 Re-Sync Alerts Now' : 'Enable Alerts'}
         </button>
         <button
           type="button"

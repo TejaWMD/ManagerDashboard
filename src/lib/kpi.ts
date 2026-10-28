@@ -45,7 +45,8 @@ export function evaluateQueryKpi(
 
     const turnaroundMs = Math.max(0, managerDoneMs - createdMs);
     const turnaroundHours = Math.round((turnaroundMs / (1000 * 60 * 60)) * 10) / 10;
-    const isOnTime = managerDoneMs <= deadlineMs && !query.isDelayed;
+    // Urgent queries have no delay threshold; once completed they count normally as On-Time (+1.0 pt)
+    const isOnTime = query.isUrgent ? true : managerDoneMs <= deadlineMs && !query.isDelayed;
 
     // Sender verification latency: completedAtMs - managerDoneAtMs
     let senderVerificationHours: number | null = null;
@@ -68,8 +69,8 @@ export function evaluateQueryKpi(
     };
   }
 
-  // Manager is NOT done yet
-  const isPastDeadline = nowMs > deadlineMs || query.isDelayed === true;
+  // Manager is NOT done yet. Urgent queries have no delay threshold and are never classified as delayed/overdue.
+  const isPastDeadline = !query.isUrgent && (nowMs > deadlineMs || query.isDelayed === true);
 
   if (isPastDeadline) {
     return {

@@ -30,6 +30,7 @@ interface QueryPageProps {
     queryTitle: string;
     queryText: string;
     linkedAppointmentId?: string | null;
+    isUrgent?: boolean;
   }) => Promise<void>;
   onUpdateQuery: (
     queryId: string,
@@ -55,6 +56,7 @@ interface QueryPageProps {
         | 'extensionReviewNote'
         | 'extensionReviewedAt'
         | 'isDelayed'
+        | 'isUrgent'
       >
     >
   ) => Promise<void>;
@@ -62,6 +64,7 @@ interface QueryPageProps {
 
 type StatusFilterValue =
   | 'ALL'
+  | 'Urgent'
   | 'Pending'
   | 'ExtensionPending'
   | 'Unchecked'
@@ -124,6 +127,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
   // Create modal states
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
+  const [isUrgentDraft, setIsUrgentDraft] = useState<boolean>(false);
   const [selectedManagerId, setSelectedManagerId] = useState<string>(
     targetManagersForCreation[0]?.id || ''
   );
@@ -368,6 +372,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         const delayed = isQueryDelayed(c, nowMs);
         const pendingUnder48h = isQueryPending(c, nowMs);
 
+        if (filterStatus === 'Urgent' && !c.isUrgent) return false;
         if (filterStatus === 'Completed' && !done) return false;
         if (filterStatus === 'Pending' && !pendingUnder48h) return false;
         if (filterStatus === 'ExtensionPending' && c.extensionStatus !== 'PENDING') return false;
@@ -413,14 +418,21 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     setTimestampOrder('desc');
   };
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateSubmit = async (e?: React.FormEvent, forceUrgent?: boolean) => {
+    if (e) e.preventDefault();
+    const effectiveIsUrgent = forceUrgent !== undefined ? forceUrgent : isUrgentDraft;
+
     if (
       !selectedManagerId ||
       !queryTitleInput.trim() ||
       !queryInput.trim() ||
       isSubmittingNew
     ) {
+      if (!queryTitleInput.trim()) {
+        document.getElementById('query-title-input')?.focus();
+      } else if (!queryInput.trim()) {
+        document.getElementById('write-query')?.focus();
+      }
       return;
     }
 
@@ -436,14 +448,32 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         queryTitle: queryTitleInput.trim(),
         queryText: queryInput.trim(),
         linkedAppointmentId: selectedAppointmentId ? selectedAppointmentId : null,
+        isUrgent: effectiveIsUrgent,
       });
 
       setQueryTitleInput('');
       setQueryInput('');
       setSelectedAppointmentId('');
+      setIsUrgentDraft(false);
       setShowCreateModal(false);
     } finally {
       setIsSubmittingNew(false);
+    }
+  };
+
+  const handleUrgentButtonClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // If query fields are already filled, submit immediately as urgent
+    if (queryTitleInput.trim() && queryInput.trim() && selectedManagerId) {
+      handleCreateSubmit(undefined, true);
+    } else {
+      // Toggle urgent mode on and direct user to fill missing fields
+      setIsUrgentDraft((prev) => !prev);
+      if (!queryTitleInput.trim()) {
+        document.getElementById('query-title-input')?.focus();
+      } else if (!queryInput.trim()) {
+        document.getElementById('write-query')?.focus();
+      }
     }
   };
 
@@ -667,6 +697,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               onChange={(e) => setFilterStatus(e.target.value as StatusFilterValue)}
             >
               <option value="ALL">All Status</option>
+              <option value="Urgent">🚨 Urgent</option>
               <option value="Pending">Pending (On Track)</option>
               <option value="ExtensionPending">Extension Requested ⏳</option>
               <option value="Unchecked">Unchecked</option>
@@ -766,6 +797,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
                 const rowStateClass = completed
                   ? 'row-completed'
+                  : item.isUrgent
+                  ? 'row-urgent'
                   : managerOnlyChecked
                   ? 'row-manager-done'
                   : 'row-unchecked';
@@ -793,12 +826,22 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     <td className="td-timestamp">{item.createdAt}</td>
 
                     <td className="td-query-id">
-                      <span
-                        className="query-id-badge query-id-badge--clickable"
-                        onClick={() => setViewingQuery(item)}
-                      >
-                        {item.queryId}
-                      </span>
+                      <div className="query-id-stack">
+                        <span
+                          className="query-id-badge query-id-badge--clickable"
+                          onClick={() => setViewingQuery(item)}
+                        >
+                          {item.queryId}
+                        </span>
+                        {item.isUrgent && (
+                          <span
+                            className={`query-urgent-tag ${completed ? 'query-urgent-tag--completed' : ''}`}
+                            title={completed ? 'Urgent query (Completed)' : '🚨 URGENT: Immediate response required!'}
+                          >
+                            🚨 URGENT
+                          </span>
+                        )}
+                      </div>
                       {rowLinkedAptId && (
                         <span
                           className="query-linked-apt-chip"
@@ -1154,12 +1197,27 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             <span className="table-status-pill table-status-pill--completed">
                               Completed
                             </span>
+                            {item.isUrgent && (
+                              <span className="table-status-pill table-status-pill--urgent-tag" title="Urgent Query (Resolved)">
+                                Urgent
+                              </span>
+                            )}
                             {delayed && (
                               <span className="table-status-pill table-status-pill--delayed">
                                 Delayed
                               </span>
                             )}
                           </>
+                        ) : item.isUrgent ? (
+                          managerOnlyChecked ? (
+                            <span className="table-status-pill table-status-pill--urgent-mgr" title="Urgent query checked by manager; awaiting sender verification">
+                              🚨 Urgent - Mgr Checked
+                            </span>
+                          ) : (
+                            <span className="table-status-pill table-status-pill--urgent" title="Urgent query: Immediate response required, no delay threshold">
+                              🚨 URGENT (Due Now)
+                            </span>
+                          )
                         ) : managerOnlyChecked ? (
                           <>
                             <span className="table-status-pill table-status-pill--mgr-done">
@@ -1347,20 +1405,45 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 />
               </div>
 
+              {isUrgentDraft && (
+                <div className="urgent-mode-notice">
+                  <span className="urgent-mode-notice-icon">🚨</span>
+                  <span>
+                    <strong>URGENT Query Mode Active:</strong> This query will be immediately due with no 48h delay threshold, highlighted in red at the top of the table, and notify the receiver every 24h until completed.
+                  </span>
+                </div>
+              )}
+
               <div className="modal-actions">
                 <button
                   type="button"
                   className="btn-secondary"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setIsUrgentDraft(false);
+                  }}
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="btn-primary"
+                  type="button"
+                  className={`btn-urgent-action ${isUrgentDraft ? 'btn-urgent-action--active' : ''}`}
+                  onClick={handleUrgentButtonClick}
+                  title="Mark and submit query as URGENT (Immediate priority, no 48h delay threshold)"
                   disabled={isSubmittingNew}
                 >
-                  {isSubmittingNew ? 'Submitting...' : 'Submit Query'}
+                  🚨 URGENT
+                </button>
+                <button
+                  type="submit"
+                  className={`btn-primary ${isUrgentDraft ? 'btn-primary--urgent' : ''}`}
+                  disabled={isSubmittingNew}
+                >
+                  {isSubmittingNew
+                    ? 'Submitting...'
+                    : isUrgentDraft
+                    ? 'Submit Urgent Query'
+                    : 'Submit Query'}
                 </button>
               </div>
             </form>
@@ -1491,12 +1574,27 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <span className="table-status-pill table-status-pill--completed">
                           Completed
                         </span>
+                        {activeViewingQuery.isUrgent && (
+                          <span className="table-status-pill table-status-pill--urgent-tag" title="Urgent Query (Resolved)">
+                            Urgent
+                          </span>
+                        )}
                         {isQueryDelayed(activeViewingQuery, nowMs) && (
                           <span className="table-status-pill table-status-pill--delayed">
                             Delayed
                           </span>
                         )}
                       </>
+                    ) : activeViewingQuery.isUrgent ? (
+                      activeViewingQuery.managerDone && !activeViewingQuery.accountManagerDone ? (
+                        <span className="table-status-pill table-status-pill--urgent-mgr">
+                          🚨 Urgent - Mgr Checked
+                        </span>
+                      ) : (
+                        <span className="table-status-pill table-status-pill--urgent">
+                          🚨 URGENT (Due Now)
+                        </span>
+                      )
                     ) : activeViewingQuery.managerDone &&
                       !activeViewingQuery.accountManagerDone ? (
                       <>
@@ -1717,7 +1815,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 <div className="query-view-section-header">
                   <span className="query-view-section-label">Target Completion</span>
                   <span className="query-view-due-text">
-                    {activeViewingQuery.targetDueAt ? (
+                    {activeViewingQuery.isUrgent ? (
+                      <span className="pill-urgent-badge-strong">
+                        🚨 Immediately Due (No 48h delay threshold)
+                      </span>
+                    ) : activeViewingQuery.targetDueAt ? (
                       <>
                         <strong>{activeViewingQuery.targetDueAt}</strong>{' '}
                         <span className="pill-extended-badge">Extended</span>

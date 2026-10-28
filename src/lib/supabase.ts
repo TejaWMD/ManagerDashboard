@@ -42,6 +42,8 @@ interface LocalCompletionMeta {
   extensionReviewNote?: string | null;
   extensionReviewedAt?: string | null;
   linkedAppointmentId?: string | null;
+  isUrgent?: boolean;
+  lastUrgentReminderAtMs?: number | null;
 }
 
 function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
@@ -108,6 +110,8 @@ export interface QueryRow {
   extension_review_note?: string | null;
   extension_reviewed_at?: string | null;
   linked_appointment_id?: string | null;
+  is_urgent?: boolean | null;
+  last_urgent_reminder_at_ms?: number | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -310,6 +314,11 @@ export function mapRowToQuery(row: QueryRow): Query {
     extensionReviewedAt,
     linkedAppointmentId:
       row.linked_appointment_id || localMeta?.linkedAppointmentId || null,
+    isUrgent: Boolean(row.is_urgent === true || localMeta?.isUrgent === true),
+    lastUrgentReminderAtMs:
+      row.last_urgent_reminder_at_ms !== null && row.last_urgent_reminder_at_ms !== undefined
+        ? Number(row.last_urgent_reminder_at_ms)
+        : localMeta?.lastUrgentReminderAtMs ?? null,
   };
 }
 
@@ -345,6 +354,7 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
     created_at: query.createdAt,
     created_at_ms: query.createdAtMs,
     rating: query.rating ?? null,
+    is_urgent: Boolean(query.isUrgent),
   };
 }
 
@@ -476,7 +486,9 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('extension_reason') ||
     message.includes('extension_review_note') ||
     message.includes('extension_reviewed_at') ||
-    message.includes('linked_appointment_id')
+    message.includes('linked_appointment_id') ||
+    message.includes('is_urgent') ||
+    message.includes('last_urgent_reminder_at_ms')
   );
 }
 
@@ -510,13 +522,16 @@ export async function insertQueryInDb(query: Query): Promise<{
     manager_done_at_ms: query.managerDoneAtMs ?? null,
     is_delayed: Boolean(query.isDelayed),
     linked_appointment_id: query.linkedAppointmentId ?? null,
+    is_urgent: Boolean(query.isUrgent),
+    last_urgent_reminder_at_ms: query.lastUrgentReminderAtMs ?? null,
   };
-  if (query.linkedAppointmentId) {
+  if (query.linkedAppointmentId || query.isUrgent) {
     saveLocalCompletionMeta(query.queryId, {
       completedAt: query.completedAt ?? null,
       completedAtMs: query.completedAtMs ?? null,
       isDelayed: Boolean(query.isDelayed),
       linkedAppointmentId: query.linkedAppointmentId,
+      isUrgent: Boolean(query.isUrgent),
     });
   }
 
@@ -611,6 +626,8 @@ export async function updateQueryInDb(
     extensionReviewNote?: string | null;
     extensionReviewedAt?: string | null;
     linkedAppointmentId?: string | null;
+    isUrgent?: boolean;
+    lastUrgentReminderAtMs?: number | null;
   }
 ): Promise<{
   data: Query | null;
@@ -700,6 +717,12 @@ export async function updateQueryInDb(
   if (updates.linkedAppointmentId !== undefined) {
     extendedUpdates.linked_appointment_id = updates.linkedAppointmentId;
   }
+  if (updates.isUrgent !== undefined) {
+    extendedUpdates.is_urgent = updates.isUrgent;
+  }
+  if (updates.lastUrgentReminderAtMs !== undefined) {
+    extendedUpdates.last_urgent_reminder_at_ms = updates.lastUrgentReminderAtMs;
+  }
 
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
@@ -732,7 +755,9 @@ export async function updateQueryInDb(
     updates.extensionStatus !== undefined ||
     updates.extensionProposedDueAt !== undefined ||
     updates.extensionReason !== undefined ||
-    updates.linkedAppointmentId !== undefined
+    updates.linkedAppointmentId !== undefined ||
+    updates.isUrgent !== undefined ||
+    updates.lastUrgentReminderAtMs !== undefined
   ) {
     saveLocalCompletionMeta(queryId, {
       ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
@@ -751,6 +776,10 @@ export async function updateQueryInDb(
       ...(updates.extensionReviewedAt !== undefined ? { extensionReviewedAt: updates.extensionReviewedAt } : {}),
       ...(updates.linkedAppointmentId !== undefined
         ? { linkedAppointmentId: updates.linkedAppointmentId }
+        : {}),
+      ...(updates.isUrgent !== undefined ? { isUrgent: Boolean(updates.isUrgent) } : {}),
+      ...(updates.lastUrgentReminderAtMs !== undefined
+        ? { lastUrgentReminderAtMs: updates.lastUrgentReminderAtMs }
         : {}),
     });
   }

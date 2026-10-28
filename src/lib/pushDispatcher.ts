@@ -14,6 +14,7 @@ export type NotificationEventType =
   | 'EXTENSION_REQUESTED'
   | 'EXTENSION_APPROVED'
   | 'EXTENSION_DECLINED'
+  | 'URGENT_REMINDER'
   | 'TEST';
 
 export interface DispatchNotificationParams {
@@ -64,6 +65,17 @@ export function computeTargetRecipients(
       );
       break;
 
+    case 'URGENT_REMINDER':
+      // Notify the receiver responsible for completing the query + Admin
+      if (!query.managerDone) {
+        rawRecipients.push(query.managerId, ...adminIds);
+      } else if (!query.accountManagerDone) {
+        rawRecipients.push(query.accountManagerId, ...adminIds);
+      } else {
+        rawRecipients.push(query.managerId, query.accountManagerId, ...adminIds);
+      }
+      break;
+
     case 'TEST':
       rawRecipients.push(actorId, ...adminIds);
       break;
@@ -93,6 +105,12 @@ export function formatNotificationContent(
 
   switch (event) {
     case 'NEW_QUERY':
+      if (query.isUrgent) {
+        return {
+          title: `🚨 URGENT Query: ${query.queryId} (Due Immediately)`,
+          body: `[URGENT - Immediate Action Required] ${actorRoleLabel} ${actor.name} assigned ${query.queryId} to ${query.managerName}: "${(query.queryTitle || query.queryText).slice(0, 80)}"`,
+        };
+      }
       return {
         title: `🚨 New Query: ${query.queryId}`,
         body: `${actorRoleLabel} ${actor.name} assigned ${query.queryId} to ${query.managerName}: "${(query.queryTitle || query.queryText).slice(0, 80)}"`,
@@ -145,6 +163,16 @@ export function formatNotificationContent(
         title: `❌ Extension Declined: ${query.queryId}`,
         body: `${actorRoleLabel} ${actor.name} declined completion extension request.`,
       };
+
+    case 'URGENT_REMINDER': {
+      const recipientTarget = !query.managerDone
+        ? `Manager ${query.managerName}`
+        : `Sender ${query.accountManagerName}`;
+      return {
+        title: `🚨 24h Reminder: Urgent Query ${query.queryId}`,
+        body: `Immediate response required: ${query.queryId} ("${(query.queryTitle || query.queryText).slice(0, 70)}") is still pending completion. Awaiting response from ${recipientTarget}.`,
+      };
+    }
 
     case 'TEST':
       return {

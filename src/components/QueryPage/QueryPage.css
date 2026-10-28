@@ -280,6 +280,20 @@
 }
 
 /* Row states */
+.queries-table tbody tr.row-urgent td {
+  background: #fef2f2 !important;
+  border-top: 1px solid #fecaca;
+  border-bottom: 1px solid #fecaca;
+}
+
+.queries-table tbody tr.row-urgent td:first-child {
+  border-left: 4px solid #ef4444 !important;
+}
+
+.queries-table tbody tr.row-urgent:hover td {
+  background: #fee2e2 !important;
+}
+
 .queries-table tbody tr.row-unchecked:nth-child(even) td {
   background: #faf9f5;
 }
@@ -317,6 +331,33 @@
   background: var(--c-cream);
   color: var(--c-russet);
   border: 1px solid rgba(193, 128, 54, 0.3);
+}
+
+.query-id-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.query-urgent-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.query-urgent-tag--completed {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: #e5e7eb;
 }
 
 .td-person {
@@ -584,6 +625,38 @@
   border: 1px solid rgba(214, 116, 43, 0.4);
 }
 
+.table-status-pill--urgent {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1.5px solid #f87171;
+  font-weight: 800;
+  box-shadow: 0 1px 4px rgba(239, 68, 68, 0.25);
+  animation: pulse-urgent-pill 2s infinite ease-in-out;
+}
+
+@keyframes pulse-urgent-pill {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.table-status-pill--urgent-mgr {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1.5px solid #fb923c;
+  font-weight: 800;
+}
+
+.table-status-pill--urgent-tag {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  font-weight: 700;
+}
+
 .empty-queries-cell {
   padding: 3rem 1.5rem !important;
   text-align: center;
@@ -778,6 +851,92 @@
 
 .btn-secondary:hover {
   background: var(--c-cream);
+}
+
+.btn-urgent-action {
+  padding: 0.78rem 1.4rem;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid #dc2626;
+  background: #ffffff;
+  color: #dc2626;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.12);
+}
+
+.btn-urgent-action:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #b91c1c;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.25);
+}
+
+.btn-urgent-action--active {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%) !important;
+  color: #ffffff !important;
+  border-color: #991b1b !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35), 0 3px 8px rgba(185, 28, 28, 0.35) !important;
+  animation: pulse-urgent-btn 1.8s infinite;
+}
+
+@keyframes pulse-urgent-btn {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5), 0 3px 8px rgba(185, 28, 28, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0), 0 3px 8px rgba(185, 28, 28, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 3px 8px rgba(185, 28, 28, 0.35);
+  }
+}
+
+.btn-primary--urgent {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.38) !important;
+}
+
+.btn-primary--urgent:hover {
+  background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%) !important;
+  transform: translateY(-2px) scale(1.03);
+}
+
+.urgent-mode-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #dc2626;
+  border-radius: 8px;
+  margin-bottom: 0.85rem;
+  font-size: 0.84rem;
+  color: #991b1b;
+  line-height: 1.45;
+}
+
+.urgent-mode-notice-icon {
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.pill-urgent-badge-strong {
+  display: inline-block;
+  padding: 0.22rem 0.65rem;
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 /* ==========================================================================
@@ -1134,6 +1293,7 @@
   }
 
   .btn-primary,
+  .btn-urgent-action,
   .btn-secondary {
     flex: 1;
     text-align: center;
