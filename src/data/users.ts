@@ -98,7 +98,7 @@ export const AUTHORIZED_USERS: UserAccount[] = [
   // Admins
   {
     id: 'adm-1',
-    name: 'Mani',
+    name: 'Mr. Mani',
     email: 'admin1@gmail.com',
     password: '981834',
     role: 'admin',
