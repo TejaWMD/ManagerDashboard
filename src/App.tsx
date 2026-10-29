@@ -38,10 +38,13 @@ import {
   writeCachedAppointments,
 } from './lib/supabase';
 import {
+  ACTIVITIES_STORAGE_KEY,
+  PRESENCE_STORAGE_KEY,
   ActivityRow,
   PresenceRow,
   fetchRecentActivitiesFromDb,
   fetchUserPresencesFromDb,
+  getCrossTabBus,
   getOrCreateTrackingChannel,
   logUserActivity,
   mapRowToActivity,
@@ -639,6 +642,50 @@ export const App: React.FC = () => {
     window.addEventListener('wm_activity_logged', handleLocalActivity);
     window.addEventListener('wm_presence_updated', handleLocalPresence);
 
+    // Cross-tab broadcast bus listener (instant 0ms sync between multiple tabs/windows)
+    const crossTabBus = getCrossTabBus();
+    const handleCrossTabMessage = (event: MessageEvent) => {
+      const { type, data } = event.data || {};
+      if (type === 'activity' && data) {
+        setActivities((prev) => {
+          if (prev.some((a) => a.id === data.id)) return prev;
+          return [data, ...prev];
+        });
+      } else if (type === 'presence' && data) {
+        setPresences((prev) => ({
+          ...prev,
+          [data.userId]: data,
+        }));
+      } else if (type === 'offline' && data) {
+        setPresences((prev) => {
+          const curr = prev[data.userId];
+          if (!curr) return prev;
+          return {
+            ...prev,
+            [data.userId]: {
+              ...curr,
+              isOnline: false,
+              lastSeenAtMs: data.lastSeenAtMs || Date.now(),
+            },
+          };
+        });
+      }
+    };
+
+    if (crossTabBus) {
+      crossTabBus.addEventListener('message', handleCrossTabMessage);
+    }
+
+    // Storage event listener fallback (detects when other tabs log in or out)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === ACTIVITIES_STORAGE_KEY) {
+        setActivities(readCachedActivities());
+      } else if (e.key === PRESENCE_STORAGE_KEY) {
+        setPresences(readCachedPresences());
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
     return () => {
       supabase.removeChannel(queryChannel);
       supabase.removeChannel(aptChannel);
@@ -646,6 +693,10 @@ export const App: React.FC = () => {
       supabase.removeChannel(presenceChannel);
       window.removeEventListener('wm_activity_logged', handleLocalActivity);
       window.removeEventListener('wm_presence_updated', handleLocalPresence);
+      if (crossTabBus) {
+        crossTabBus.removeEventListener('message', handleCrossTabMessage);
+      }
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, [loadQueries, loadAppointments, loadActivities, loadPresences]);
 
@@ -679,6 +730,8 @@ export const App: React.FC = () => {
       targetType: 'auth',
     });
     updateUserPresence(user, 'home', 'Logged into portal', true);
+    loadActivities();
+    loadPresences();
   };
 
   const handleLogout = () => {

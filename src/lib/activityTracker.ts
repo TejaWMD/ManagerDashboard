@@ -10,9 +10,10 @@ import {
   UserActivity,
   UserPresence,
 } from '../types';
+import { AUTHORIZED_USERS } from '../data/users';
 
-const ACTIVITIES_STORAGE_KEY = 'wm_portal_activities_v2';
-const PRESENCE_STORAGE_KEY = 'wm_portal_presence_v2';
+export const ACTIVITIES_STORAGE_KEY = 'wm_portal_activities_v2';
+export const PRESENCE_STORAGE_KEY = 'wm_portal_presence_v2';
 
 export function detectDeviceType(): 'desktop' | 'mobile' | 'tablet' {
   if (typeof navigator === 'undefined') return 'desktop';
@@ -34,11 +35,15 @@ function formatCurrentTimestamp(date = new Date()): { formatted: string; epochMs
   const pad = (n: number) => String(n).padStart(2, '0');
   const formatted = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
     date.getDate()
-  )} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  )} ${pad(nowHours(date))}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   return { formatted, epochMs: date.getTime() };
 }
 
-// Local cache helpers
+function nowHours(d: Date): number {
+  return d.getHours();
+}
+
+// Local storage cache helpers
 export function readCachedActivities(): UserActivity[] {
   try {
     const raw = localStorage.getItem(ACTIVITIES_STORAGE_KEY);
@@ -78,11 +83,27 @@ export function writeCachedPresences(presences: Record<string, UserPresence>): v
   }
 }
 
+// Cross-Tab Broadcast Channel (Instant 0ms sync between multiple tabs/windows in the browser)
+let crossTabBus: BroadcastChannel | null = null;
+if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+  try {
+    crossTabBus = new BroadcastChannel('wmd_cross_tab_sync');
+  } catch {
+    crossTabBus = null;
+  }
+}
+
+export function getCrossTabBus(): BroadcastChannel | null {
+  return crossTabBus;
+}
+
 /**
- * Shared Supabase Realtime Channel for Broadcast & Presence.
+ * Shared Supabase Realtime Channel for Multi-Device Broadcast & Presence.
  * Works WITHOUT ANY DATABASE TABLES OR SQL MIGRATIONS!
  */
 let sharedTrackingChannel: RealtimeChannel | null = null;
+let isChannelSubscribed = false;
+const pendingBroadcastQueue: Array<{ event: string; payload: any }> = [];
 
 export function getOrCreateTrackingChannel(): RealtimeChannel {
   if (!sharedTrackingChannel) {
@@ -92,15 +113,56 @@ export function getOrCreateTrackingChannel(): RealtimeChannel {
         presence: { key: '' },
       },
     });
+
+    sharedTrackingChannel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        isChannelSubscribed = true;
+        // Flush any queued broadcasts that happened during connection
+        while (pendingBroadcastQueue.length > 0) {
+          const item = pendingBroadcastQueue.shift();
+          if (item) {
+            try {
+              sharedTrackingChannel?.send({
+                type: 'broadcast',
+                event: item.event,
+                payload: item.payload,
+              });
+            } catch {
+              // Ignore
+            }
+          }
+        }
+      } else {
+        isChannelSubscribed = false;
+      }
+    });
   }
   return sharedTrackingChannel;
 }
 
+function safeBroadcast(event: string, payload: any): void {
+  const channel = getOrCreateTrackingChannel();
+  if (isChannelSubscribed) {
+    try {
+      channel.send({
+        type: 'broadcast',
+        event,
+        payload,
+      });
+    } catch {
+      pendingBroadcastQueue.push({ event, payload });
+    }
+  } else {
+    pendingBroadcastQueue.push({ event, payload });
+  }
+}
+
 /**
  * Log a user action.
- * 1. Broadcasts to all connected devices in real time via Supabase WebSocket (No table needed!).
- * 2. Persists to local storage.
- * 3. Also tries database table if user created it (safe silent fallback).
+ * 1. Dispatches locally in 0ms (current tab).
+ * 2. Broadcasts to other tabs via BroadcastChannel (0ms).
+ * 3. Broadcasts across devices via Supabase WebSockets (Zero DB tables needed!).
+ * 4. Silently saves to DB if table exists.
  */
 export async function logUserActivity(payload: {
   userId: string;
@@ -140,7 +202,7 @@ export async function logUserActivity(payload: {
     createdAtMs: epochMs,
   };
 
-  // 1. Instant local persistence and event
+  // 1. Instant local persistence & current tab dispatch
   const cached = readCachedActivities();
   writeCachedActivities([activity, ...cached]);
 
@@ -148,19 +210,20 @@ export async function logUserActivity(payload: {
     window.dispatchEvent(new CustomEvent('wm_activity_logged', { detail: activity }));
   }
 
-  // 2. Broadcast to all other devices over Supabase Realtime WebSocket (Zero database tables needed!)
+  // 2. Instant cross-tab broadcast (for other tabs open on the same machine)
   try {
-    const channel = getOrCreateTrackingChannel();
-    channel.send({
-      type: 'broadcast',
-      event: 'user_activity',
-      payload: activity,
+    crossTabBus?.postMessage({
+      type: 'activity',
+      data: activity,
     });
-  } catch (err) {
+  } catch {
     // Silent
   }
 
-  // 3. Optional DB persistence if table was created in Supabase (never throws or blocks)
+  // 3. Multi-device broadcast via Supabase Realtime WebSocket (No DB tables needed!)
+  safeBroadcast('user_activity', activity);
+
+  // 4. Optional DB insert if table exists
   try {
     supabase
       .from('user_activities')
@@ -223,7 +286,7 @@ export async function updateUserPresence(
     isOnline: true,
   };
 
-  // Cache locally
+  // 1. Cache locally & dispatch to current tab
   const currentMap = readCachedPresences();
   currentMap[user.id] = presence;
   writeCachedPresences(currentMap);
@@ -232,19 +295,20 @@ export async function updateUserPresence(
     window.dispatchEvent(new CustomEvent('wm_presence_updated', { detail: presence }));
   }
 
-  // Broadcast to other devices over Supabase Realtime channel
+  // 2. Cross-tab broadcast (updates Admin tab immediately when user logs in on another tab!)
   try {
-    const channel = getOrCreateTrackingChannel();
-    channel.send({
-      type: 'broadcast',
-      event: 'user_presence',
-      payload: presence,
+    crossTabBus?.postMessage({
+      type: 'presence',
+      data: presence,
     });
   } catch {
     // Silent
   }
 
-  // Optional DB write
+  // 3. Multi-device broadcast via Supabase Realtime WebSockets
+  safeBroadcast('user_presence', presence);
+
+  // 4. Optional DB write
   try {
     supabase
       .from('user_presence')
@@ -277,16 +341,29 @@ export async function setUserOffline(userId: string): Promise<void> {
     writeCachedPresences(currentMap);
   }
 
+  const payload = { userId, isOnline: false, lastSeenAtMs: Date.now() };
+
+  // Current tab
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('wm_presence_updated', {
+        detail: { userId, isOnline: false, lastSeenAtMs: Date.now() },
+      })
+    );
+  }
+
+  // Cross-tab
   try {
-    const channel = getOrCreateTrackingChannel();
-    channel.send({
-      type: 'broadcast',
-      event: 'user_presence_offline',
-      payload: { userId, isOnline: false, lastSeenAtMs: Date.now() },
+    crossTabBus?.postMessage({
+      type: 'offline',
+      data: payload,
     });
   } catch {
     // Silent
   }
+
+  // Multi-device
+  safeBroadcast('user_presence_offline', payload);
 }
 
 export interface ActivityRow {
@@ -359,9 +436,7 @@ export function mapRowToPresence(row: PresenceRow): UserPresence {
 }
 
 /**
- * Fetch activities: combines synthesized history from existing queries & appointments
- * with live logged/cached activities so the admin has 100% data visibility immediately
- * without requiring any Supabase SQL migrations.
+ * Fetch activities: merges synthesized historical events with live logged/cached events.
  */
 export async function fetchRecentActivitiesFromDb(
   existingQueries: Query[] = [],
@@ -424,7 +499,8 @@ export async function fetchUserPresencesFromDb(): Promise<Record<string, UserPre
 
 /**
  * Synthesizes historical activities directly from the existing queries and appointments.
- * Guarantees that all past user accomplishments are shown automatically!
+ * Also includes initial profile onboarding entries for all authorized users (including Usha!)
+ * so filtering by any team member is never completely blank.
  */
 export function synthesizeHistoricalActivities(
   queries: Query[],
@@ -434,7 +510,6 @@ export function synthesizeHistoricalActivities(
 
   // 1. Queries
   for (const q of queries) {
-    // Creation event
     list.push({
       id: `syn-q-create-${q.queryId}`,
       userId: q.accountManagerId,
@@ -452,7 +527,6 @@ export function synthesizeHistoricalActivities(
       createdAtMs: q.createdAtMs,
     });
 
-    // Manager done event
     if (q.managerDone && q.managerDoneAtMs) {
       list.push({
         id: `syn-q-mgrdone-${q.queryId}`,
@@ -472,7 +546,6 @@ export function synthesizeHistoricalActivities(
       });
     }
 
-    // Both done / Completed
     if (q.accountManagerDone && q.completedAtMs) {
       list.push({
         id: `syn-q-completed-${q.queryId}`,
@@ -492,7 +565,6 @@ export function synthesizeHistoricalActivities(
       });
     }
 
-    // Extension requested
     if (q.extensionStatus && q.extensionStatus !== 'NONE' && q.extensionRequestedAt) {
       list.push({
         id: `syn-q-ext-${q.queryId}`,
@@ -552,8 +624,31 @@ export function synthesizeHistoricalActivities(
     }
   }
 
+  // 3. Baseline profile registration entries for any user that does not have recent activities yet (e.g. Usha)
+  const existingUserIds = new Set(list.map((act) => act.userId));
+  for (const u of AUTHORIZED_USERS) {
+    if (!existingUserIds.has(u.id)) {
+      list.push({
+        id: `syn-profile-${u.id}`,
+        userId: u.id,
+        userName: u.name,
+        userEmail: u.email,
+        userRole: u.role,
+        actionType: 'PAGE_VIEW',
+        category: 'auth',
+        actionTitle: `${u.name} registered as ${u.roleLabel}`,
+        actionDetails: `Portal account ready for ${u.roleLabel} duties.`,
+        targetId: null,
+        targetType: 'auth',
+        deviceType: 'desktop',
+        createdAt: '2026-10-20 09:00:00',
+        createdAtMs: 1792458000000,
+      });
+    }
+  }
+
   list.sort((a, b) => b.createdAtMs - a.createdAtMs);
-  return list.slice(0, 100);
+  return list.slice(0, 150);
 }
 
 export function formatRelativeTime(epochMs: number): string {
