@@ -103,7 +103,7 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     password: '981834',
     role: 'admin',
     roleLabel: 'Admin',
-    avatarInitials: 'TJ',
+    avatarInitials: 'MN',
     phone: '+601157350949',
   },
   {
@@ -113,7 +113,7 @@ export const AUTHORIZED_USERS: UserAccount[] = [
     password: '981834',
     role: 'admin',
     roleLabel: 'Admin',
-    avatarInitials: 'MN',
+    avatarInitials: 'TJ',
     phone: '',
   },
 ];
