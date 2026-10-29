@@ -13,6 +13,7 @@ import {
   AppointmentAttendee,
   AppointmentStatus,
   belongsToAppointment,
+  QueryAttachment,
 } from './types';
 import { AUTHORIZED_USERS } from './data/users';
 import { INITIAL_QUERIES } from './data/initialQueries';
@@ -523,6 +524,7 @@ export const App: React.FC = () => {
     queryText: string;
     linkedAppointmentId?: string | null;
     isUrgent?: boolean;
+    attachments?: QueryAttachment[];
   }) => {
     if (!currentUser) return;
     const now = new Date();
@@ -553,6 +555,7 @@ export const App: React.FC = () => {
       status: 'Pending',
       linkedAppointmentId: payload.linkedAppointmentId || null,
       isUrgent: Boolean(payload.isUrgent),
+      attachments: payload.attachments || [],
     };
 
     setQueries((prev) => {
@@ -629,6 +632,7 @@ export const App: React.FC = () => {
         | 'isUrgent'
         | 'lastUrgentReminderAtMs'
         | 'linkedAppointmentId'
+        | 'attachments'
       >
     >
   ) => {

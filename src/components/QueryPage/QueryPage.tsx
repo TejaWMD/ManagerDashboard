@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   belongsToAccountManager,
   belongsToAppointment,
@@ -6,6 +6,7 @@ import {
   getLinkedAppointmentForQuery,
   isUserParticipantInAppointment,
   Query,
+  QueryAttachment,
   isQueryDelayed,
   isQueryDone,
   isQueryPending,
@@ -13,6 +14,13 @@ import {
   UserAccount,
   Appointment,
 } from '../../types';
+import {
+  formatFileSize,
+  getFileIcon,
+  readFileAsAttachment,
+  downloadAttachment,
+  openAttachment,
+} from '../../lib/attachments';
 import { AUTHORIZED_USERS } from '../../data/users';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './QueryPage.css';
@@ -32,6 +40,7 @@ interface QueryPageProps {
     queryText: string;
     linkedAppointmentId?: string | null;
     isUrgent?: boolean;
+    attachments?: QueryAttachment[];
   }) => Promise<void>;
   onUpdateQuery: (
     queryId: string,
@@ -59,6 +68,7 @@ interface QueryPageProps {
         | 'isDelayed'
         | 'isUrgent'
         | 'linkedAppointmentId'
+        | 'attachments'
       >
     >
   ) => Promise<void>;
@@ -137,6 +147,159 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [queryInput, setQueryInput] = useState<string>('');
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>('');
   const [isSubmittingNew, setIsSubmittingNew] = useState<boolean>(false);
+
+  // Attachment states for new query modal
+  const [attachedFiles, setAttachedFiles] = useState<QueryAttachment[]>([]);
+  const [isReadingFiles, setIsReadingFiles] = useState<boolean>(false);
+  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFilesAdded = async (files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
+    setIsReadingFiles(true);
+    try {
+      const fileArray = Array.from(files);
+      const newAttachments: QueryAttachment[] = [];
+      const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15MB limit per file
+
+      for (const file of fileArray) {
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          alert(`File "${file.name}" exceeds the 15MB limit. Please choose a smaller document.`);
+          continue;
+        }
+        try {
+          const att = await readFileAsAttachment(file);
+          newAttachments.push(att);
+        } catch (err) {
+          console.error(`Error reading file ${file.name}:`, err);
+        }
+      }
+
+      if (newAttachments.length > 0) {
+        setAttachedFiles((prev) => [...prev, ...newAttachments]);
+      }
+    } finally {
+      setIsReadingFiles(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFilesAdded(e.target.files);
+    }
+  };
+
+  const handleDropFiles = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFilesAdded(e.dataTransfer.files);
+    }
+  };
+
+  const handleRemoveAttachedFile = (id: string) => {
+    setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  // Query Details in-place editing (sender & admin)
+  const [isEditingDescription, setIsEditingDescription] = useState<boolean>(false);
+  const [detailTitleDraft, setDetailTitleDraft] = useState<string>('');
+  const [detailDescDraft, setDetailDescDraft] = useState<string>('');
+  const [detailAttachmentsDraft, setDetailAttachmentsDraft] = useState<QueryAttachment[]>([]);
+  const [isReadingDetailFiles, setIsReadingDetailFiles] = useState<boolean>(false);
+  const [isSavingDetailChanges, setIsSavingDetailChanges] = useState<boolean>(false);
+  const [hasUnsavedDetailChanges, setHasUnsavedDetailChanges] = useState<boolean>(false);
+  const [detailSaveSuccess, setDetailSaveSuccess] = useState<boolean>(false);
+  const detailFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleDetailFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsReadingDetailFiles(true);
+    try {
+      const fileArray = Array.from(files);
+      const newAttachments: QueryAttachment[] = [];
+      const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15MB limit
+
+      for (const file of fileArray) {
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          alert(`File "${file.name}" exceeds the 15MB limit. Please choose a smaller document.`);
+          continue;
+        }
+        try {
+          const att = await readFileAsAttachment(file);
+          newAttachments.push(att);
+        } catch (err) {
+          console.error(`Error reading file ${file.name}:`, err);
+        }
+      }
+
+      if (newAttachments.length > 0) {
+        setDetailAttachmentsDraft((prev) => [...prev, ...newAttachments]);
+        setHasUnsavedDetailChanges(true);
+      }
+    } finally {
+      setIsReadingDetailFiles(false);
+      if (detailFileInputRef.current) {
+        detailFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveDetailAttachment = (id: string) => {
+    setDetailAttachmentsDraft((prev) => prev.filter((a) => a.id !== id));
+    setHasUnsavedDetailChanges(true);
+  };
+
+  const handleSaveDetailChanges = async () => {
+    if (!activeViewingQuery) return;
+    const finalTitle = detailTitleDraft.trim() || detailDescDraft.trim();
+    const finalDesc = detailDescDraft.trim();
+    if (!finalTitle && !finalDesc) {
+      alert('Please provide a query title or description.');
+      return;
+    }
+
+    setIsSavingDetailChanges(true);
+    try {
+      await onUpdateQuery(activeViewingQuery.queryId, {
+        queryTitle: finalTitle,
+        queryText: finalDesc,
+        attachments: detailAttachmentsDraft,
+      });
+
+      // Update viewing query in state
+      setViewingQuery((prev) =>
+        prev
+          ? {
+              ...prev,
+              queryTitle: finalTitle,
+              queryText: finalDesc,
+              attachments: detailAttachmentsDraft,
+            }
+          : null
+      );
+
+      setIsEditingDescription(false);
+      setHasUnsavedDetailChanges(false);
+      setDetailSaveSuccess(true);
+      setTimeout(() => setDetailSaveSuccess(false), 3500);
+    } finally {
+      setIsSavingDetailChanges(false);
+    }
+  };
+
+  const handleCancelDetailEdits = () => {
+    if (!activeViewingQuery) return;
+    setDetailTitleDraft(activeViewingQuery.queryTitle || activeViewingQuery.queryText || '');
+    setDetailDescDraft(activeViewingQuery.queryText || '');
+    setDetailAttachmentsDraft(activeViewingQuery.attachments ? [...activeViewingQuery.attachments] : []);
+    setIsEditingDescription(false);
+    setHasUnsavedDetailChanges(false);
+  };
 
   // If redirected from an appointment follow-up action, prefill the create query modal
   useEffect(() => {
@@ -373,7 +536,20 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     setIsLinkingExistingApt(false);
     setChosenExistingAptId('');
     setLinkExistingError(null);
-  }, [viewingQuery?.queryId]);
+    if (activeViewingQuery) {
+      setIsEditingDescription(false);
+      setDetailTitleDraft(activeViewingQuery.queryTitle || activeViewingQuery.queryText || '');
+      setDetailDescDraft(activeViewingQuery.queryText || '');
+      setDetailAttachmentsDraft(activeViewingQuery.attachments ? [...activeViewingQuery.attachments] : []);
+      setHasUnsavedDetailChanges(false);
+      setDetailSaveSuccess(false);
+    }
+  }, [
+    activeViewingQuery?.queryId,
+    activeViewingQuery?.queryTitle,
+    activeViewingQuery?.queryText,
+    activeViewingQuery?.attachments?.length,
+  ]);
 
   // 1. Role-scoped queries
   // Account Managers see queries they created.
@@ -518,11 +694,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         queryText: queryInput.trim(),
         linkedAppointmentId: selectedAppointmentId ? selectedAppointmentId : null,
         isUrgent: effectiveIsUrgent,
+        attachments: attachedFiles,
       });
 
       setQueryTitleInput('');
       setQueryInput('');
       setSelectedAppointmentId('');
+      setAttachedFiles([]);
       setIsUrgentDraft(false);
       setShowCreateModal(false);
     } finally {
@@ -563,9 +741,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   };
 
   const startEditQueryText = (item: Query) => {
-    setEditingQueryTextId(item.queryId);
-    setQueryTitleDraft(item.queryTitle || item.queryText || '');
-    setQueryTextDraft(item.queryText || '');
+    setViewingQuery(item);
+    setIsEditingDescription(true);
+    setDetailTitleDraft(item.queryTitle || item.queryText || '');
+    setDetailDescDraft(item.queryText || '');
+    setDetailAttachmentsDraft(item.attachments ? [...item.attachments] : []);
+    setHasUnsavedDetailChanges(true);
   };
 
   const saveQueryText = async (queryId: string) => {
@@ -917,6 +1098,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           title={`Linked to appointment ${rowLinkedAptId}${rowLinkedApt ? `: ${rowLinkedApt.title} (${rowLinkedApt.scheduledAt})` : ''}`}
                         >
                           📅 {rowLinkedAptId}
+                        </span>
+                      )}
+                      {item.attachments && item.attachments.length > 0 && (
+                        <span
+                          className="query-attachment-badge"
+                          title={`${item.attachments.length} attached document(s): ${item.attachments.map((a) => a.name).join(', ')}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewingQuery(item);
+                          }}
+                        >
+                          📎 {item.attachments.length} {item.attachments.length === 1 ? 'doc' : 'docs'}
                         </span>
                       )}
                     </td>
@@ -1476,6 +1669,96 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 />
               </div>
 
+              {/* Attachments Section in Create Query Modal */}
+              <div className="cp-form-group attachment-form-group">
+                <div className="attachment-header-row">
+                  <label htmlFor="query-attachments-input" className="attachment-label">
+                    <span>Attach Documents</span>
+                    <span className="attachment-subtext">(Optional)</span>
+                  </label>
+                  {attachedFiles.length > 0 && (
+                    <span className="attachment-count-badge">
+                      {attachedFiles.length} {attachedFiles.length === 1 ? 'file' : 'files'} attached
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  className={`attachment-dropzone ${isDraggingOver ? 'attachment-dropzone--active' : ''}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setIsDraggingOver(false);
+                  }}
+                  onDrop={handleDropFiles}
+                  onClick={() => fileInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  aria-label="Click or drag files here to attach documents"
+                >
+                  <input
+                    ref={fileInputRef}
+                    id="query-attachments-input"
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={handleFileInputChange}
+                  />
+                  <div className="attachment-dropzone-inner">
+                    <span className="attachment-dropzone-icon">📎</span>
+                    <div className="attachment-dropzone-prompts">
+                      <span className="attachment-dropzone-cta">
+                        {isReadingFiles ? 'Reading document(s)...' : 'Choose files from device'}
+                      </span>
+                      <span className="attachment-dropzone-hint">
+                        PDF, Word, Excel, Images, Text or any document (Max 15MB)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {attachedFiles.length > 0 && (
+                  <div className="attached-files-list">
+                    {attachedFiles.map((att) => (
+                      <div key={att.id} className="attached-file-pill">
+                        <span className="attached-file-icon">
+                          {getFileIcon(att.name, att.type)}
+                        </span>
+                        <div className="attached-file-info">
+                          <span className="attached-file-name" title={att.name}>
+                            {att.name}
+                          </span>
+                          <span className="attached-file-size">
+                            {formatFileSize(att.size)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="attached-file-remove-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveAttachedFile(att.id);
+                          }}
+                          aria-label={`Remove attachment ${att.name}`}
+                          title="Remove file"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {isUrgentDraft && (
                 <div className="urgent-mode-notice">
                   <span className="urgent-mode-notice-icon">🚨</span>
@@ -1492,6 +1775,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   onClick={() => {
                     setShowCreateModal(false);
                     setIsUrgentDraft(false);
+                    setAttachedFiles([]);
                   }}
                 >
                   Cancel
@@ -1751,24 +2035,239 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 </div>
               </div>
 
-              <div className="query-view-section">
-                <span className="query-view-section-label">Query Details</span>
-                <div className="query-view-content-box">
-                  <div className="query-view-field-block">
-                    <span className="query-view-sub-label">Title</span>
-                    <div className="query-view-item-title">
-                      {activeViewingQuery.queryTitle ||
-                        activeViewingQuery.queryText}
+              {(() => {
+                const isSenderOrAdmin =
+                  currentUser.id === activeViewingQuery.accountManagerId ||
+                  currentUser.role === 'admin';
+
+                return (
+                  <>
+                    {/* Query Details Section */}
+                    <div className="query-view-section">
+                      <div className="query-view-section-header">
+                        <span className="query-view-section-label">Query Details</span>
+                        {isSenderOrAdmin && (
+                          <button
+                            type="button"
+                            className={`btn-query-edit-action ${isEditingDescription ? 'btn-query-edit-action--active' : ''}`}
+                            onClick={() => {
+                              setIsEditingDescription((prev) => !prev);
+                              if (!isEditingDescription) {
+                                setHasUnsavedDetailChanges(true);
+                              }
+                            }}
+                            title={isEditingDescription ? 'Close description editor' : 'Edit query title and description'}
+                          >
+                            {isEditingDescription ? '✓ Done Editing' : '✏️ Edit Description'}
+                          </button>
+                        )}
+                      </div>
+                      <div className="query-view-content-box">
+                        {isEditingDescription ? (
+                          <div className="query-view-edit-block">
+                            <label htmlFor="detail-title-input" className="query-view-sub-label">
+                              Query Title
+                            </label>
+                            <input
+                              id="detail-title-input"
+                              type="text"
+                              className="inline-edit-title-input"
+                              value={detailTitleDraft}
+                              onChange={(e) => {
+                                setDetailTitleDraft(e.target.value);
+                                setHasUnsavedDetailChanges(true);
+                              }}
+                              placeholder="Enter query title..."
+                            />
+                            <label
+                              htmlFor="detail-desc-input"
+                              className="query-view-sub-label"
+                              style={{ marginTop: '0.65rem' }}
+                            >
+                              Query Description
+                            </label>
+                            <textarea
+                              id="detail-desc-input"
+                              rows={6}
+                              className="inline-edit-desc-textarea"
+                              value={detailDescDraft}
+                              onChange={(e) => {
+                                setDetailDescDraft(e.target.value);
+                                setHasUnsavedDetailChanges(true);
+                              }}
+                              placeholder="Enter query description..."
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="query-view-field-block">
+                              <span className="query-view-sub-label">Title</span>
+                              <div className="query-view-item-title">
+                                {activeViewingQuery.queryTitle || activeViewingQuery.queryText}
+                              </div>
+                            </div>
+                            <div className="query-view-field-block query-view-field-block--desc">
+                              <span className="query-view-sub-label">Description</span>
+                              <div className="query-view-item-desc">
+                                {activeViewingQuery.queryText || '—'}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="query-view-field-block query-view-field-block--desc">
-                    <span className="query-view-sub-label">Description</span>
-                    <div className="query-view-item-desc">
-                      {activeViewingQuery.queryText || '—'}
+
+                    {/* Attachments Section */}
+                    <div className="query-view-section">
+                      <div className="query-view-section-header">
+                        <span className="query-view-section-label">
+                          Attachments ({detailAttachmentsDraft.length})
+                        </span>
+                        {isSenderOrAdmin && (
+                          <>
+                            <input
+                              ref={detailFileInputRef}
+                              id="detail-attachments-file-input"
+                              type="file"
+                              multiple
+                              style={{ display: 'none' }}
+                              onChange={handleDetailFilesSelected}
+                            />
+                            <button
+                              type="button"
+                              className="btn-query-edit-action"
+                              onClick={() => detailFileInputRef.current?.click()}
+                              title="Select documents from device to attach"
+                              disabled={isReadingDetailFiles}
+                            >
+                              {isReadingDetailFiles ? 'Reading files...' : '📎 Add Attachment'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      {detailAttachmentsDraft.length > 0 ? (
+                        <div className="query-view-attachments-grid">
+                          {detailAttachmentsDraft.map((att) => (
+                            <div key={att.id} className="query-attachment-card">
+                              <div className="query-attachment-card-main">
+                                <span className="query-attachment-card-icon">
+                                  {getFileIcon(att.name, att.type)}
+                                </span>
+                                <div className="query-attachment-card-details">
+                                  <div className="query-attachment-card-name" title={att.name}>
+                                    {att.name}
+                                  </div>
+                                  <div className="query-attachment-card-meta">
+                                    <span className="query-attachment-card-size">
+                                      {formatFileSize(att.size)}
+                                    </span>
+                                    {att.uploadedAt && (
+                                      <span className="query-attachment-card-date">
+                                        &bull; {new Date(att.uploadedAt).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="query-attachment-card-actions">
+                                <button
+                                  type="button"
+                                  className="btn-attachment-action btn-attachment-action--view"
+                                  onClick={() => openAttachment(att)}
+                                  title="Open or preview document in a new tab"
+                                >
+                                  👁️ Open
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-attachment-action btn-attachment-action--download"
+                                  onClick={() => downloadAttachment(att)}
+                                  title="Download document to device"
+                                >
+                                  ⬇️ Download
+                                </button>
+                                {isSenderOrAdmin && (
+                                  <button
+                                    type="button"
+                                    className="btn-attachment-action btn-attachment-action--remove"
+                                    onClick={() => handleRemoveDetailAttachment(att.id)}
+                                    title="Remove this attachment"
+                                    aria-label={`Remove ${att.name}`}
+                                  >
+                                    ✕ Remove
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div
+                          className="query-view-content-box query-view-content-box--empty"
+                          style={{
+                            padding: '0.85rem 1rem',
+                            fontSize: '0.84rem',
+                            color: '#786e60',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '0.6rem',
+                          }}
+                        >
+                          <span>No documents attached to this query yet.</span>
+                          {isSenderOrAdmin && (
+                            <button
+                              type="button"
+                              className="btn-inline-edit"
+                              onClick={() => detailFileInputRef.current?.click()}
+                            >
+                              + Add Attachment from Device
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </div>
-              </div>
+
+                    {/* Save Changes Action Bar (visible when sender/admin has edited description or added/removed attachments) */}
+                    {isSenderOrAdmin && (hasUnsavedDetailChanges || isEditingDescription) && (
+                      <div className="query-view-save-bar">
+                        <div className="query-view-save-info">
+                          <span className="query-view-save-info-icon">ℹ️</span>
+                          <span>
+                            Original creation timestamp (<strong>{activeViewingQuery.createdAt}</strong>) and SLA target deadlines remain strictly preserved.
+                          </span>
+                        </div>
+                        <div className="query-view-save-actions">
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={handleCancelDetailEdits}
+                            disabled={isSavingDetailChanges}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-primary btn-save-changes-highlight"
+                            onClick={handleSaveDetailChanges}
+                            disabled={isSavingDetailChanges || isReadingDetailFiles}
+                          >
+                            {isSavingDetailChanges ? 'Saving Changes...' : '💾 Save Changes'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {detailSaveSuccess && (
+                      <div className="query-view-save-toast">
+                        ✅ Query changes and attachments saved successfully!
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {(activeViewingLinkedAppointment || activeViewingQuery.linkedAppointmentId) && (
                 <div className="query-view-section">

@@ -17,6 +17,15 @@ export type QueryStatus = 'Pending' | 'Completed';
 
 export type ExtensionStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'DECLINED';
 
+export interface QueryAttachment {
+  id: string; // e.g., 'att-1729000000000-xyz'
+  name: string; // Original filename, e.g. 'Project_Scope.pdf'
+  size: number; // File size in bytes
+  type: string; // MIME type, e.g. 'application/pdf', 'image/png'
+  url: string; // Data URL (Base64) or remote URL
+  uploadedAt?: string;
+}
+
 export interface Query {
   id: string; // matches queryId for React keys
   queryId: string; // e.g., QRY-001 (Primary Key in Supabase)
@@ -57,6 +66,7 @@ export interface Query {
   linkedAppointmentId?: string | null; // e.g. 'APT-001' if query was raised following an appointment
   isUrgent?: boolean; // Flag indicating query is urgent (immediate response required, no 48h delay threshold)
   lastUrgentReminderAtMs?: number | null; // Epoch ms of the latest 24h reminder notification sent to receiver
+  attachments?: QueryAttachment[]; // Attached documents from user's device
 }
 
 export type MeetingType = 'Online Call' | 'Office/Desk' | 'Phone';

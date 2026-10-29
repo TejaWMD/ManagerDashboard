@@ -11,6 +11,7 @@ import {
   AppointmentStatus,
   MeetingType,
   UserRole,
+  QueryAttachment,
 } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 
@@ -44,6 +45,7 @@ interface LocalCompletionMeta {
   linkedAppointmentId?: string | null;
   isUrgent?: boolean;
   lastUrgentReminderAtMs?: number | null;
+  attachments?: QueryAttachment[];
 }
 
 function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
@@ -112,9 +114,35 @@ export interface QueryRow {
   linked_appointment_id?: string | null;
   is_urgent?: boolean | null;
   last_urgent_reminder_at_ms?: number | null;
+  attachments?: string | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
+const QUERY_ATTACHMENTS_SEPARATOR = '\n<<<WMD_ATTACHMENTS>>>\n';
+
+export function packAttachments(attachments?: QueryAttachment[] | null): string {
+  if (!attachments || attachments.length === 0) return '';
+  return `${QUERY_ATTACHMENTS_SEPARATOR}${JSON.stringify(attachments)}`;
+}
+
+export function unpackAttachments(rawText?: string | null): {
+  cleanText: string;
+  attachments: QueryAttachment[];
+} {
+  const raw = rawText ?? '';
+  if (raw.includes(QUERY_ATTACHMENTS_SEPARATOR)) {
+    const [cleanText, ...rest] = raw.split(QUERY_ATTACHMENTS_SEPARATOR);
+    const metaJson = rest.join(QUERY_ATTACHMENTS_SEPARATOR);
+    try {
+      const parsed = JSON.parse(metaJson);
+      if (Array.isArray(parsed)) {
+        return { cleanText: cleanText.trim(), attachments: parsed };
+      }
+    } catch {}
+    return { cleanText: cleanText.trim(), attachments: [] };
+  }
+  return { cleanText: raw, attachments: [] };
+}
 
 // Tracks whether the Supabase table has the dedicated *_title columns
 let titleColumnsSupported: boolean | null = null;
@@ -263,8 +291,11 @@ export function mapRowToQuery(row: QueryRow): Query {
       : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)
     : Boolean(effectiveDeadlineMs > 0 && Date.now() > effectiveDeadlineMs);
 
+  const { cleanText: strippedQueryText, attachments: unpackedAttachments } =
+    unpackAttachments(row.query_text);
+
   const unpackedQuery = unpackTitleAndDescription(
-    row.query_text,
+    strippedQueryText,
     row.query_title
   );
   const unpackedMgrRemark = unpackTitleAndDescription(
@@ -275,6 +306,26 @@ export function mapRowToQuery(row: QueryRow): Query {
     row.account_manager_remark,
     row.account_manager_remark_title
   );
+
+  let resolvedAttachments: QueryAttachment[] = [];
+  if (row.attachments) {
+    try {
+      const parsed = JSON.parse(row.attachments);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        resolvedAttachments = parsed;
+      }
+    } catch {}
+  }
+  if (resolvedAttachments.length === 0 && unpackedAttachments.length > 0) {
+    resolvedAttachments = unpackedAttachments;
+  }
+  if (
+    resolvedAttachments.length === 0 &&
+    localMeta?.attachments &&
+    localMeta.attachments.length > 0
+  ) {
+    resolvedAttachments = localMeta.attachments;
+  }
 
   return {
     id: row.query_id,
@@ -319,6 +370,7 @@ export function mapRowToQuery(row: QueryRow): Query {
       row.last_urgent_reminder_at_ms !== null && row.last_urgent_reminder_at_ms !== undefined
         ? Number(row.last_urgent_reminder_at_ms)
         : localMeta?.lastUrgentReminderAtMs ?? null,
+    attachments: resolvedAttachments,
   };
 }
 
@@ -336,10 +388,9 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
     manager_id: query.managerId,
     manager_name: query.managerName,
     manager_email: query.managerEmail,
-    query_text: packTitleAndDescription(
-      query.queryTitle,
-      query.queryText
-    ),
+    query_text:
+      packTitleAndDescription(query.queryTitle, query.queryText) +
+      packAttachments(query.attachments),
     manager_remark: packTitleAndDescription(
       query.managerRemarkTitle,
       query.managerRemark
@@ -488,7 +539,8 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('extension_reviewed_at') ||
     message.includes('linked_appointment_id') ||
     message.includes('is_urgent') ||
-    message.includes('last_urgent_reminder_at_ms')
+    message.includes('last_urgent_reminder_at_ms') ||
+    message.includes('attachments')
   );
 }
 
@@ -524,14 +576,23 @@ export async function insertQueryInDb(query: Query): Promise<{
     linked_appointment_id: query.linkedAppointmentId ?? null,
     is_urgent: Boolean(query.isUrgent),
     last_urgent_reminder_at_ms: query.lastUrgentReminderAtMs ?? null,
+    attachments:
+      query.attachments && query.attachments.length > 0
+        ? JSON.stringify(query.attachments)
+        : null,
   };
-  if (query.linkedAppointmentId || query.isUrgent) {
+  if (
+    query.linkedAppointmentId ||
+    query.isUrgent ||
+    (query.attachments && query.attachments.length > 0)
+  ) {
     saveLocalCompletionMeta(query.queryId, {
       completedAt: query.completedAt ?? null,
       completedAtMs: query.completedAtMs ?? null,
       isDelayed: Boolean(query.isDelayed),
       linkedAppointmentId: query.linkedAppointmentId,
       isUrgent: Boolean(query.isUrgent),
+      attachments: query.attachments || [],
     });
   }
 
@@ -628,6 +689,7 @@ export async function updateQueryInDb(
     linkedAppointmentId?: string | null;
     isUrgent?: boolean;
     lastUrgentReminderAtMs?: number | null;
+    attachments?: QueryAttachment[] | null;
   }
 ): Promise<{
   data: Query | null;
@@ -638,11 +700,14 @@ export async function updateQueryInDb(
     baseUpdates.status = updates.status;
   }
 
-  if (updates.queryTitle !== undefined || updates.queryText !== undefined) {
-    baseUpdates.query_text = packTitleAndDescription(
-      updates.queryTitle,
-      updates.queryText
-    );
+  if (
+    updates.queryTitle !== undefined ||
+    updates.queryText !== undefined ||
+    updates.attachments !== undefined
+  ) {
+    baseUpdates.query_text =
+      packTitleAndDescription(updates.queryTitle, updates.queryText) +
+      packAttachments(updates.attachments);
   }
   if (updates.managerRemarkTitle !== undefined || updates.managerRemark !== undefined) {
     baseUpdates.manager_remark = packTitleAndDescription(
@@ -723,6 +788,12 @@ export async function updateQueryInDb(
   if (updates.lastUrgentReminderAtMs !== undefined) {
     extendedUpdates.last_urgent_reminder_at_ms = updates.lastUrgentReminderAtMs;
   }
+  if (updates.attachments !== undefined) {
+    extendedUpdates.attachments =
+      updates.attachments && updates.attachments.length > 0
+        ? JSON.stringify(updates.attachments)
+        : null;
+  }
 
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
@@ -757,7 +828,8 @@ export async function updateQueryInDb(
     updates.extensionReason !== undefined ||
     updates.linkedAppointmentId !== undefined ||
     updates.isUrgent !== undefined ||
-    updates.lastUrgentReminderAtMs !== undefined
+    updates.lastUrgentReminderAtMs !== undefined ||
+    updates.attachments !== undefined
   ) {
     saveLocalCompletionMeta(queryId, {
       ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
@@ -780,6 +852,9 @@ export async function updateQueryInDb(
       ...(updates.isUrgent !== undefined ? { isUrgent: Boolean(updates.isUrgent) } : {}),
       ...(updates.lastUrgentReminderAtMs !== undefined
         ? { lastUrgentReminderAtMs: updates.lastUrgentReminderAtMs }
+        : {}),
+      ...(updates.attachments !== undefined
+        ? { attachments: updates.attachments || [] }
         : {}),
     });
   }

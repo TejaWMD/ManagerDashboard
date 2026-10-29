@@ -16,6 +16,12 @@ import { AUTHORIZED_USERS } from '../../data/users';
 import { AppointmentsSection } from '../Appointments/AppointmentsSection';
 import { generateWeeklyManagerReportPdf } from '../../lib/pdfReport';
 import {
+  formatFileSize,
+  getFileIcon,
+  downloadAttachment,
+  openAttachment,
+} from '../../lib/attachments';
+import {
   calculateAllManagersKpi,
   calculateManagerKpi,
   filterQueriesByWindow,
@@ -597,7 +603,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               <span className="kpi-label">Team Avg KPI</span>
             </div>
             <div className="kpi-weighted-footer">
-              <span className="kpi-pts-text">3 Managers</span>
+              <span className="kpi-pts-text">6 Managers</span>
               <span className="kpi-detail-link">KPI Page &rarr;</span>
             </div>
           </div>
@@ -876,6 +882,58 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                 </div>
               </div>
+
+              {activeViewingQuery.attachments && activeViewingQuery.attachments.length > 0 && (
+                <div className="query-view-section">
+                  <span className="query-view-section-label">
+                    Attached Documents ({activeViewingQuery.attachments.length})
+                  </span>
+                  <div className="query-view-attachments-grid">
+                    {activeViewingQuery.attachments.map((att) => (
+                      <div key={att.id} className="query-attachment-card">
+                        <div className="query-attachment-card-main">
+                          <span className="query-attachment-card-icon">
+                            {getFileIcon(att.name, att.type)}
+                          </span>
+                          <div className="query-attachment-card-details">
+                            <div className="query-attachment-card-name" title={att.name}>
+                              {att.name}
+                            </div>
+                            <div className="query-attachment-card-meta">
+                              <span className="query-attachment-card-size">
+                                {formatFileSize(att.size)}
+                              </span>
+                              {att.uploadedAt && (
+                                <span className="query-attachment-card-date">
+                                  &bull; {new Date(att.uploadedAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="query-attachment-card-actions">
+                          <button
+                            type="button"
+                            className="btn-attachment-action btn-attachment-action--view"
+                            onClick={() => openAttachment(att)}
+                            title="Open or preview document in a new tab"
+                          >
+                            👁️ Open
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-attachment-action btn-attachment-action--download"
+                            onClick={() => downloadAttachment(att)}
+                            title="Download document to device"
+                          >
+                            ⬇️ Download
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {(activeViewingLinkedAppointment || activeViewingQuery.linkedAppointmentId) && (
                 <div className="query-view-section">
