@@ -1054,7 +1054,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   : 'row-unchecked';
 
                 const rowLinkedApt = getLinkedAppointmentForQuery(item, appointments);
-                const rowLinkedAptId = rowLinkedApt?.id || item.linkedAppointmentId;
+                const rowLinkedAptId =
+                  rowLinkedApt?.id ||
+                  (item.linkedAppointmentId &&
+                  appointments.some((a) => a.id === item.linkedAppointmentId)
+                    ? item.linkedAppointmentId
+                    : null);
 
                 return (
                   <tr

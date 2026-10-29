@@ -24,8 +24,21 @@ export const SUPABASE_ANON_KEY =
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Immediate cleanup of legacy dummy/test cache keys that may exist in client browsers
+try {
+  localStorage.removeItem('wm_portal_completion_meta_v1');
+  localStorage.removeItem('wm_portal_completion_meta_v2');
+  localStorage.removeItem('wm_portal_appointments_v1');
+  localStorage.removeItem('wm_portal_appointments_v2');
+  localStorage.removeItem('wm_portal_queries_v1');
+  localStorage.removeItem('wm_portal_queries_v2');
+  localStorage.removeItem('wm_portal_queries_v3');
+} catch {
+  // Ignore storage errors in non-browser/restricted environments
+}
+
 const OLD_COMPLETION_META_KEY = 'wm_portal_completion_meta_v1';
-const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v2';
+const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v3';
 
 interface LocalCompletionMeta {
   completedAt?: string | null;
@@ -364,8 +377,13 @@ export function mapRowToQuery(row: QueryRow): Query {
     extensionReviewNote,
     extensionReviewedAt,
     linkedAppointmentId:
-      row.linked_appointment_id || localMeta?.linkedAppointmentId || null,
-    isUrgent: Boolean(row.is_urgent === true || localMeta?.isUrgent === true),
+      row.linked_appointment_id !== undefined
+        ? (row.linked_appointment_id || null)
+        : (localMeta?.linkedAppointmentId || null),
+    isUrgent:
+      row.is_urgent !== undefined
+        ? Boolean(row.is_urgent)
+        : Boolean(localMeta?.isUrgent === true),
     lastUrgentReminderAtMs:
       row.last_urgent_reminder_at_ms !== null && row.last_urgent_reminder_at_ms !== undefined
         ? Number(row.last_urgent_reminder_at_ms)
@@ -912,7 +930,7 @@ export async function updateQueryInDb(
 // Appointments Database Interface & Realtime Helpers
 // ============================================================================
 
-export const STORAGE_KEY_APPOINTMENTS = 'wm_portal_appointments_v2';
+export const STORAGE_KEY_APPOINTMENTS = 'wm_portal_appointments_v3';
 
 export interface AppointmentRow {
   id: string;
@@ -1158,6 +1176,7 @@ export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
 export function readCachedAppointments(): Appointment[] {
   try {
     localStorage.removeItem('wm_portal_appointments_v1');
+    localStorage.removeItem('wm_portal_appointments_v2');
     const raw = localStorage.getItem(STORAGE_KEY_APPOINTMENTS);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
@@ -1170,6 +1189,7 @@ export function readCachedAppointments(): Appointment[] {
 export function writeCachedAppointments(list: Appointment[]): void {
   try {
     localStorage.removeItem('wm_portal_appointments_v1');
+    localStorage.removeItem('wm_portal_appointments_v2');
     localStorage.setItem(STORAGE_KEY_APPOINTMENTS, JSON.stringify(list));
   } catch {
     // Ignore storage quota errors

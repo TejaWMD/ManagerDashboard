@@ -61,8 +61,21 @@ import sqlSchemaText from '../supabase_schema.sql?raw';
 import './App.css';
 
 const OLD_DUMMY_STORAGE_KEY = 'wm_portal_queries_v1';
-const STORAGE_KEY_QUERIES = 'wm_portal_queries_v3';
+const STORAGE_KEY_QUERIES = 'wm_portal_queries_v4';
 const STORAGE_KEY_SESSION = 'wm_portal_active_user_v1';
+
+// One-time cleanup of legacy and corrupted mock/test keys
+try {
+  localStorage.removeItem(OLD_DUMMY_STORAGE_KEY);
+  localStorage.removeItem('wm_portal_queries_v2');
+  localStorage.removeItem('wm_portal_queries_v3');
+  localStorage.removeItem('wm_portal_completion_meta_v1');
+  localStorage.removeItem('wm_portal_completion_meta_v2');
+  localStorage.removeItem('wm_portal_appointments_v1');
+  localStorage.removeItem('wm_portal_appointments_v2');
+} catch {
+  // Ignore storage errors
+}
 
 function persistQueriesCache(list: Query[]): void {
   try {
@@ -151,6 +164,11 @@ export const App: React.FC = () => {
     try {
       localStorage.removeItem(OLD_DUMMY_STORAGE_KEY);
       localStorage.removeItem('wm_portal_queries_v2');
+      localStorage.removeItem('wm_portal_queries_v3');
+      localStorage.removeItem('wm_portal_completion_meta_v1');
+      localStorage.removeItem('wm_portal_completion_meta_v2');
+      localStorage.removeItem('wm_portal_appointments_v1');
+      localStorage.removeItem('wm_portal_appointments_v2');
     } catch {
       // Ignore storage errors
     }
