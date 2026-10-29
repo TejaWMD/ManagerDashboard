@@ -1,6 +1,58 @@
 export type UserRole = 'account_manager' | 'manager' | 'admin';
 
-export type PageView = 'home' | 'queries' | 'kpi';
+export type PageView = 'home' | 'queries' | 'kpi' | 'tracking';
+
+export type ActivityActionType =
+  | 'QUERY_CREATED'
+  | 'QUERY_UPDATED'
+  | 'QUERY_MANAGER_DONE'
+  | 'QUERY_ACCOUNT_MANAGER_DONE'
+  | 'QUERY_COMPLETED'
+  | 'QUERY_REMARK_ADDED'
+  | 'QUERY_EXTENSION_REQUESTED'
+  | 'QUERY_EXTENSION_RESOLVED'
+  | 'QUERY_RATED'
+  | 'APPOINTMENT_BOOKED'
+  | 'APPOINTMENT_UPDATED'
+  | 'APPOINTMENT_ACCEPTED'
+  | 'APPOINTMENT_RESCHEDULED'
+  | 'APPOINTMENT_DECLINED'
+  | 'APPOINTMENT_CANCELLED'
+  | 'USER_LOGIN'
+  | 'USER_LOGOUT'
+  | 'PAGE_VIEW';
+
+export type ActivityCategory = 'all' | 'query' | 'appointment' | 'auth' | 'navigation';
+
+export interface UserActivity {
+  id: string; // e.g., 'act-1729000000000-xyz'
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userRole: UserRole;
+  actionType: ActivityActionType;
+  category: ActivityCategory;
+  actionTitle: string;
+  actionDetails?: string;
+  targetId?: string | null; // e.g. 'QRY-001', 'APT-002'
+  targetType?: 'query' | 'appointment' | 'auth' | 'navigation' | null;
+  deviceType?: 'desktop' | 'mobile' | 'tablet';
+  createdAt: string; // YYYY-MM-DD HH:mm:ss
+  createdAtMs: number;
+}
+
+export interface UserPresence {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userRole: UserRole;
+  currentPage: PageView;
+  currentAction?: string;
+  deviceType?: 'desktop' | 'mobile' | 'tablet';
+  lastSeenAt: string;
+  lastSeenAtMs: number;
+  isOnline: boolean;
+}
 
 export interface UserAccount {
   id: string;
@@ -438,7 +490,7 @@ export function hasUserAcceptedAppointment(
 ): boolean {
   if (appointment.status === 'CONFIRMED') return true;
   if (!Array.isArray(appointment.attendees) || appointment.attendees.length === 0) {
-    return appointment.status === 'CONFIRMED';
+    return false;
   }
 
   const matched = appointment.attendees.find(
@@ -452,7 +504,7 @@ export function hasUserAcceptedAppointment(
         att.name.trim().toLowerCase() === user.name!.trim().toLowerCase())
   );
 
-  return Boolean(matched && (matched.status === 'CONFIRMED' || appointment.status === 'CONFIRMED'));
+  return Boolean(matched && matched.status === 'CONFIRMED');
 }
 
 export function isAppointmentActionNeeded(

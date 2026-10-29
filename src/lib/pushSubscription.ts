@@ -107,10 +107,16 @@ export async function checkPushStatus(userId: string): Promise<PushStatusInfo> {
           const rawAuth = sub.getKey ? sub.getKey('auth') : null;
           const p256dh = rawKey ? btoa(String.fromCharCode(...new Uint8Array(rawKey))) : '';
           const auth = rawAuth ? btoa(String.fromCharCode(...new Uint8Array(rawAuth))) : '';
-          supabase.from('push_subscriptions').upsert(
-            { user_id: userId, endpoint: sub.endpoint, p256dh, auth },
-            { onConflict: 'user_id,endpoint' }
-          ).catch((e) => console.warn('[Push] Silent sync error:', e));
+          supabase
+            .from('push_subscriptions')
+            .upsert(
+              { user_id: userId, endpoint: sub.endpoint, p256dh, auth },
+              { onConflict: 'user_id,endpoint' }
+            )
+            .then(
+              () => {},
+              (e: unknown) => console.warn('[Push] Silent sync error:', e)
+            );
         }
 
         try {

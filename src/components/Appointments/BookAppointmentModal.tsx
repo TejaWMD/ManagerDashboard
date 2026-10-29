@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Appointment,
   AppointmentAttendee,
+  AppointmentStatus,
   belongsToAccountManager,
   belongsToManager,
   MeetingType,
@@ -280,23 +281,25 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
     }
 
     // Map selected user IDs to AppointmentAttendee objects
-    const attendeeObjects: AppointmentAttendee[] = selectedUserIds
-      .map((id) => {
+    const attendeeObjects: AppointmentAttendee[] = selectedUserIds.reduce<AppointmentAttendee[]>(
+      (acc, id) => {
         const u = users.find((user) => user.id === id);
-        if (!u) return null;
+        if (!u) return acc;
         const existingAtt =
           isEditMode && appointmentToEdit?.attendees
             ? appointmentToEdit.attendees.find((a) => a.id === id)
             : null;
-        return {
+        acc.push({
           id: u.id,
           name: u.name,
           email: u.email,
           role: u.role as UserRole,
-          status: existingAtt?.status || ('PENDING' as AppointmentStatus),
-        };
-      })
-      .filter((a): a is AppointmentAttendee => Boolean(a));
+          status: existingAtt?.status || 'PENDING',
+        });
+        return acc;
+      },
+      []
+    );
 
     if (attendeeObjects.length === 0) {
       setErrorMessage('Could not resolve selected attendees.');

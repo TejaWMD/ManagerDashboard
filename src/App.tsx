@@ -14,6 +14,8 @@ import {
   AppointmentStatus,
   belongsToAppointment,
   QueryAttachment,
+  UserActivity,
+  UserPresence,
 } from './types';
 import { AUTHORIZED_USERS } from './data/users';
 import { INITIAL_QUERIES } from './data/initialQueries';
@@ -36,6 +38,22 @@ import {
   writeCachedAppointments,
 } from './lib/supabase';
 import {
+  ActivityRow,
+  PresenceRow,
+  fetchRecentActivitiesFromDb,
+  fetchUserPresencesFromDb,
+  getOrCreateTrackingChannel,
+  logUserActivity,
+  mapRowToActivity,
+  mapRowToPresence,
+  readCachedActivities,
+  readCachedPresences,
+  setUserOffline,
+  updateUserPresence,
+  writeCachedActivities,
+  writeCachedPresences,
+} from './lib/activityTracker';
+import {
   registerServiceWorker,
   showWebNotification,
 } from './lib/notifications';
@@ -54,6 +72,7 @@ import { Navbar } from './components/Navbar/Navbar';
 import { HomePage } from './components/HomePage/HomePage';
 import { QueryPage } from './components/QueryPage/QueryPage';
 import { KPIPage } from './components/KPIPage/KPIPage';
+import { TrackingPage } from './components/TrackingPage/TrackingPage';
 import { BookAppointmentModal } from './components/Appointments/BookAppointmentModal';
 import { RescheduleAppointmentModal } from './components/Appointments/RescheduleAppointmentModal';
 import { NotificationModal } from './components/NotificationModal/NotificationModal';
@@ -110,6 +129,8 @@ export const App: React.FC = () => {
 
   const [queries, setQueries] = useState<Query[]>(INITIAL_QUERIES);
   const [appointments, setAppointments] = useState<Appointment[]>(() => readCachedAppointments());
+  const [activities, setActivities] = useState<UserActivity[]>(() => readCachedActivities());
+  const [presences, setPresences] = useState<Record<string, UserPresence>>(() => readCachedPresences());
   const [isBookAptModalOpen, setIsBookAptModalOpen] = useState<boolean>(false);
   const [appointmentToEdit, setAppointmentToEdit] = useState<Appointment | null>(null);
   const [bookAptPreselectedQueryId, setBookAptPreselectedQueryId] = useState<string | null>(null);
@@ -209,12 +230,35 @@ export const App: React.FC = () => {
     }
   }, []);
 
+  const loadActivities = useCallback(async () => {
+    try {
+      const acts = await fetchRecentActivitiesFromDb(
+        queriesRef.current,
+        appointmentsRef.current
+      );
+      setActivities(acts);
+    } catch {
+      // Graceful fallback
+    }
+  }, []);
+
+  const loadPresences = useCallback(async () => {
+    try {
+      const p = await fetchUserPresencesFromDb();
+      setPresences(p);
+    } catch {
+      // Graceful fallback
+    }
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
       await Promise.all([
         loadQueries(),
         loadAppointments(),
+        loadActivities(),
+        loadPresences(),
         fetchUsersFromDb().then((users) => {
           if (users && users.length > 0) {
             setAllUsers(users);
@@ -231,11 +275,13 @@ export const App: React.FC = () => {
         setIsRefreshing(false);
       }, 450);
     }
-  }, [loadQueries, loadAppointments]);
+  }, [loadQueries, loadAppointments, loadActivities, loadPresences]);
 
   useEffect(() => {
     loadQueries();
     loadAppointments();
+    loadActivities();
+    loadPresences();
 
     const queryChannel = supabase
       .channel('public:queries')
@@ -483,11 +529,137 @@ export const App: React.FC = () => {
       )
       .subscribe();
 
+    // Realtime channel for live user activities (DB changes)
+    const activityChannel = supabase
+      .channel('public:user_activities')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'user_activities' },
+        (payload) => {
+          if (payload.new) {
+            const incoming = mapRowToActivity(payload.new as ActivityRow);
+            setActivities((prev) => {
+              if (prev.some((a) => a.id === incoming.id)) return prev;
+              const next = [incoming, ...prev];
+              writeCachedActivities(next);
+              return next;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Realtime channel for live user presence (DB changes)
+    const presenceChannel = supabase
+      .channel('public:user_presence')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_presence' },
+        (payload) => {
+          if (payload.new) {
+            const incoming = mapRowToPresence(payload.new as PresenceRow);
+            setPresences((prev) => {
+              const next = { ...prev, [incoming.userId]: incoming };
+              writeCachedPresences(next);
+              return next;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Realtime WebSocket broadcast channel (Works WITHOUT ANY Supabase tables or migrations!)
+    const broadcastTrackingChannel = getOrCreateTrackingChannel();
+    broadcastTrackingChannel
+      .on('broadcast', { event: 'user_activity' }, ({ payload }) => {
+        if (payload) {
+          const incoming = payload as UserActivity;
+          setActivities((prev) => {
+            if (prev.some((a) => a.id === incoming.id)) return prev;
+            const next = [incoming, ...prev];
+            writeCachedActivities(next);
+            return next;
+          });
+        }
+      })
+      .on('broadcast', { event: 'user_presence' }, ({ payload }) => {
+        if (payload) {
+          const incoming = payload as UserPresence;
+          setPresences((prev) => {
+            const next = { ...prev, [incoming.userId]: incoming };
+            writeCachedPresences(next);
+            return next;
+          });
+        }
+      })
+      .on('broadcast', { event: 'user_presence_offline' }, ({ payload }) => {
+        if (payload && payload.userId) {
+          setPresences((prev) => {
+            const current = prev[payload.userId];
+            if (!current) return prev;
+            const next = {
+              ...prev,
+              [payload.userId]: {
+                ...current,
+                isOnline: false,
+                lastSeenAtMs: payload.lastSeenAtMs || Date.now(),
+              },
+            };
+            writeCachedPresences(next);
+            return next;
+          });
+        }
+      })
+      .subscribe();
+
+    // Listen to local events for instantaneous 0ms local response
+    const handleLocalActivity = (e: Event) => {
+      const customEvent = e as CustomEvent<UserActivity>;
+      if (customEvent.detail) {
+        setActivities((prev) => {
+          if (prev.some((a) => a.id === customEvent.detail.id)) return prev;
+          const next = [customEvent.detail, ...prev];
+          writeCachedActivities(next);
+          return next;
+        });
+      }
+    };
+
+    const handleLocalPresence = (e: Event) => {
+      const customEvent = e as CustomEvent<UserPresence>;
+      if (customEvent.detail) {
+        setPresences((prev) => {
+          const next = { ...prev, [customEvent.detail.userId]: customEvent.detail };
+          writeCachedPresences(next);
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('wm_activity_logged', handleLocalActivity);
+    window.addEventListener('wm_presence_updated', handleLocalPresence);
+
     return () => {
       supabase.removeChannel(queryChannel);
       supabase.removeChannel(aptChannel);
+      supabase.removeChannel(activityChannel);
+      supabase.removeChannel(presenceChannel);
+      window.removeEventListener('wm_activity_logged', handleLocalActivity);
+      window.removeEventListener('wm_presence_updated', handleLocalPresence);
     };
-  }, [loadQueries, loadAppointments]);
+  }, [loadQueries, loadAppointments, loadActivities, loadPresences]);
+
+  // Real-time live presence heartbeat
+  useEffect(() => {
+    if (!currentUser) return;
+    updateUserPresence(currentUser, activePage);
+    const presenceTimer = setInterval(() => {
+      if (currentUserRef.current) {
+        updateUserPresence(currentUserRef.current, activePage);
+      }
+    }, 25000);
+    return () => clearInterval(presenceTimer);
+  }, [currentUser, activePage]);
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
@@ -497,9 +669,31 @@ export const App: React.FC = () => {
     } catch {
       // Ignore storage errors
     }
+    logUserActivity({
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      userRole: user.role,
+      actionType: 'USER_LOGIN',
+      actionTitle: `${user.name} logged in`,
+      targetType: 'auth',
+    });
+    updateUserPresence(user, 'home', 'Logged into portal', true);
   };
 
   const handleLogout = () => {
+    if (currentUser) {
+      logUserActivity({
+        userId: currentUser.id,
+        userName: currentUser.name,
+        userEmail: currentUser.email,
+        userRole: currentUser.role,
+        actionType: 'USER_LOGOUT',
+        actionTitle: `${currentUser.name} logged out`,
+        targetType: 'auth',
+      });
+      setUserOffline(currentUser.id);
+    }
     setCurrentUser(null);
     setActivePage('home');
     try {
@@ -620,6 +814,19 @@ export const App: React.FC = () => {
         event: 'NEW_QUERY',
         query: data,
         actor: currentUser,
+      });
+
+      // Log real-time activity
+      logUserActivity({
+        userId: currentUser.id,
+        userName: currentUser.name,
+        userEmail: currentUser.email,
+        userRole: currentUser.role,
+        actionType: 'QUERY_CREATED',
+        actionTitle: `${currentUser.name} submitted Query ${data.queryId}`,
+        actionDetails: `Assigned to ${data.managerName}: "${data.queryTitle || data.queryText.slice(0, 60)}"`,
+        targetId: data.queryId,
+        targetType: 'query',
       });
     }
   };
@@ -906,6 +1113,98 @@ export const App: React.FC = () => {
             (updates.accountManagerRemark ?? '').trim(),
         });
       }
+
+      // Log granular real-time activities for tracking
+      if (!existing.managerDone && updates.managerDone) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_MANAGER_DONE',
+          actionTitle: `${currentUser.name} marked Query ${queryId} as Done`,
+          actionDetails: updates.managerRemark || existing.managerRemark || 'Manager completed resolution.',
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (!existing.accountManagerDone && updates.accountManagerDone) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_COMPLETED',
+          actionTitle: `${currentUser.name} closed Query ${queryId}`,
+          actionDetails: updates.rating ? `Mandatory Rating: ${updates.rating} stars` : 'Finalized by account manager.',
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (updates.extensionStatus === 'PENDING') {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_EXTENSION_REQUESTED',
+          actionTitle: `${currentUser.name} requested extension for ${queryId}`,
+          actionDetails: updates.extensionReason || 'Requested target date extension',
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (updates.extensionStatus === 'APPROVED' || updates.extensionStatus === 'DECLINED') {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_EXTENSION_RESOLVED',
+          actionTitle: `${currentUser.name} ${updates.extensionStatus.toLowerCase()} extension for ${queryId}`,
+          actionDetails: updates.extensionReviewNote || `Extension ${updates.extensionStatus.toLowerCase()}`,
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (updates.rating && updates.rating !== existing.rating) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_RATED',
+          actionTitle: `${currentUser.name} rated Query ${queryId} (${updates.rating} stars)`,
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (
+        updates.managerRemark &&
+        updates.managerRemark !== existing.managerRemark
+      ) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_REMARK_ADDED',
+          actionTitle: `${currentUser.name} added Manager remark on ${queryId}`,
+          actionDetails: updates.managerRemark,
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (
+        updates.accountManagerRemark &&
+        updates.accountManagerRemark !== existing.accountManagerRemark
+      ) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_REMARK_ADDED',
+          actionTitle: `${currentUser.name} added AM remark on ${queryId}`,
+          actionDetails: updates.accountManagerRemark,
+          targetId: queryId,
+          targetType: 'query',
+        });
+      }
     }
   };
 
@@ -972,6 +1271,19 @@ export const App: React.FC = () => {
       event: 'APPOINTMENT_REQUESTED',
       appointment: finalApt,
       actor: currentUser,
+    });
+
+    // Log real-time activity for tracking
+    logUserActivity({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      userRole: currentUser.role,
+      actionType: 'APPOINTMENT_BOOKED',
+      actionTitle: `${currentUser.name} booked Appointment ${finalApt.id}: ${finalApt.title}`,
+      actionDetails: `Scheduled for ${finalApt.scheduledAt} (${finalApt.meetingType})`,
+      targetId: finalApt.id,
+      targetType: 'appointment',
     });
   };
 
@@ -1059,6 +1371,18 @@ export const App: React.FC = () => {
       appointment: updated,
       actor: currentUser,
     });
+
+    logUserActivity({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      userRole: currentUser.role,
+      actionType: 'APPOINTMENT_ACCEPTED',
+      actionTitle: `${currentUser.name} accepted Appointment ${appointmentId}`,
+      actionDetails: target.title,
+      targetId: appointmentId,
+      targetType: 'appointment',
+    });
   };
 
   const handleRescheduleClick = (appointment: Appointment) => {
@@ -1145,6 +1469,18 @@ export const App: React.FC = () => {
       appointment: updated,
       actor: currentUser,
     });
+
+    logUserActivity({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      userRole: currentUser.role,
+      actionType: 'APPOINTMENT_RESCHEDULED',
+      actionTitle: `${currentUser.name} accepted reschedule for Appointment ${appointmentId}`,
+      actionDetails: `Rescheduled to ${updated.scheduledAt}`,
+      targetId: appointmentId,
+      targetType: 'appointment',
+    });
   };
 
   const handleDeclineAppointment = async (appointmentId: string) => {
@@ -1166,6 +1502,18 @@ export const App: React.FC = () => {
       appointment: updated,
       actor: currentUser,
     });
+
+    logUserActivity({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      userRole: currentUser.role,
+      actionType: 'APPOINTMENT_DECLINED',
+      actionTitle: `${currentUser.name} declined Appointment ${appointmentId}`,
+      actionDetails: target.title,
+      targetId: appointmentId,
+      targetType: 'appointment',
+    });
   };
 
   const handleCancelAppointment = async (appointmentId: string) => {
@@ -1186,6 +1534,18 @@ export const App: React.FC = () => {
       event: 'APPOINTMENT_CANCELLED',
       appointment: updated,
       actor: currentUser,
+    });
+
+    logUserActivity({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      userRole: currentUser.role,
+      actionType: 'APPOINTMENT_CANCELLED',
+      actionTitle: `${currentUser.name} cancelled Appointment ${appointmentId}`,
+      actionDetails: 'Cancelled meeting',
+      targetId: appointmentId,
+      targetType: 'appointment',
     });
   };
 
@@ -1279,6 +1639,18 @@ export const App: React.FC = () => {
       event: 'APPOINTMENT_CANCELLED',
       appointment: updated,
       actor: currentUser,
+    });
+
+    logUserActivity({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      userRole: currentUser.role,
+      actionType: 'APPOINTMENT_CANCELLED',
+      actionTitle: `${currentUser.name} cancelled Appointment ${appointmentId}`,
+      actionDetails: remark ? `Reason: "${remark}"` : 'Cancelled meeting',
+      targetId: appointmentId,
+      targetType: 'appointment',
     });
   };
 
@@ -1392,6 +1764,18 @@ export const App: React.FC = () => {
               queries={queries}
               users={allUsers}
               onNavigate={setActivePage}
+            />
+          ) : activePage === 'tracking' ? (
+            <TrackingPage
+              currentUser={currentUser}
+              users={allUsers}
+              queries={queries}
+              appointments={appointments}
+              activities={activities}
+              presences={presences}
+              onNavigate={setActivePage}
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
             />
           ) : (
             <QueryPage

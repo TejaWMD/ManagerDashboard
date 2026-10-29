@@ -328,3 +328,80 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.appointments;
   END IF;
 END $$;
+
+-- ============================================================================
+-- 8. User Activity Tracking & Real-Time Presence (Admin Live Monitoring)
+-- ============================================================================
+
+-- Audit trail of all user actions (queries, appointments, logins, completions)
+CREATE TABLE IF NOT EXISTS public.user_activities (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES public.users(id) ON UPDATE CASCADE,
+  user_name TEXT NOT NULL,
+  user_email TEXT NOT NULL,
+  user_role TEXT NOT NULL CHECK (user_role IN ('account_manager', 'manager', 'admin')),
+  action_type TEXT NOT NULL,
+  action_title TEXT NOT NULL,
+  action_details TEXT DEFAULT '',
+  target_id TEXT DEFAULT NULL,
+  target_type TEXT DEFAULT NULL,
+  device_type TEXT DEFAULT 'desktop',
+  created_at TEXT NOT NULL,
+  created_at_ms BIGINT NOT NULL
+);
+
+-- User presence / heartbeat for real-time live status
+CREATE TABLE IF NOT EXISTS public.user_presence (
+  user_id TEXT PRIMARY KEY REFERENCES public.users(id) ON UPDATE CASCADE,
+  user_name TEXT NOT NULL,
+  user_email TEXT NOT NULL,
+  user_role TEXT NOT NULL CHECK (user_role IN ('account_manager', 'manager', 'admin')),
+  current_page TEXT NOT NULL DEFAULT 'home',
+  current_action TEXT DEFAULT '',
+  device_type TEXT DEFAULT 'desktop',
+  last_seen_at TEXT NOT NULL,
+  last_seen_at_ms BIGINT NOT NULL,
+  is_online BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Indexes for lightning fast queries and ordering
+CREATE INDEX IF NOT EXISTS idx_user_activities_created_at_ms ON public.user_activities(created_at_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_user_activities_user_id ON public.user_activities(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_activities_action_type ON public.user_activities(action_type);
+
+-- Enable Row Level Security & Policies
+ALTER TABLE public.user_activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_presence ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow full access to user_activities" ON public.user_activities;
+CREATE POLICY "Allow full access to user_activities"
+  ON public.user_activities FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow full access to user_presence" ON public.user_presence;
+CREATE POLICY "Allow full access to user_presence"
+  ON public.user_presence FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- Enable Realtime for activities and presence
+ALTER TABLE public.user_activities REPLICA IDENTITY FULL;
+ALTER TABLE public.user_presence REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'user_activities'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.user_activities;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'user_presence'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.user_presence;
+  END IF;
+END $$;

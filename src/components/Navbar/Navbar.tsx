@@ -150,6 +150,32 @@ export const Navbar: React.FC<NavbarProps> = ({
           {!isCollapsed && <span className="sidebar-link-text">KPI</span>}
         </button>
 
+        {currentUser.role === 'admin' && (
+          <button
+            type="button"
+            className={`sidebar-link-btn ${
+              activePage === 'tracking' ? 'sidebar-link-btn--active' : ''
+            }`}
+            onClick={() => onNavigate('tracking')}
+            title="Live Team Tracking & Activity Audit"
+          >
+            <svg
+              className="sidebar-nav-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M3 12h1m16 0h1M12 3v1m0 16v1" />
+              <circle cx="12" cy="12" r="8" strokeDasharray="3 3" />
+            </svg>
+            {!isCollapsed && <span className="sidebar-link-text">Tracking</span>}
+          </button>
+        )}
+
         {onOpenNotifications && (
           <button
             type="button"
