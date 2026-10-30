@@ -1079,6 +1079,25 @@
   font-style: italic;
 }
 
+.query-view-remark-box--editing {
+  max-height: none;
+  overflow: visible;
+  border-color: rgba(193, 128, 54, 0.55);
+  box-shadow: 0 0 0 3px rgba(193, 128, 54, 0.12);
+  background: #fffdf9;
+}
+
+.query-view-remark-box--clickable {
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.query-view-remark-box--clickable:hover {
+  border-color: var(--c-russet, #844918);
+  box-shadow: 0 0 0 2px rgba(132, 73, 24, 0.1);
+  background: #fdfbf7;
+}
+
 .query-view-field-block {
   display: flex;
   flex-direction: column;

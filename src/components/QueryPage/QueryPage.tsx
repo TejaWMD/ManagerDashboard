@@ -301,6 +301,92 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     setHasUnsavedDetailChanges(false);
   };
 
+  // Manager Remark in-place editing in Query View modal (receiving manager & admin)
+  const [isEditingModalMgrRemark, setIsEditingModalMgrRemark] = useState<boolean>(false);
+  const [modalMgrRemarkTitleDraft, setModalMgrRemarkTitleDraft] = useState<string>('');
+  const [modalMgrRemarkDraft, setModalMgrRemarkDraft] = useState<string>('');
+  const [isSavingModalMgrRemark, setIsSavingModalMgrRemark] = useState<boolean>(false);
+  const [modalMgrRemarkSaveSuccess, setModalMgrRemarkSaveSuccess] = useState<boolean>(false);
+
+  const handleSaveModalMgrRemark = async () => {
+    if (!activeViewingQuery) return;
+    setIsSavingModalMgrRemark(true);
+    try {
+      const finalTitle = modalMgrRemarkTitleDraft.trim();
+      const finalDesc = modalMgrRemarkDraft.trim();
+      await onUpdateQuery(activeViewingQuery.queryId, {
+        managerRemarkTitle: finalTitle,
+        managerRemark: finalDesc,
+      });
+
+      setViewingQuery((prev) =>
+        prev && prev.queryId === activeViewingQuery.queryId
+          ? {
+              ...prev,
+              managerRemarkTitle: finalTitle,
+              managerRemark: finalDesc,
+            }
+          : null
+      );
+
+      setIsEditingModalMgrRemark(false);
+      setModalMgrRemarkSaveSuccess(true);
+      setTimeout(() => setModalMgrRemarkSaveSuccess(false), 3500);
+    } finally {
+      setIsSavingModalMgrRemark(false);
+    }
+  };
+
+  const handleCancelModalMgrRemark = () => {
+    if (!activeViewingQuery) return;
+    setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
+    setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+    setIsEditingModalMgrRemark(false);
+  };
+
+  // Sender Remark in-place editing in Query View modal (sender & admin)
+  const [isEditingModalSenderRemark, setIsEditingModalSenderRemark] = useState<boolean>(false);
+  const [modalSenderRemarkTitleDraft, setModalSenderRemarkTitleDraft] = useState<string>('');
+  const [modalSenderRemarkDraft, setModalSenderRemarkDraft] = useState<string>('');
+  const [isSavingModalSenderRemark, setIsSavingModalSenderRemark] = useState<boolean>(false);
+  const [modalSenderRemarkSaveSuccess, setModalSenderRemarkSaveSuccess] = useState<boolean>(false);
+
+  const handleSaveModalSenderRemark = async () => {
+    if (!activeViewingQuery) return;
+    setIsSavingModalSenderRemark(true);
+    try {
+      const finalTitle = modalSenderRemarkTitleDraft.trim();
+      const finalDesc = modalSenderRemarkDraft.trim();
+      await onUpdateQuery(activeViewingQuery.queryId, {
+        accountManagerRemarkTitle: finalTitle,
+        accountManagerRemark: finalDesc,
+      });
+
+      setViewingQuery((prev) =>
+        prev && prev.queryId === activeViewingQuery.queryId
+          ? {
+              ...prev,
+              accountManagerRemarkTitle: finalTitle,
+              accountManagerRemark: finalDesc,
+            }
+          : null
+      );
+
+      setIsEditingModalSenderRemark(false);
+      setModalSenderRemarkSaveSuccess(true);
+      setTimeout(() => setModalSenderRemarkSaveSuccess(false), 3500);
+    } finally {
+      setIsSavingModalSenderRemark(false);
+    }
+  };
+
+  const handleCancelModalSenderRemark = () => {
+    if (!activeViewingQuery) return;
+    setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
+    setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
+    setIsEditingModalSenderRemark(false);
+  };
+
   // If redirected from an appointment follow-up action, prefill the create query modal
   useEffect(() => {
     if (initialFollowupAppointment) {
@@ -543,11 +629,25 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setDetailAttachmentsDraft(activeViewingQuery.attachments ? [...activeViewingQuery.attachments] : []);
       setHasUnsavedDetailChanges(false);
       setDetailSaveSuccess(false);
+
+      setIsEditingModalMgrRemark(false);
+      setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
+      setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+      setModalMgrRemarkSaveSuccess(false);
+
+      setIsEditingModalSenderRemark(false);
+      setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
+      setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
+      setModalSenderRemarkSaveSuccess(false);
     }
   }, [
     activeViewingQuery?.queryId,
     activeViewingQuery?.queryTitle,
     activeViewingQuery?.queryText,
+    activeViewingQuery?.managerRemarkTitle,
+    activeViewingQuery?.managerRemark,
+    activeViewingQuery?.accountManagerRemarkTitle,
+    activeViewingQuery?.accountManagerRemark,
     activeViewingQuery?.attachments?.length,
   ]);
 
@@ -2518,95 +2618,325 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               </div>
 
               <div className="query-view-remarks-grid">
-                <div className="query-view-section">
-                  <div className="query-view-section-header">
-                    <span className="query-view-section-label">Manager Remark</span>
-                    <span
-                      className={`query-view-check-tag ${
-                        activeViewingQuery.managerDone
-                          ? 'query-view-check-tag--done'
-                          : ''
-                      }`}
-                    >
-                      {activeViewingQuery.managerDone ? '✓ Mgr Done' : 'Unchecked'}
-                    </span>
-                  </div>
-                  <div
-                    className={`query-view-remark-box ${
-                      !activeViewingQuery.managerRemarkTitle &&
-                      !activeViewingQuery.managerRemark
-                        ? 'query-view-remark-box--empty'
-                        : ''
-                    }`}
-                  >
-                    {activeViewingQuery.managerRemarkTitle ||
-                    activeViewingQuery.managerRemark ? (
-                      <>
-                        <div className="query-view-field-block">
-                          <span className="query-view-sub-label">Title</span>
-                          <div className="query-view-item-title">
-                            {activeViewingQuery.managerRemarkTitle ||
-                              activeViewingQuery.managerRemark}
-                          </div>
-                        </div>
-                        <div className="query-view-field-block query-view-field-block--desc">
-                          <span className="query-view-sub-label">Description</span>
-                          <div className="query-view-item-desc">
-                            {activeViewingQuery.managerRemark || '—'}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      'No manager remark yet.'
-                    )}
-                  </div>
-                </div>
+                {/* Manager Remark (editable by receiving manager & admin) */}
+                {(() => {
+                  const isAssignedManagerOrAdmin =
+                    belongsToManager(activeViewingQuery, currentUser) ||
+                    currentUser.role === 'admin';
 
-                <div className="query-view-section">
-                  <div className="query-view-section-header">
-                    <span className="query-view-section-label">Sender Remark</span>
-                    <span
-                      className={`query-view-check-tag ${
-                        activeViewingQuery.accountManagerDone
-                          ? 'query-view-check-tag--done'
-                          : ''
-                      }`}
-                    >
-                      {activeViewingQuery.accountManagerDone
-                        ? '✓ Sender Done'
-                        : 'Unchecked'}
-                    </span>
-                  </div>
-                  <div
-                    className={`query-view-remark-box ${
-                      !activeViewingQuery.accountManagerRemarkTitle &&
-                      !activeViewingQuery.accountManagerRemark
-                        ? 'query-view-remark-box--empty'
-                        : ''
-                    }`}
-                  >
-                    {activeViewingQuery.accountManagerRemarkTitle ||
-                    activeViewingQuery.accountManagerRemark ? (
-                      <>
-                        <div className="query-view-field-block">
-                          <span className="query-view-sub-label">Title</span>
-                          <div className="query-view-item-title">
-                            {activeViewingQuery.accountManagerRemarkTitle ||
-                              activeViewingQuery.accountManagerRemark}
+                  return (
+                    <div className="query-view-section">
+                      <div className="query-view-section-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <span className="query-view-section-label">Manager Remark</span>
+                          {isAssignedManagerOrAdmin && (
+                            <button
+                              type="button"
+                              className={`btn-query-edit-action ${isEditingModalMgrRemark ? 'btn-query-edit-action--active' : ''}`}
+                              onClick={() => {
+                                if (isEditingModalMgrRemark) {
+                                  handleCancelModalMgrRemark();
+                                } else {
+                                  setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
+                                  setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+                                  setIsEditingModalMgrRemark(true);
+                                }
+                              }}
+                              title={isEditingModalMgrRemark ? 'Cancel editing manager remark' : 'Edit manager remark'}
+                            >
+                              {isEditingModalMgrRemark ? '✕ Cancel' : '✏️ Edit'}
+                            </button>
+                          )}
+                        </div>
+                        <span
+                          className={`query-view-check-tag ${
+                            activeViewingQuery.managerDone
+                              ? 'query-view-check-tag--done'
+                              : ''
+                          }`}
+                        >
+                          {activeViewingQuery.managerDone ? '✓ Mgr Done' : 'Unchecked'}
+                        </span>
+                      </div>
+
+                      {isEditingModalMgrRemark ? (
+                        <div className="query-view-remark-box query-view-remark-box--editing">
+                          <div className="query-view-edit-block">
+                            <label htmlFor="modal-mgr-remark-title-input" className="query-view-sub-label">
+                              Manager Remark Title
+                            </label>
+                            <input
+                              id="modal-mgr-remark-title-input"
+                              type="text"
+                              className="inline-edit-title-input"
+                              value={modalMgrRemarkTitleDraft}
+                              onChange={(e) => setModalMgrRemarkTitleDraft(e.target.value)}
+                              placeholder="Enter manager remark title..."
+                            />
+                            <label
+                              htmlFor="modal-mgr-remark-desc-input"
+                              className="query-view-sub-label"
+                              style={{ marginTop: '0.55rem' }}
+                            >
+                              Manager Remark Description
+                            </label>
+                            <textarea
+                              id="modal-mgr-remark-desc-input"
+                              rows={4}
+                              className="inline-edit-desc-textarea"
+                              value={modalMgrRemarkDraft}
+                              onChange={(e) => setModalMgrRemarkDraft(e.target.value)}
+                              placeholder="Enter solution or resolution details..."
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem', marginTop: '0.65rem' }}>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}
+                                onClick={handleCancelModalMgrRemark}
+                                disabled={isSavingModalMgrRemark}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem' }}
+                                onClick={handleSaveModalMgrRemark}
+                                disabled={isSavingModalMgrRemark}
+                              >
+                                {isSavingModalMgrRemark ? 'Saving...' : '💾 Save Remark'}
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <div className="query-view-field-block query-view-field-block--desc">
-                          <span className="query-view-sub-label">Description</span>
-                          <div className="query-view-item-desc">
-                            {activeViewingQuery.accountManagerRemark || '—'}
+                      ) : (
+                        <div
+                          className={`query-view-remark-box ${
+                            !activeViewingQuery.managerRemarkTitle &&
+                            !activeViewingQuery.managerRemark
+                              ? 'query-view-remark-box--empty'
+                              : ''
+                          } ${
+                            isAssignedManagerOrAdmin ? 'query-view-remark-box--clickable' : ''
+                          }`}
+                          onClick={() => {
+                            if (isAssignedManagerOrAdmin && !isEditingModalMgrRemark) {
+                              setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
+                              setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+                              setIsEditingModalMgrRemark(true);
+                            }
+                          }}
+                          title={isAssignedManagerOrAdmin ? 'Click to edit manager remark' : undefined}
+                        >
+                          {activeViewingQuery.managerRemarkTitle ||
+                          activeViewingQuery.managerRemark ? (
+                            <>
+                              <div className="query-view-field-block">
+                                <span className="query-view-sub-label">Title</span>
+                                <div className="query-view-item-title">
+                                  {activeViewingQuery.managerRemarkTitle ||
+                                    activeViewingQuery.managerRemark}
+                                </div>
+                              </div>
+                              <div className="query-view-field-block query-view-field-block--desc">
+                                <span className="query-view-sub-label">Description</span>
+                                <div className="query-view-item-desc">
+                                  {activeViewingQuery.managerRemark || '—'}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-start' }}>
+                              <span>No manager remark yet.</span>
+                              {isAssignedManagerOrAdmin && (
+                                <button
+                                  type="button"
+                                  className="btn-inline-edit"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setModalMgrRemarkTitleDraft('');
+                                    setModalMgrRemarkDraft('');
+                                    setIsEditingModalMgrRemark(true);
+                                  }}
+                                >
+                                  + Add Manager Remark
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {modalMgrRemarkSaveSuccess && (
+                        <div className="query-view-save-toast" style={{ marginTop: '0.35rem', fontSize: '0.78rem', padding: '0.35rem 0.65rem' }}>
+                          ✅ Manager remark saved successfully!
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Sender Remark (editable by sender & admin) */}
+                {(() => {
+                  const isSenderOrAdmin =
+                    belongsToAccountManager(activeViewingQuery, currentUser) ||
+                    currentUser.role === 'admin';
+
+                  return (
+                    <div className="query-view-section">
+                      <div className="query-view-section-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <span className="query-view-section-label">Sender Remark</span>
+                          {isSenderOrAdmin && (
+                            <button
+                              type="button"
+                              className={`btn-query-edit-action ${isEditingModalSenderRemark ? 'btn-query-edit-action--active' : ''}`}
+                              onClick={() => {
+                                if (isEditingModalSenderRemark) {
+                                  handleCancelModalSenderRemark();
+                                } else {
+                                  setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
+                                  setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
+                                  setIsEditingModalSenderRemark(true);
+                                }
+                              }}
+                              title={isEditingModalSenderRemark ? 'Cancel editing sender remark' : 'Edit sender remark'}
+                            >
+                              {isEditingModalSenderRemark ? '✕ Cancel' : '✏️ Edit'}
+                            </button>
+                          )}
+                        </div>
+                        <span
+                          className={`query-view-check-tag ${
+                            activeViewingQuery.accountManagerDone
+                              ? 'query-view-check-tag--done'
+                              : ''
+                          }`}
+                        >
+                          {activeViewingQuery.accountManagerDone
+                            ? '✓ Sender Done'
+                            : 'Unchecked'}
+                        </span>
+                      </div>
+
+                      {isEditingModalSenderRemark ? (
+                        <div className="query-view-remark-box query-view-remark-box--editing">
+                          <div className="query-view-edit-block">
+                            <label htmlFor="modal-sender-remark-title-input" className="query-view-sub-label">
+                              Sender Remark Title
+                            </label>
+                            <input
+                              id="modal-sender-remark-title-input"
+                              type="text"
+                              className="inline-edit-title-input"
+                              value={modalSenderRemarkTitleDraft}
+                              onChange={(e) => setModalSenderRemarkTitleDraft(e.target.value)}
+                              placeholder="Enter sender remark title..."
+                            />
+                            <label
+                              htmlFor="modal-sender-remark-desc-input"
+                              className="query-view-sub-label"
+                              style={{ marginTop: '0.55rem' }}
+                            >
+                              Sender Remark Description
+                            </label>
+                            <textarea
+                              id="modal-sender-remark-desc-input"
+                              rows={4}
+                              className="inline-edit-desc-textarea"
+                              value={modalSenderRemarkDraft}
+                              onChange={(e) => setModalSenderRemarkDraft(e.target.value)}
+                              placeholder="Enter feedback or verification notes..."
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem', marginTop: '0.65rem' }}>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}
+                                onClick={handleCancelModalSenderRemark}
+                                disabled={isSavingModalSenderRemark}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem' }}
+                                onClick={handleSaveModalSenderRemark}
+                                disabled={isSavingModalSenderRemark}
+                              >
+                                {isSavingModalSenderRemark ? 'Saving...' : '💾 Save Remark'}
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </>
-                    ) : (
-                      'No sender remark yet.'
-                    )}
-                  </div>
-                </div>
+                      ) : (
+                        <div
+                          className={`query-view-remark-box ${
+                            !activeViewingQuery.accountManagerRemarkTitle &&
+                            !activeViewingQuery.accountManagerRemark
+                              ? 'query-view-remark-box--empty'
+                              : ''
+                          } ${
+                            isSenderOrAdmin ? 'query-view-remark-box--clickable' : ''
+                          }`}
+                          onClick={() => {
+                            if (isSenderOrAdmin && !isEditingModalSenderRemark) {
+                              setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
+                              setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
+                              setIsEditingModalSenderRemark(true);
+                            }
+                          }}
+                          title={isSenderOrAdmin ? 'Click to edit sender remark' : undefined}
+                        >
+                          {activeViewingQuery.accountManagerRemarkTitle ||
+                          activeViewingQuery.accountManagerRemark ? (
+                            <>
+                              <div className="query-view-field-block">
+                                <span className="query-view-sub-label">Title</span>
+                                <div className="query-view-item-title">
+                                  {activeViewingQuery.accountManagerRemarkTitle ||
+                                    activeViewingQuery.accountManagerRemark}
+                                </div>
+                              </div>
+                              <div className="query-view-field-block query-view-field-block--desc">
+                                <span className="query-view-sub-label">Description</span>
+                                <div className="query-view-item-desc">
+                                  {activeViewingQuery.accountManagerRemark || '—'}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-start' }}>
+                              <span>No sender remark yet.</span>
+                              {isSenderOrAdmin && (
+                                <button
+                                  type="button"
+                                  className="btn-inline-edit"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setModalSenderRemarkTitleDraft('');
+                                    setModalSenderRemarkDraft('');
+                                    setIsEditingModalSenderRemark(true);
+                                  }}
+                                >
+                                  + Add Sender Remark
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {modalSenderRemarkSaveSuccess && (
+                        <div className="query-view-save-toast" style={{ marginTop: '0.35rem', fontSize: '0.78rem', padding: '0.35rem 0.65rem' }}>
+                          ✅ Sender remark saved successfully!
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Rating Section: strictly visible ONLY to Admin and the Sender (Hidden from Receiving Manager) */}
