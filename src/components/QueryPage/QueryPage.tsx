@@ -305,8 +305,51 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [isEditingModalMgrRemark, setIsEditingModalMgrRemark] = useState<boolean>(false);
   const [modalMgrRemarkTitleDraft, setModalMgrRemarkTitleDraft] = useState<string>('');
   const [modalMgrRemarkDraft, setModalMgrRemarkDraft] = useState<string>('');
+  const [modalMgrAttachmentsDraft, setModalMgrAttachmentsDraft] = useState<QueryAttachment[]>([]);
+  const [isReadingMgrFiles, setIsReadingMgrFiles] = useState<boolean>(false);
   const [isSavingModalMgrRemark, setIsSavingModalMgrRemark] = useState<boolean>(false);
   const [modalMgrRemarkSaveSuccess, setModalMgrRemarkSaveSuccess] = useState<boolean>(false);
+  const mgrFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleMgrFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setIsReadingMgrFiles(true);
+    try {
+      const newAttachments: QueryAttachment[] = [];
+      for (const file of files) {
+        if (file.size > 15 * 1024 * 1024) {
+          alert(`File "${file.name}" exceeds the 15MB limit. Please choose a smaller file.`);
+          continue;
+        }
+        try {
+          const att = await readFileAsAttachment(file);
+          newAttachments.push({
+            ...att,
+            uploadedBy: currentUser.name,
+            uploaderRole: 'manager',
+          });
+        } catch (err) {
+          console.error(`Error reading file ${file.name}:`, err);
+        }
+      }
+
+      if (newAttachments.length > 0) {
+        setModalMgrAttachmentsDraft((prev) => [...prev, ...newAttachments]);
+        setIsEditingModalMgrRemark(true);
+      }
+    } finally {
+      setIsReadingMgrFiles(false);
+      if (mgrFileInputRef.current) {
+        mgrFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveMgrAttachment = (id: string) => {
+    setModalMgrAttachmentsDraft((prev) => prev.filter((a) => a.id !== id));
+  };
 
   const handleSaveModalMgrRemark = async () => {
     if (!activeViewingQuery) return;
@@ -317,6 +360,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       await onUpdateQuery(activeViewingQuery.queryId, {
         managerRemarkTitle: finalTitle,
         managerRemark: finalDesc,
+        managerAttachments: modalMgrAttachmentsDraft,
       });
 
       setViewingQuery((prev) =>
@@ -325,6 +369,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               ...prev,
               managerRemarkTitle: finalTitle,
               managerRemark: finalDesc,
+              managerAttachments: modalMgrAttachmentsDraft,
             }
           : null
       );
@@ -341,6 +386,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     if (!activeViewingQuery) return;
     setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
     setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+    setModalMgrAttachmentsDraft(
+      activeViewingQuery.managerAttachments ? [...activeViewingQuery.managerAttachments] : []
+    );
     setIsEditingModalMgrRemark(false);
   };
 
@@ -468,7 +516,10 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [remarkModalQuery, setRemarkModalQuery] = useState<Query | null>(null);
   const [mandatoryRemarkTitleDraft, setMandatoryRemarkTitleDraft] = useState<string>('');
   const [mandatoryRemarkDraft, setMandatoryRemarkDraft] = useState<string>('');
+  const [mandatoryRemarkAttachmentsDraft, setMandatoryRemarkAttachmentsDraft] = useState<QueryAttachment[]>([]);
+  const [isReadingMandatoryFiles, setIsReadingMandatoryFiles] = useState<boolean>(false);
   const [remarkError, setRemarkError] = useState<string>('');
+  const mandatoryFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Completion Extension Modal states (for Manager requesting extra time)
   const [extensionModalQuery, setExtensionModalQuery] = useState<Query | null>(null);
@@ -633,6 +684,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setIsEditingModalMgrRemark(false);
       setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
       setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+      setModalMgrAttachmentsDraft(
+        activeViewingQuery.managerAttachments ? [...activeViewingQuery.managerAttachments] : []
+      );
       setModalMgrRemarkSaveSuccess(false);
 
       setIsEditingModalSenderRemark(false);
@@ -649,6 +703,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     activeViewingQuery?.accountManagerRemarkTitle,
     activeViewingQuery?.accountManagerRemark,
     activeViewingQuery?.attachments?.length,
+    activeViewingQuery?.managerAttachments?.length,
   ]);
 
   // 1. Role-scoped queries
@@ -894,6 +949,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setRemarkModalQuery(item);
       setMandatoryRemarkTitleDraft('');
       setMandatoryRemarkDraft('');
+      setMandatoryRemarkAttachmentsDraft(item.managerAttachments ? [...item.managerAttachments] : []);
       setRemarkError('');
       return;
     }
@@ -919,11 +975,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     await onUpdateQuery(remarkModalQuery.queryId, {
       managerRemarkTitle: trimmedTitle || trimmedDesc,
       managerRemark: trimmedDesc,
+      managerAttachments: mandatoryRemarkAttachmentsDraft,
       managerDone: true,
     });
     setRemarkModalQuery(null);
     setMandatoryRemarkTitleDraft('');
     setMandatoryRemarkDraft('');
+    setMandatoryRemarkAttachmentsDraft([]);
     setRemarkError('');
   };
 
@@ -1992,6 +2050,92 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 )}
               </div>
 
+              <div className="cp-form-group">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                  <label htmlFor="mandatory-remark-file-btn" style={{ margin: 0 }}>
+                    Resolution Document(s) (Optional)
+                  </label>
+                  <input
+                    ref={mandatoryFileInputRef}
+                    id="mandatory-remark-file-btn"
+                    type="file"
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length === 0) return;
+                      setIsReadingMandatoryFiles(true);
+                      try {
+                        const newAtts: QueryAttachment[] = [];
+                        for (const file of files) {
+                          if (file.size > 15 * 1024 * 1024) {
+                            alert(`File "${file.name}" exceeds 15MB limit.`);
+                            continue;
+                          }
+                          try {
+                            const att = await readFileAsAttachment(file);
+                            newAtts.push({
+                              ...att,
+                              uploadedBy: currentUser.name,
+                              uploaderRole: 'manager',
+                            });
+                          } catch (err) {
+                            console.error(`Error reading file ${file.name}:`, err);
+                          }
+                        }
+                        if (newAtts.length > 0) {
+                          setMandatoryRemarkAttachmentsDraft((prev) => [...prev, ...newAtts]);
+                        }
+                      } finally {
+                        setIsReadingMandatoryFiles(false);
+                        if (mandatoryFileInputRef.current) mandatoryFileInputRef.current.value = '';
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-inline-edit"
+                    onClick={() => mandatoryFileInputRef.current?.click()}
+                    disabled={isReadingMandatoryFiles}
+                  >
+                    {isReadingMandatoryFiles ? 'Reading...' : '📎 Attach Document'}
+                  </button>
+                </div>
+
+                {mandatoryRemarkAttachmentsDraft.length > 0 && (
+                  <div className="attached-files-list">
+                    {mandatoryRemarkAttachmentsDraft.map((att) => (
+                      <div key={att.id} className="attached-file-pill">
+                        <span className="attached-file-icon">
+                          {getFileIcon(att.name, att.type)}
+                        </span>
+                        <div className="attached-file-info">
+                          <span className="attached-file-name" title={att.name}>
+                            {att.name}
+                          </span>
+                          <span className="attached-file-size">
+                            {formatFileSize(att.size)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="attached-file-remove-btn"
+                          onClick={() => {
+                            setMandatoryRemarkAttachmentsDraft((prev) =>
+                              prev.filter((a) => a.id !== att.id)
+                            );
+                          }}
+                          aria-label={`Remove attachment ${att.name}`}
+                          title="Remove file"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="modal-actions">
                 <button
                   type="button"
@@ -2630,22 +2774,44 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
                           <span className="query-view-section-label">Manager Remark</span>
                           {isAssignedManagerOrAdmin && (
-                            <button
-                              type="button"
-                              className={`btn-query-edit-action ${isEditingModalMgrRemark ? 'btn-query-edit-action--active' : ''}`}
-                              onClick={() => {
-                                if (isEditingModalMgrRemark) {
-                                  handleCancelModalMgrRemark();
-                                } else {
-                                  setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
-                                  setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
-                                  setIsEditingModalMgrRemark(true);
-                                }
-                              }}
-                              title={isEditingModalMgrRemark ? 'Cancel editing manager remark' : 'Edit manager remark'}
-                            >
-                              {isEditingModalMgrRemark ? '✕ Cancel' : '✏️ Edit'}
-                            </button>
+                            <>
+                              <input
+                                ref={mgrFileInputRef}
+                                id="modal-mgr-attachments-file-input"
+                                type="file"
+                                multiple
+                                style={{ display: 'none' }}
+                                onChange={handleMgrFilesSelected}
+                              />
+                              <button
+                                type="button"
+                                className={`btn-query-edit-action ${isEditingModalMgrRemark ? 'btn-query-edit-action--active' : ''}`}
+                                onClick={() => {
+                                  if (isEditingModalMgrRemark) {
+                                    handleCancelModalMgrRemark();
+                                  } else {
+                                    setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
+                                    setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+                                    setModalMgrAttachmentsDraft(
+                                      activeViewingQuery.managerAttachments ? [...activeViewingQuery.managerAttachments] : []
+                                    );
+                                    setIsEditingModalMgrRemark(true);
+                                  }
+                                }}
+                                title={isEditingModalMgrRemark ? 'Cancel editing manager remark' : 'Edit manager remark'}
+                              >
+                                {isEditingModalMgrRemark ? '✕ Cancel' : '✏️ Edit'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-query-edit-action"
+                                onClick={() => mgrFileInputRef.current?.click()}
+                                title="Attach resolution documents from device"
+                                disabled={isReadingMgrFiles}
+                              >
+                                {isReadingMgrFiles ? 'Reading files...' : '📎 Add Attachment'}
+                              </button>
+                            </>
                           )}
                         </div>
                         <span
@@ -2688,7 +2854,75 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               onChange={(e) => setModalMgrRemarkDraft(e.target.value)}
                               placeholder="Enter solution or resolution details..."
                             />
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem', marginTop: '0.65rem' }}>
+
+                            {/* Manager Attachments Section in Edit Mode */}
+                            <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(193, 128, 54, 0.2)', paddingTop: '0.65rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                <span className="query-view-sub-label" style={{ margin: 0, fontWeight: 700 }}>
+                                  📎 Manager Attachments ({modalMgrAttachmentsDraft.length})
+                                </span>
+                                <button
+                                  type="button"
+                                  className="btn-inline-edit"
+                                  onClick={() => mgrFileInputRef.current?.click()}
+                                  disabled={isReadingMgrFiles}
+                                  style={{ fontSize: '0.76rem', padding: '0.2rem 0.55rem' }}
+                                >
+                                  {isReadingMgrFiles ? 'Reading...' : '+ Attach Documents from Device'}
+                                </button>
+                              </div>
+
+                              {modalMgrAttachmentsDraft.length > 0 ? (
+                                <div className="query-view-attachments-grid" style={{ marginTop: '0.4rem' }}>
+                                  {modalMgrAttachmentsDraft.map((att) => (
+                                    <div key={att.id} className="query-attachment-card">
+                                      <div className="query-attachment-card-main">
+                                        <span className="query-attachment-card-icon">
+                                          {getFileIcon(att.name, att.type)}
+                                        </span>
+                                        <div className="query-attachment-card-details">
+                                          <div className="query-attachment-card-name" title={att.name}>
+                                            {att.name}
+                                          </div>
+                                          <div className="query-attachment-card-meta">
+                                            <span className="query-attachment-card-size">
+                                              {formatFileSize(att.size)}
+                                            </span>
+                                            <span className="query-attachment-card-date">
+                                              &bull; Resolution Doc
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="query-attachment-card-actions">
+                                        <button
+                                          type="button"
+                                          className="btn-attachment-action btn-attachment-action--view"
+                                          onClick={() => openAttachment(att)}
+                                          title="Open or preview document in a new tab"
+                                        >
+                                          👁️ Open
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn-attachment-action btn-attachment-action--remove"
+                                          onClick={() => handleRemoveMgrAttachment(att.id)}
+                                          title="Remove this document"
+                                        >
+                                          ✕ Remove
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: '0.8rem', color: '#8c7d6b', fontStyle: 'italic', padding: '0.25rem 0' }}>
+                                  No resolution documents attached yet. Click &quot;+ Attach Documents from Device&quot; to add invoices, proof, or reports.
+                                </div>
+                              )}
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.45rem', marginTop: '0.85rem' }}>
                               <button
                                 type="button"
                                 className="btn-secondary"
@@ -2703,9 +2937,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                 className="btn-primary"
                                 style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem' }}
                                 onClick={handleSaveModalMgrRemark}
-                                disabled={isSavingModalMgrRemark}
+                                disabled={isSavingModalMgrRemark || isReadingMgrFiles}
                               >
-                                {isSavingModalMgrRemark ? 'Saving...' : '💾 Save Remark'}
+                                {isSavingModalMgrRemark ? 'Saving...' : '💾 Save Remark & Attachments'}
                               </button>
                             </div>
                           </div>
@@ -2714,54 +2948,135 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <div
                           className={`query-view-remark-box ${
                             !activeViewingQuery.managerRemarkTitle &&
-                            !activeViewingQuery.managerRemark
+                            !activeViewingQuery.managerRemark &&
+                            (!activeViewingQuery.managerAttachments || activeViewingQuery.managerAttachments.length === 0)
                               ? 'query-view-remark-box--empty'
                               : ''
-                          } ${
-                            isAssignedManagerOrAdmin ? 'query-view-remark-box--clickable' : ''
                           }`}
-                          onClick={() => {
-                            if (isAssignedManagerOrAdmin && !isEditingModalMgrRemark) {
-                              setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
-                              setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
-                              setIsEditingModalMgrRemark(true);
-                            }
-                          }}
-                          title={isAssignedManagerOrAdmin ? 'Click to edit manager remark' : undefined}
                         >
                           {activeViewingQuery.managerRemarkTitle ||
-                          activeViewingQuery.managerRemark ? (
+                          activeViewingQuery.managerRemark ||
+                          (activeViewingQuery.managerAttachments && activeViewingQuery.managerAttachments.length > 0) ? (
                             <>
-                              <div className="query-view-field-block">
-                                <span className="query-view-sub-label">Title</span>
-                                <div className="query-view-item-title">
-                                  {activeViewingQuery.managerRemarkTitle ||
-                                    activeViewingQuery.managerRemark}
+                              {(activeViewingQuery.managerRemarkTitle || activeViewingQuery.managerRemark) && (
+                                <>
+                                  <div className="query-view-field-block">
+                                    <span className="query-view-sub-label">Title</span>
+                                    <div className="query-view-item-title">
+                                      {activeViewingQuery.managerRemarkTitle ||
+                                        activeViewingQuery.managerRemark}
+                                    </div>
+                                  </div>
+                                  <div className="query-view-field-block query-view-field-block--desc">
+                                    <span className="query-view-sub-label">Description</span>
+                                    <div className="query-view-item-desc">
+                                      {activeViewingQuery.managerRemark || '—'}
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+
+                              {/* Display Manager Attached Documents */}
+                              {activeViewingQuery.managerAttachments && activeViewingQuery.managerAttachments.length > 0 && (
+                                <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(193, 128, 54, 0.18)', paddingTop: '0.65rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                    <span className="query-view-sub-label" style={{ margin: 0, fontWeight: 700, color: 'var(--c-russet, #844918)' }}>
+                                      📎 Manager Attachments ({activeViewingQuery.managerAttachments.length})
+                                    </span>
+                                    {isAssignedManagerOrAdmin && (
+                                      <button
+                                        type="button"
+                                        className="btn-inline-edit"
+                                        onClick={() => {
+                                          setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
+                                          setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+                                          setModalMgrAttachmentsDraft(
+                                            activeViewingQuery.managerAttachments ? [...activeViewingQuery.managerAttachments] : []
+                                          );
+                                          setIsEditingModalMgrRemark(true);
+                                        }}
+                                        style={{ fontSize: '0.74rem', padding: '0.15rem 0.5rem' }}
+                                      >
+                                        ✏️ Manage Attachments
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="query-view-attachments-grid" style={{ marginTop: '0.35rem' }}>
+                                    {activeViewingQuery.managerAttachments.map((att) => (
+                                      <div key={att.id} className="query-attachment-card">
+                                        <div className="query-attachment-card-main">
+                                          <span className="query-attachment-card-icon">
+                                            {getFileIcon(att.name, att.type)}
+                                          </span>
+                                          <div className="query-attachment-card-details">
+                                            <div className="query-attachment-card-name" title={att.name}>
+                                              {att.name}
+                                            </div>
+                                            <div className="query-attachment-card-meta">
+                                              <span className="query-attachment-card-size">
+                                                {formatFileSize(att.size)}
+                                              </span>
+                                              {att.uploadedAt && (
+                                                <span className="query-attachment-card-date">
+                                                  &bull; {new Date(att.uploadedAt).toLocaleDateString()}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="query-attachment-card-actions">
+                                          <button
+                                            type="button"
+                                            className="btn-attachment-action btn-attachment-action--view"
+                                            onClick={() => openAttachment(att)}
+                                            title="Open or preview document in a new tab"
+                                          >
+                                            👁️ Open
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btn-attachment-action btn-attachment-action--download"
+                                            onClick={() => downloadAttachment(att)}
+                                            title="Download document to device"
+                                          >
+                                            ⬇️ Download
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="query-view-field-block query-view-field-block--desc">
-                                <span className="query-view-sub-label">Description</span>
-                                <div className="query-view-item-desc">
-                                  {activeViewingQuery.managerRemark || '—'}
-                                </div>
-                              </div>
+                              )}
                             </>
                           ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-start' }}>
-                              <span>No manager remark yet.</span>
+                              <span>No manager remark or resolution documents yet.</span>
                               {isAssignedManagerOrAdmin && (
-                                <button
-                                  type="button"
-                                  className="btn-inline-edit"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setModalMgrRemarkTitleDraft('');
-                                    setModalMgrRemarkDraft('');
-                                    setIsEditingModalMgrRemark(true);
-                                  }}
-                                >
-                                  + Add Manager Remark
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-inline-edit"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setModalMgrRemarkTitleDraft('');
+                                      setModalMgrRemarkDraft('');
+                                      setModalMgrAttachmentsDraft([]);
+                                      setIsEditingModalMgrRemark(true);
+                                    }}
+                                  >
+                                    + Add Manager Remark
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-inline-edit"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      mgrFileInputRef.current?.click();
+                                    }}
+                                  >
+                                    📎 Attach Document from Device
+                                  </button>
+                                </div>
                               )}
                             </div>
                           )}

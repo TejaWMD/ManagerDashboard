@@ -59,6 +59,7 @@ interface LocalCompletionMeta {
   isUrgent?: boolean;
   lastUrgentReminderAtMs?: number | null;
   attachments?: QueryAttachment[];
+  managerAttachments?: QueryAttachment[];
 }
 
 function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
@@ -128,6 +129,7 @@ export interface QueryRow {
   is_urgent?: boolean | null;
   last_urgent_reminder_at_ms?: number | null;
   attachments?: string | null;
+  manager_attachments?: string | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -307,12 +309,15 @@ export function mapRowToQuery(row: QueryRow): Query {
   const { cleanText: strippedQueryText, attachments: unpackedAttachments } =
     unpackAttachments(row.query_text);
 
+  const { cleanText: strippedMgrRemark, attachments: unpackedMgrAttachments } =
+    unpackAttachments(row.manager_remark);
+
   const unpackedQuery = unpackTitleAndDescription(
     strippedQueryText,
     row.query_title
   );
   const unpackedMgrRemark = unpackTitleAndDescription(
-    row.manager_remark,
+    strippedMgrRemark,
     row.manager_remark_title
   );
   const unpackedAmRemark = unpackTitleAndDescription(
@@ -338,6 +343,26 @@ export function mapRowToQuery(row: QueryRow): Query {
     localMeta.attachments.length > 0
   ) {
     resolvedAttachments = localMeta.attachments;
+  }
+
+  let resolvedManagerAttachments: QueryAttachment[] = [];
+  if (row.manager_attachments) {
+    try {
+      const parsed = JSON.parse(row.manager_attachments);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        resolvedManagerAttachments = parsed;
+      }
+    } catch {}
+  }
+  if (resolvedManagerAttachments.length === 0 && unpackedMgrAttachments.length > 0) {
+    resolvedManagerAttachments = unpackedMgrAttachments;
+  }
+  if (
+    resolvedManagerAttachments.length === 0 &&
+    localMeta?.managerAttachments &&
+    localMeta.managerAttachments.length > 0
+  ) {
+    resolvedManagerAttachments = localMeta.managerAttachments;
   }
 
   return {
@@ -389,6 +414,7 @@ export function mapRowToQuery(row: QueryRow): Query {
         ? Number(row.last_urgent_reminder_at_ms)
         : localMeta?.lastUrgentReminderAtMs ?? null,
     attachments: resolvedAttachments,
+    managerAttachments: resolvedManagerAttachments,
   };
 }
 
@@ -409,10 +435,11 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
     query_text:
       packTitleAndDescription(query.queryTitle, query.queryText) +
       packAttachments(query.attachments),
-    manager_remark: packTitleAndDescription(
-      query.managerRemarkTitle,
-      query.managerRemark
-    ),
+    manager_remark:
+      packTitleAndDescription(
+        query.managerRemarkTitle,
+        query.managerRemark
+      ) + packAttachments(query.managerAttachments),
     manager_done: managerDone,
     account_manager_remark: packTitleAndDescription(
       query.accountManagerRemarkTitle,
@@ -558,7 +585,8 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('linked_appointment_id') ||
     message.includes('is_urgent') ||
     message.includes('last_urgent_reminder_at_ms') ||
-    message.includes('attachments')
+    message.includes('attachments') ||
+    message.includes('manager_attachments')
   );
 }
 
@@ -598,11 +626,16 @@ export async function insertQueryInDb(query: Query): Promise<{
       query.attachments && query.attachments.length > 0
         ? JSON.stringify(query.attachments)
         : null,
+    manager_attachments:
+      query.managerAttachments && query.managerAttachments.length > 0
+        ? JSON.stringify(query.managerAttachments)
+        : null,
   };
   if (
     query.linkedAppointmentId ||
     query.isUrgent ||
-    (query.attachments && query.attachments.length > 0)
+    (query.attachments && query.attachments.length > 0) ||
+    (query.managerAttachments && query.managerAttachments.length > 0)
   ) {
     saveLocalCompletionMeta(query.queryId, {
       completedAt: query.completedAt ?? null,
@@ -611,6 +644,7 @@ export async function insertQueryInDb(query: Query): Promise<{
       linkedAppointmentId: query.linkedAppointmentId,
       isUrgent: Boolean(query.isUrgent),
       attachments: query.attachments || [],
+      managerAttachments: query.managerAttachments || [],
     });
   }
 
@@ -708,6 +742,7 @@ export async function updateQueryInDb(
     isUrgent?: boolean;
     lastUrgentReminderAtMs?: number | null;
     attachments?: QueryAttachment[] | null;
+    managerAttachments?: QueryAttachment[] | null;
   }
 ): Promise<{
   data: Query | null;
@@ -727,11 +762,16 @@ export async function updateQueryInDb(
       packTitleAndDescription(updates.queryTitle, updates.queryText) +
       packAttachments(updates.attachments);
   }
-  if (updates.managerRemarkTitle !== undefined || updates.managerRemark !== undefined) {
-    baseUpdates.manager_remark = packTitleAndDescription(
-      updates.managerRemarkTitle,
-      updates.managerRemark
-    );
+  if (
+    updates.managerRemarkTitle !== undefined ||
+    updates.managerRemark !== undefined ||
+    updates.managerAttachments !== undefined
+  ) {
+    baseUpdates.manager_remark =
+      packTitleAndDescription(
+        updates.managerRemarkTitle,
+        updates.managerRemark
+      ) + packAttachments(updates.managerAttachments);
   }
   if (updates.managerDone !== undefined) {
     baseUpdates.manager_done = updates.managerDone;
@@ -812,6 +852,12 @@ export async function updateQueryInDb(
         ? JSON.stringify(updates.attachments)
         : null;
   }
+  if (updates.managerAttachments !== undefined) {
+    extendedUpdates.manager_attachments =
+      updates.managerAttachments && updates.managerAttachments.length > 0
+        ? JSON.stringify(updates.managerAttachments)
+        : null;
+  }
 
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
@@ -847,7 +893,8 @@ export async function updateQueryInDb(
     updates.linkedAppointmentId !== undefined ||
     updates.isUrgent !== undefined ||
     updates.lastUrgentReminderAtMs !== undefined ||
-    updates.attachments !== undefined
+    updates.attachments !== undefined ||
+    updates.managerAttachments !== undefined
   ) {
     saveLocalCompletionMeta(queryId, {
       ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
@@ -873,6 +920,9 @@ export async function updateQueryInDb(
         : {}),
       ...(updates.attachments !== undefined
         ? { attachments: updates.attachments || [] }
+        : {}),
+      ...(updates.managerAttachments !== undefined
+        ? { managerAttachments: updates.managerAttachments || [] }
         : {}),
     });
   }

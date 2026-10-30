@@ -911,6 +911,7 @@ export const App: React.FC = () => {
         | 'lastUrgentReminderAtMs'
         | 'linkedAppointmentId'
         | 'attachments'
+        | 'managerAttachments'
       >
     >
   ) => {
@@ -1014,6 +1015,12 @@ export const App: React.FC = () => {
 
     const { data, error } = await updateQueryInDb(queryId, {
       ...updates,
+      queryTitle: updates.queryTitle !== undefined ? updates.queryTitle : existing.queryTitle,
+      queryText: updates.queryText !== undefined ? updates.queryText : existing.queryText,
+      attachments: updates.attachments !== undefined ? updates.attachments : existing.attachments,
+      managerRemarkTitle: updates.managerRemarkTitle !== undefined ? updates.managerRemarkTitle : existing.managerRemarkTitle,
+      managerRemark: updates.managerRemark !== undefined ? updates.managerRemark : existing.managerRemark,
+      managerAttachments: updates.managerAttachments !== undefined ? updates.managerAttachments : existing.managerAttachments,
       managerDone: nextManagerDone,
       managerDoneAt: nextManagerDoneAt,
       managerDoneAtMs: nextManagerDoneAtMs,

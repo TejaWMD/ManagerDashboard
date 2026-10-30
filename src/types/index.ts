@@ -76,6 +76,8 @@ export interface QueryAttachment {
   type: string; // MIME type, e.g. 'application/pdf', 'image/png'
   url: string; // Data URL (Base64) or remote URL
   uploadedAt?: string;
+  uploadedBy?: string; // Name of user who attached the file
+  uploaderRole?: 'sender' | 'manager'; // Sender or Receiving Manager
 }
 
 export interface Query {
@@ -118,7 +120,8 @@ export interface Query {
   linkedAppointmentId?: string | null; // e.g. 'APT-001' if query was raised following an appointment
   isUrgent?: boolean; // Flag indicating query is urgent (immediate response required, no 48h delay threshold)
   lastUrgentReminderAtMs?: number | null; // Epoch ms of the latest 24h reminder notification sent to receiver
-  attachments?: QueryAttachment[]; // Attached documents from user's device
+  attachments?: QueryAttachment[]; // Attached documents from user's device (sender)
+  managerAttachments?: QueryAttachment[]; // Attached documents from receiving manager / solution
 }
 
 export type MeetingType = 'Online Call' | 'Office/Desk' | 'Phone';
