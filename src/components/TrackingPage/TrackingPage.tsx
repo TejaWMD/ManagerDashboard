@@ -279,7 +279,7 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
               className={`track-hero-action-btn ${isRefreshing ? 'track-hero-action-btn--spinning' : ''}`}
               onClick={onRefresh}
               disabled={isRefreshing}
-              title="Refresh tracking data"
+              title="Sync tracking data & check for updates"
             >
               <svg
                 className="track-action-icon"
@@ -294,7 +294,7 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
                 <polyline points="1 20 1 14 7 14" />
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
               </svg>
-              <span>{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
+              <span>{isRefreshing ? 'Syncing...' : 'Sync & Refresh'}</span>
             </button>
           )}
 

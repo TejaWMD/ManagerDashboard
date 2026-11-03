@@ -9,6 +9,12 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // Handle incoming Web Push event from server / FCM / Supabase
 self.addEventListener('push', (event) => {
   let payload = {

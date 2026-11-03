@@ -209,12 +209,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             disabled={isRefreshing}
             title={
               isRefreshing
-                ? 'Syncing portal data...'
+                ? 'Checking for updates & syncing data...'
                 : lastRefreshedAt
-                ? `Refresh data (Last updated ${lastRefreshedAt})`
-                : 'Refresh portal data'
+                ? `Sync & Refresh (Last synced: ${lastRefreshedAt})`
+                : 'Sync data & check for updates'
             }
-            aria-label="Refresh portal data"
+            aria-label="Sync data & check for updates"
           >
             <svg
               className={`sidebar-nav-icon sidebar-refresh-icon ${
@@ -233,7 +233,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </svg>
             {!isCollapsed && (
               <span className="sidebar-link-text">
-                {isRefreshing ? 'Syncing...' : 'Refresh'}
+                {isRefreshing ? 'Syncing...' : 'Sync & Refresh'}
               </span>
             )}
           </button>

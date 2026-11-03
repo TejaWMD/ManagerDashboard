@@ -63,8 +63,13 @@ import {
 import {
   formatTimestamp as formatTimestampUtil,
   formatDateTime,
+  formatDate,
   parseDateToMs,
 } from './lib/dateUtils';
+import {
+  checkForAppUpdate,
+  applyAppUpdate,
+} from './lib/versionManager';
 import {
   dispatchQueryPushNotification,
   dispatchAppointmentPushNotification,
@@ -188,7 +193,12 @@ export const App: React.FC = () => {
     return () => window.clearInterval(delayTimer);
   }, [queries.length]);
 
-  const loadQueries = useCallback(async () => {
+  const [syncToast, setSyncToast] = useState<{
+    message: string;
+    type: 'info' | 'updating' | 'success';
+  } | null>(null);
+
+  const loadQueries = useCallback(async (): Promise<Query[]> => {
     setIsLoadingDb(true);
     try {
       localStorage.removeItem(OLD_DUMMY_STORAGE_KEY);
@@ -213,71 +223,137 @@ export const App: React.FC = () => {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed)) {
             setQueries(parsed as Query[]);
+            setIsLoadingDb(false);
+            return parsed as Query[];
           }
         }
       } catch {
         // Ignore
       }
+      setIsLoadingDb(false);
+      return [];
     } else {
       setDbTableMissing(false);
       setDbError(null);
       setQueries(result.data);
       persistQueriesCache(result.data);
+      setIsLoadingDb(false);
+      return result.data;
     }
-    setIsLoadingDb(false);
   }, []);
 
-  const loadAppointments = useCallback(async () => {
+  const loadAppointments = useCallback(async (): Promise<Appointment[]> => {
     try {
       const res = await fetchAppointmentsFromDb();
       if (res.data) {
         setAppointments(res.data);
+        return res.data;
       }
     } catch {
       // Graceful fallback to cached
     }
+    return appointmentsRef.current;
   }, []);
 
-  const loadActivities = useCallback(async () => {
-    try {
-      const acts = await fetchRecentActivitiesFromDb(
-        queriesRef.current,
-        appointmentsRef.current
-      );
-      setActivities(acts);
-    } catch {
-      // Graceful fallback
-    }
-  }, []);
+  const loadActivities = useCallback(
+    async (
+      overrideQueries?: Query[],
+      overrideAppointments?: Appointment[]
+    ): Promise<UserActivity[]> => {
+      try {
+        const targetQueries = overrideQueries || queriesRef.current;
+        const targetAppointments =
+          overrideAppointments || appointmentsRef.current;
+        const acts = await fetchRecentActivitiesFromDb(
+          targetQueries,
+          targetAppointments
+        );
+        setActivities(acts);
+        return acts;
+      } catch {
+        return [];
+      }
+    },
+    []
+  );
 
-  const loadPresences = useCallback(async () => {
+  const loadPresences = useCallback(async (): Promise<Record<string, UserPresence>> => {
     try {
       const p = await fetchUserPresencesFromDb();
       setPresences(p);
+      return p;
     } catch {
-      // Graceful fallback
+      return {};
     }
   }, []);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
+    setSyncToast({
+      message: 'Checking for deployment updates & syncing...',
+      type: 'info',
+    });
+
     try {
-      await Promise.all([
-        loadQueries(),
-        loadAppointments(),
-        loadActivities(),
-        loadPresences(),
-        fetchUsersFromDb().then((users) => {
-          if (users && users.length > 0) {
-            setAllUsers(users);
-          }
-        }),
-      ]);
+      // 1. Check if a newer version has been deployed to the server
+      const updateCheck = await checkForAppUpdate();
+      if (updateCheck.hasUpdate) {
+        setSyncToast({
+          message: 'Reloading',
+          type: 'updating',
+        });
+        // Brief pause so the user sees the confirmation message before reload
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        await applyAppUpdate();
+        return;
+      }
+
+      // 2. Fetch fresh data from Supabase in parallel
+      const [freshQueries, freshAppointments, freshPresences, freshUsers] =
+        await Promise.all([
+          loadQueries(),
+          loadAppointments(),
+          loadPresences(),
+          fetchUsersFromDb().catch(() => null),
+        ]);
+
+      if (freshUsers && freshUsers.length > 0) {
+        setAllUsers(freshUsers);
+      }
+
+      // 3. Sync activities with fresh queries and appointments
+      await loadActivities(freshQueries, freshAppointments);
+
+      // 4. Run SLA delay checks & urgent notifications on fresh data
+      if (freshQueries && freshQueries.length > 0) {
+        await checkAndNotifyDelayedQueries(freshQueries);
+        await checkAndNotifyUrgentReminders(freshQueries);
+      }
+
+      // 5. Update timestamp with DD-MM-YYYY format
       const now = new Date();
       const hh = String(now.getHours()).padStart(2, '0');
       const mm = String(now.getMinutes()).padStart(2, '0');
       const ss = String(now.getSeconds()).padStart(2, '0');
-      setLastRefreshedAt(`${hh}:${mm}:${ss}`);
+      const dateStr = formatDate(now);
+      setLastRefreshedAt(`${dateStr} ${hh}:${mm}:${ss}`);
+
+      setSyncToast({
+        message: '✓ All portal data is up to date and in sync',
+        type: 'success',
+      });
+      setTimeout(() => {
+        setSyncToast(null);
+      }, 2500);
+    } catch (err: unknown) {
+      console.warn('[Refresh] Sync warning:', err);
+      setSyncToast({
+        message: '✓ Synced with local cache',
+        type: 'success',
+      });
+      setTimeout(() => {
+        setSyncToast(null);
+      }, 2500);
     } finally {
       setTimeout(() => {
         setIsRefreshing(false);
@@ -1898,6 +1974,23 @@ export const App: React.FC = () => {
         onClose={() => setIsNotifModalOpen(false)}
         currentUser={currentUser}
       />
+
+      {syncToast && (
+        <aside
+          className={`portal-sync-toast portal-sync-toast--${syncToast.type}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="sync-toast-icon">
+            {syncToast.type === 'updating'
+              ? '🚀'
+              : syncToast.type === 'success'
+              ? '✓'
+              : '🔄'}
+          </span>
+          <span className="sync-toast-message">{syncToast.message}</span>
+        </aside>
+      )}
     </div>
   );
 };
