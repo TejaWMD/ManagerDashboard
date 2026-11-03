@@ -29,33 +29,35 @@ export function evaluateQueryKpi(
 ): EvaluatedQueryDetail {
   const createdMs = getQueryTimestampMs(query);
   const deadlineMs = getQueryDeadlineMs(query);
-  const managerDone = Boolean(query.managerDone);
+  // A query is only considered completed when the sender (Account Manager) checks the done box
+  const senderDone = Boolean(query.accountManagerDone);
 
-  if (managerDone) {
-    // Determine when manager finished their work (Anti-cheat timestamp)
-    let managerDoneMs = query.managerDoneAtMs;
-    if (!managerDoneMs && query.completedAtMs) {
-      managerDoneMs = query.completedAtMs;
+  if (senderDone) {
+    // Determine when query was finalized by sender (with managerDoneAtMs fallback)
+    let completionMs = query.completedAtMs;
+    if (!completionMs && query.managerDoneAtMs) {
+      completionMs = query.managerDoneAtMs;
     }
-    if (!managerDoneMs) {
-      managerDoneMs = query.isDelayed
+    if (!completionMs) {
+      completionMs = query.isDelayed
         ? deadlineMs + 1
         : createdMs;
     }
 
+    const managerDoneMs = query.managerDoneAtMs || completionMs;
     const turnaroundMs = Math.max(0, managerDoneMs - createdMs);
     const turnaroundHours = Math.round((turnaroundMs / (1000 * 60 * 60)) * 10) / 10;
     // Urgent queries have no delay threshold; once completed they count normally as On-Time (+1.0 pt)
-    const isOnTime = query.isUrgent ? true : managerDoneMs <= deadlineMs && !query.isDelayed;
+    const isOnTime = query.isUrgent ? true : completionMs <= deadlineMs && !query.isDelayed;
 
     // Sender verification latency: completedAtMs - managerDoneAtMs
     let senderVerificationHours: number | null = null;
     if (
-      query.accountManagerDone &&
+      query.managerDoneAtMs &&
       query.completedAtMs &&
-      query.completedAtMs >= managerDoneMs
+      query.completedAtMs >= query.managerDoneAtMs
     ) {
-      const verifyMs = query.completedAtMs - managerDoneMs;
+      const verifyMs = query.completedAtMs - query.managerDoneAtMs;
       senderVerificationHours = Math.round((verifyMs / (1000 * 60 * 60)) * 10) / 10;
     }
 
@@ -69,7 +71,7 @@ export function evaluateQueryKpi(
     };
   }
 
-  // Manager is NOT done yet. Urgent queries have no delay threshold and are never classified as delayed/overdue.
+  // Sender has NOT completed yet. Urgent queries have no delay threshold and are never classified as delayed/overdue.
   const isPastDeadline = !query.isUrgent && (nowMs > deadlineMs || query.isDelayed === true);
 
   if (isPastDeadline) {
@@ -114,9 +116,9 @@ export function filterQueriesByWindow(
     // Included if created within rolling window
     if (createdMs >= windowThresholdMs) return true;
 
-    // Anti-cheat: If manager has NOT finished and it is overdue, keep it in the window!
+    // Anti-cheat: If sender has NOT finalized and it is overdue, keep it in the window!
     const isUnresolvedOverdue =
-      !c.managerDone && nowMs - createdMs > DELAY_THRESHOLD_MS;
+      !c.accountManagerDone && nowMs - createdMs > DELAY_THRESHOLD_MS;
     return isUnresolvedOverdue;
   });
 }

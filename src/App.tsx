@@ -1234,6 +1234,17 @@ export const App: React.FC = () => {
           targetId: queryId,
           targetType: 'query',
         });
+      } else if (updates.rating === null && existing.rating) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_UPDATED',
+          actionTitle: `${currentUser.name} cleared rating for Query ${queryId}`,
+          targetId: queryId,
+          targetType: 'query',
+        });
       } else if (
         updates.managerRemark &&
         updates.managerRemark !== existing.managerRemark

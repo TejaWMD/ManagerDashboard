@@ -265,23 +265,19 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                     />
                   </div>
 
-                  {/* 4 Compact Stat Capsules Spanning Full Width */}
+                  {/* 3 Clear Stat Capsules: On-Time, Late, and Overdue */}
                   <div className="mgr-stats-capsules">
-                    <div className="stat-capsule stat-capsule--ontime" title="Queries completed within 48h (+1.0 pt)">
+                    <div className="stat-capsule stat-capsule--ontime" title="Queries completed within target deadline (+1.0 pt)">
                       <span className="capsule-num">⚡ {stat.onTimeCount}</span>
                       <span className="capsule-lbl">On-Time</span>
                     </div>
-                    <div className="stat-capsule stat-capsule--late" title="Queries completed after 48h (+0.5 pt)">
+                    <div className="stat-capsule stat-capsule--late" title="Queries completed after target deadline (+0.5 pt)">
                       <span className="capsule-num">⏱️ {stat.lateCount}</span>
                       <span className="capsule-lbl">Late</span>
                     </div>
-                    <div className="stat-capsule stat-capsule--overdue" title="Queries open past 48h (0.0 pt penalty)">
+                    <div className="stat-capsule stat-capsule--overdue" title="Queries pending past target deadline (0.0 pt penalty)">
                       <span className="capsule-num">⚠️ {stat.overdueCount}</span>
                       <span className="capsule-lbl">Overdue</span>
-                    </div>
-                    <div className="stat-capsule stat-capsule--delayed" title="All delayed queries (late + overdue)">
-                      <span className="capsule-num">🚨 {stat.delayedCount}</span>
-                      <span className="capsule-lbl">Delayed</span>
                     </div>
                   </div>
                 </div>
@@ -297,7 +293,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                     </span>
                   </div>
                   <span className="mgr-footer-counts">
-                    {stat.completedCount} completed · {stat.delayedCount} delayed · {stat.totalAssigned} received
+                    {stat.completedCount} completed · {stat.overdueCount} overdue · {stat.totalAssigned} received
                   </span>
                 </div>
               </div>
