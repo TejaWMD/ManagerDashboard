@@ -1,5 +1,6 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { formatDate } from './dateUtils';
 import {
   ActivityActionType,
   ActivityCategory,
@@ -33,9 +34,9 @@ export function detectDeviceType(): 'desktop' | 'mobile' | 'tablet' {
 
 function formatCurrentTimestamp(date = new Date()): { formatted: string; epochMs: number } {
   const pad = (n: number) => String(n).padStart(2, '0');
-  const formatted = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )} ${pad(nowHours(date))}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  const formatted = `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(
+    nowHours(date)
+  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   return { formatted, epochMs: date.getTime() };
 }
 
@@ -641,7 +642,7 @@ export function synthesizeHistoricalActivities(
         targetId: null,
         targetType: 'auth',
         deviceType: 'desktop',
-        createdAt: '2026-10-20 09:00:00',
+        createdAt: '20-10-2026 09:00:00',
         createdAtMs: 1792458000000,
       });
     }
@@ -663,6 +664,5 @@ export function formatRelativeTime(epochMs: number): string {
   const diffDay = Math.floor(diffHr / 24);
   if (diffDay === 1) return 'Yesterday';
   if (diffDay < 7) return `${diffDay}d ago`;
-  const date = new Date(epochMs);
-  return `${date.getDate()} ${date.toLocaleString('en-US', { month: 'short' })}`;
+  return formatDate(epochMs);
 }

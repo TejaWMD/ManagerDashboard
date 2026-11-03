@@ -21,6 +21,11 @@ import {
   downloadAttachment,
   openAttachment,
 } from '../../lib/attachments';
+import {
+  formatDate,
+  formatDateTime,
+  formatTimestamp as formatTimestampUtil,
+} from '../../lib/dateUtils';
 import { AUTHORIZED_USERS } from '../../data/users';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './QueryPage.css';
@@ -69,6 +74,7 @@ interface QueryPageProps {
         | 'isUrgent'
         | 'linkedAppointmentId'
         | 'attachments'
+        | 'managerAttachments'
       >
     >
   ) => Promise<void>;
@@ -534,13 +540,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [isReviewingExtension, setIsReviewingExtension] = useState<boolean>(false);
 
   const formatTimestamp = (date: Date): string => {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    const sec = String(date.getSeconds()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${sec}`;
+    return formatTimestampUtil(date);
   };
 
   const openExtensionModal = (query: Query) => {
@@ -577,7 +577,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       return;
     }
 
-    const proposedTimestamp = extensionProposedDateInput.replace('T', ' ') + ':00';
+    const proposedTimestamp = formatDateTime(extensionProposedDateInput.replace('T', ' ') + ':00');
     const nowTimestamp = formatTimestamp(new Date());
 
     setIsSubmittingExtension(true);
@@ -1236,7 +1236,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     }}
                     title="Click to view query details"
                   >
-                    <td className="td-timestamp">{item.createdAt}</td>
+                    <td className="td-timestamp">{formatDateTime(item.createdAt)}</td>
 
                     <td className="td-query-id">
                       <div className="query-id-stack">
@@ -1697,7 +1697,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         {item.extensionStatus === 'PENDING' && (
                           <span
                             className="table-status-pill table-status-pill--ext-pending"
-                            title={`Extension requested until ${item.extensionProposedDueAt || 'new date'}: "${item.extensionReason || ''}"`}
+                            title={`Extension requested until ${formatDateTime(item.extensionProposedDueAt) || 'new date'}: "${item.extensionReason || ''}"`}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (isSender || isAdmin) {
@@ -1713,7 +1713,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         {item.extensionStatus === 'APPROVED' && (
                           <span
                             className="table-status-pill table-status-pill--ext-approved"
-                            title={`Completion deadline extended to ${item.targetDueAt || ''}`}
+                            title={`Completion deadline extended to ${formatDateTime(item.targetDueAt) || ''}`}
                           >
                             Extended
                           </span>
@@ -2264,12 +2264,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   </div>
                 </div>
                 <span className="modal-sender-badge">
-                  Created: <strong>{activeViewingQuery.createdAt}</strong>
+                  Created: <strong>{formatDateTime(activeViewingQuery.createdAt)}</strong>
                   {activeViewingQuery.completedAt && (
                     <>
                       {' '}
                       &bull; Completed:{' '}
-                      <strong>{activeViewingQuery.completedAt}</strong>
+                      <strong>{formatDateTime(activeViewingQuery.completedAt)}</strong>
                     </>
                   )}
                 </span>
@@ -2443,7 +2443,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                     </span>
                                     {att.uploadedAt && (
                                       <span className="query-attachment-card-date">
-                                        &bull; {new Date(att.uploadedAt).toLocaleDateString()}
+                                        &bull; {formatDate(att.uploadedAt)}
                                       </span>
                                     )}
                                   </div>
@@ -2515,7 +2515,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <div className="query-view-save-info">
                           <span className="query-view-save-info-icon">ℹ️</span>
                           <span>
-                            Original creation timestamp (<strong>{activeViewingQuery.createdAt}</strong>) and SLA target deadlines remain strictly preserved.
+                            Original creation timestamp (<strong>{formatDateTime(activeViewingQuery.createdAt)}</strong>) and SLA target deadlines remain strictly preserved.
                           </span>
                         </div>
                         <div className="query-view-save-actions">
@@ -2710,7 +2710,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       </span>
                     ) : activeViewingQuery.targetDueAt ? (
                       <>
-                        <strong>{activeViewingQuery.targetDueAt}</strong>{' '}
+                        <strong>{formatDateTime(activeViewingQuery.targetDueAt)}</strong>{' '}
                         <span className="pill-extended-badge">Extended</span>
                       </>
                     ) : (
@@ -2726,7 +2726,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         ⏳ Extension Requested by Manager {activeViewingQuery.managerName}
                       </span>
                       <span className="ext-proposed-pill">
-                        Proposed: {activeViewingQuery.extensionProposedDueAt || '—'}
+                        Proposed: {formatDateTime(activeViewingQuery.extensionProposedDueAt) || '—'}
                       </span>
                     </div>
                     <p className="ext-banner-reason">
@@ -2758,7 +2758,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 ) : activeViewingQuery.extensionStatus === 'APPROVED' ? (
                   <div className="query-view-ext-banner query-view-ext-banner--approved">
                     <span>
-                      ✅ <strong>Extension Approved</strong> to {activeViewingQuery.targetDueAt}.
+                      ✅ <strong>Extension Approved</strong> to {formatDateTime(activeViewingQuery.targetDueAt)}.
                       {activeViewingQuery.extensionReason && (
                         <span className="ext-reason-note"> (Reason: {activeViewingQuery.extensionReason})</span>
                       )}
@@ -3048,7 +3048,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                               </span>
                                               {att.uploadedAt && (
                                                 <span className="query-attachment-card-date">
-                                                  &bull; {new Date(att.uploadedAt).toLocaleDateString()}
+                                                  &bull; {formatDate(att.uploadedAt)}
                                                 </span>
                                               )}
                                             </div>

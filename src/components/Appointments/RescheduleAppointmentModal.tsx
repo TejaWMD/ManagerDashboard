@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Appointment, UserAccount } from '../../types';
+import { parseDateToMs } from '../../lib/dateUtils';
 import './Appointments.css';
 
 interface RescheduleAppointmentModalProps {
@@ -33,7 +34,11 @@ export const RescheduleAppointmentModal: React.FC<RescheduleAppointmentModalProp
       setRescheduleReason('');
 
       // Default proposed time: current scheduled date plus 2 hours or next business day
-      const baseDate = new Date(appointment.scheduledAtMs || Date.now());
+      const baseDate = new Date(
+        appointment.scheduledAtMs ||
+          parseDateToMs(appointment.scheduledAt) ||
+          Date.now()
+      );
       baseDate.setHours(baseDate.getHours() + 2);
       const isoLocal = new Date(
         baseDate.getTime() - baseDate.getTimezoneOffset() * 60000
@@ -71,11 +76,11 @@ export const RescheduleAppointmentModal: React.FC<RescheduleAppointmentModalProp
       return;
     }
 
-    // Format readable timestamp string: YYYY-MM-DD HH:mm:ss
+    // Format readable timestamp string: DD-MM-YYYY HH:mm:ss
     const pad = (n: number) => String(n).padStart(2, '0');
-    const formattedProposed = `${proposedDateObj.getFullYear()}-${pad(
+    const formattedProposed = `${pad(proposedDateObj.getDate())}-${pad(
       proposedDateObj.getMonth() + 1
-    )}-${pad(proposedDateObj.getDate())} ${pad(proposedDateObj.getHours())}:${pad(
+    )}-${proposedDateObj.getFullYear()} ${pad(proposedDateObj.getHours())}:${pad(
       proposedDateObj.getMinutes()
     )}:00`;
 

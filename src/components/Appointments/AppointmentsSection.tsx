@@ -13,6 +13,7 @@ import {
   UserAccount,
 } from '../../types';
 import { AppointmentDetailsModal } from './AppointmentDetailsModal';
+import { formatDateTimeDisplay as formatDateTimeDisplayUtil } from '../../lib/dateUtils';
 import './Appointments.css';
 
 interface AppointmentsSectionProps {
@@ -105,24 +106,9 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
     }
   };
 
-  // Helper to format date & time nicely: "Wed, 28 Oct 2026, 2:30 PM"
+  // Helper to format date & time nicely: "Wed, 28-10-2026 • 2:30 PM"
   const formatDateTimeDisplay = (scheduledAt: string, scheduledAtMs: number) => {
-    const d = new Date(scheduledAtMs || Date.parse(scheduledAt.replace(' ', 'T')));
-    if (Number.isNaN(d.getTime())) return scheduledAt;
-
-    const weekday = d.toLocaleDateString('en-GB', { weekday: 'short' });
-    const dayMonthYear = d.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-    const time = d.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-
-    return `${weekday}, ${dayMonthYear} • ${time}`;
+    return formatDateTimeDisplayUtil(scheduledAt, scheduledAtMs);
   };
 
   // Relative timing tag: "Today", "Tomorrow", "In 3h", or "Past"

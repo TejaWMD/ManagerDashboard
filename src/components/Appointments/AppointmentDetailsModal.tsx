@@ -9,6 +9,7 @@ import {
   Query,
   UserAccount,
 } from '../../types';
+import { formatDateTimeModal } from '../../lib/dateUtils';
 import './Appointments.css';
 
 interface AppointmentDetailsModalProps {
@@ -82,22 +83,7 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
 
   // Format date & time
   const formatDateTime = (scheduledAt: string, scheduledAtMs: number) => {
-    const d = new Date(scheduledAtMs || Date.parse(scheduledAt.replace(' ', 'T')));
-    if (Number.isNaN(d.getTime())) return scheduledAt;
-
-    const weekday = d.toLocaleDateString('en-GB', { weekday: 'long' });
-    const dayMonthYear = d.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-    const time = d.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-
-    return `${weekday}, ${dayMonthYear} at ${time}`;
+    return formatDateTimeModal(scheduledAt, scheduledAtMs);
   };
 
   const handleConfirmCancel = async (e: React.FormEvent) => {
@@ -365,7 +351,12 @@ export const AppointmentDetailsModal: React.FC<AppointmentDetailsModalProps> = (
               <div className="apt-reschedule-banner-content">
                 <div className="apt-reschedule-banner-title">
                   Reschedule Proposed To:{' '}
-                  <strong>{appointment.proposedScheduledAt}</strong>
+                  <strong>
+                    {formatDateTime(
+                      appointment.proposedScheduledAt || '',
+                      appointment.proposedScheduledAtMs || 0
+                    )}
+                  </strong>
                 </div>
                 {appointment.rescheduleReason && (
                   <div className="apt-reschedule-banner-reason">

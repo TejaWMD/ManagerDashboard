@@ -61,6 +61,11 @@ import {
   showWebNotification,
 } from './lib/notifications';
 import {
+  formatTimestamp as formatTimestampUtil,
+  formatDateTime,
+  parseDateToMs,
+} from './lib/dateUtils';
+import {
   dispatchQueryPushNotification,
   dispatchAppointmentPushNotification,
 } from './lib/pushDispatcher';
@@ -467,7 +472,7 @@ export const App: React.FC = () => {
             if (user && belongsToAppointment(incoming, user) && incoming.requesterId !== user.id) {
               showWebNotification(
                 '📅 New Appointment Request',
-                `${incoming.requesterName} requested "${incoming.title}" on ${incoming.scheduledAt}`
+                `${incoming.requesterName} requested "${incoming.title}" on ${formatDateTime(incoming.scheduledAt)}`
               );
             }
           } else if (payload.eventType === 'UPDATE' && payload.new) {
@@ -483,7 +488,7 @@ export const App: React.FC = () => {
               if (updated.status === 'CONFIRMED' && prevApt?.status !== 'CONFIRMED') {
                 showWebNotification(
                   '✅ Appointment Confirmed',
-                  `"${updated.title}" is confirmed for ${updated.scheduledAt}`
+                  `"${updated.title}" is confirmed for ${formatDateTime(updated.scheduledAt)}`
                 );
               } else if (
                 updated.status === 'RESCHEDULE_PROPOSED' &&
@@ -491,7 +496,7 @@ export const App: React.FC = () => {
               ) {
                 showWebNotification(
                   '⏳ Reschedule Proposed',
-                  `New time proposed for "${updated.title}": ${updated.proposedScheduledAt || 'new date'}`
+                  `New time proposed for "${updated.title}": ${formatDateTime(updated.proposedScheduledAt) || 'new date'}`
                 );
               } else if (updated.status === 'DECLINED' && prevApt?.status !== 'DECLINED') {
                 showWebNotification(
@@ -514,7 +519,7 @@ export const App: React.FC = () => {
               ) {
                 showWebNotification(
                   '📝 Appointment Updated',
-                  `"${updated.title}" details were updated for ${updated.scheduledAt}.`
+                  `"${updated.title}" details were updated for ${formatDateTime(updated.scheduledAt)}.`
                 );
               }
             }
@@ -757,13 +762,7 @@ export const App: React.FC = () => {
   };
 
   const formatTimestamp = (date: Date) => {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    const sec = String(date.getSeconds()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${sec}`;
+    return formatTimestampUtil(date);
   };
 
   const generateNextQueryId = (list: Query[]): string => {
@@ -1300,10 +1299,7 @@ export const App: React.FC = () => {
     const now = new Date();
     const nextId = generateNextAppointmentId(appointments);
 
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const createdAtStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(
-      now.getDate()
-    )} ${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+    const createdAtStr = formatTimestamp(now);
 
     const newAppointment: Appointment = {
       ...data,
@@ -1357,7 +1353,7 @@ export const App: React.FC = () => {
       userRole: currentUser.role,
       actionType: 'APPOINTMENT_BOOKED',
       actionTitle: `${currentUser.name} booked Appointment ${finalApt.id}: ${finalApt.title}`,
-      actionDetails: `Scheduled for ${finalApt.scheduledAt} (${finalApt.meetingType})`,
+      actionDetails: `Scheduled for ${formatDateTime(finalApt.scheduledAt)} (${finalApt.meetingType})`,
       targetId: finalApt.id,
       targetType: 'appointment',
     });
@@ -1475,7 +1471,7 @@ export const App: React.FC = () => {
     const target = appointments.find((a) => a.id === appointmentId);
     if (!target) return;
 
-    const proposedMs = Date.parse(proposedDateTime.replace(' ', 'T'));
+    const proposedMs = parseDateToMs(proposedDateTime);
     const updated: Appointment = {
       ...target,
       status: 'RESCHEDULE_PROPOSED',
@@ -1517,7 +1513,7 @@ export const App: React.FC = () => {
       scheduledAt: target.proposedScheduledAt,
       scheduledAtMs:
         target.proposedScheduledAtMs ||
-        Date.parse(target.proposedScheduledAt.replace(' ', 'T')),
+        parseDateToMs(target.proposedScheduledAt),
       rescheduleProposedBy: null,
       proposedScheduledAt: null,
       proposedScheduledAtMs: null,
@@ -1553,7 +1549,7 @@ export const App: React.FC = () => {
       userRole: currentUser.role,
       actionType: 'APPOINTMENT_RESCHEDULED',
       actionTitle: `${currentUser.name} accepted reschedule for Appointment ${appointmentId}`,
-      actionDetails: `Rescheduled to ${updated.scheduledAt}`,
+      actionDetails: `Rescheduled to ${formatDateTime(updated.scheduledAt)}`,
       targetId: appointmentId,
       targetType: 'appointment',
     });

@@ -10,6 +10,7 @@ import {
   filterQueriesByWindow,
   KpiTimeWindow,
 } from './kpi';
+import { formatDate } from './dateUtils';
 
 export interface GenerateWeeklyReportOptions {
   queries: Query[];
@@ -98,11 +99,7 @@ export function generateWeeklyManagerReportPdf({
   const extensionsPending = windowQueries.filter((q) => q.extensionStatus === 'PENDING').length;
 
   // Date and Time labels
-  const formattedNow = new Date(nowMs).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const formattedNow = formatDate(nowMs);
   const formattedTime = new Date(nowMs).toLocaleTimeString('en-GB', {
     hour: '2-digit',
     minute: '2-digit',
@@ -112,29 +109,17 @@ export function generateWeeklyManagerReportPdf({
   let dateRangeSubtitle = '';
   if (timeWindow === '7d') {
     const startMs = nowMs - 7 * 24 * 60 * 60 * 1000;
-    const startStr = new Date(startMs).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    const startStr = formatDate(startMs);
     periodLabel = 'Weekly Briefing (7-Day Rolling)';
     dateRangeSubtitle = `Period: ${startStr} – ${formattedNow}`;
   } else if (timeWindow === '14d') {
     const startMs = nowMs - 14 * 24 * 60 * 60 * 1000;
-    const startStr = new Date(startMs).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    const startStr = formatDate(startMs);
     periodLabel = 'Bi-Weekly Briefing (14 Days)';
     dateRangeSubtitle = `Period: ${startStr} – ${formattedNow}`;
   } else if (timeWindow === '30d') {
     const startMs = nowMs - 30 * 24 * 60 * 60 * 1000;
-    const startStr = new Date(startMs).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    const startStr = formatDate(startMs);
     periodLabel = 'Monthly Operations Review (30 Days)';
     dateRangeSubtitle = `Period: ${startStr} – ${formattedNow}`;
   } else {
@@ -1020,7 +1005,7 @@ export function generateWeeklyManagerReportPdf({
   // ---------------------------------------------------------------------------
   // Save PDF Document with Clean Contextual Filename
   // ---------------------------------------------------------------------------
-  const dateStr = new Date(nowMs).toISOString().slice(0, 10);
+  const dateStr = formatDate(nowMs);
   const prefix =
     timeWindow === '7d'
       ? 'Weekly'

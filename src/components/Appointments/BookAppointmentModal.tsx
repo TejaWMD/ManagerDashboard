@@ -10,6 +10,7 @@ import {
   UserAccount,
   UserRole,
 } from '../../types';
+import { parseDateToMs, pad } from '../../lib/dateUtils';
 import './Appointments.css';
 
 interface BookAppointmentModalProps {
@@ -123,7 +124,7 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
         // Convert scheduledAt to ISO local for datetime-local input
         const baseDate = new Date(
           appointmentToEdit.scheduledAtMs ||
-            Date.parse(appointmentToEdit.scheduledAt.replace(' ', 'T')) ||
+            parseDateToMs(appointmentToEdit.scheduledAt) ||
             Date.now()
         );
         const isoLocal = new Date(
@@ -306,11 +307,10 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
       return;
     }
 
-    // Format readable timestamp string: YYYY-MM-DD HH:mm:ss
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const formattedScheduledAt = `${scheduledDate.getFullYear()}-${pad(
+    // Format readable timestamp string: DD-MM-YYYY HH:mm:ss
+    const formattedScheduledAt = `${pad(scheduledDate.getDate())}-${pad(
       scheduledDate.getMonth() + 1
-    )}-${pad(scheduledDate.getDate())} ${pad(scheduledDate.getHours())}:${pad(
+    )}-${scheduledDate.getFullYear()} ${pad(scheduledDate.getHours())}:${pad(
       scheduledDate.getMinutes()
     )}:00`;
 

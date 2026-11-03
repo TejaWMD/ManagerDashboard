@@ -27,6 +27,7 @@ import {
   filterQueriesByWindow,
   KpiTimeWindow,
 } from '../../lib/kpi';
+import { formatDate, formatDateTime } from '../../lib/dateUtils';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './HomePage.css';
 
@@ -112,36 +113,20 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   // Dynamic preview range string for report modal
   const previewRangeStr = useMemo(() => {
-    const endStr = new Date(nowMs).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    const endStr = formatDate(nowMs);
     if (reportTimeWindow === '7d') {
       const startMs = nowMs - 7 * 24 * 60 * 60 * 1000;
-      const startStr = new Date(startMs).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
+      const startStr = formatDate(startMs);
       return `${startStr} – ${endStr} (7 Days)`;
     }
     if (reportTimeWindow === '14d') {
       const startMs = nowMs - 14 * 24 * 60 * 60 * 1000;
-      const startStr = new Date(startMs).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
+      const startStr = formatDate(startMs);
       return `${startStr} – ${endStr} (14 Days)`;
     }
     if (reportTimeWindow === '30d') {
       const startMs = nowMs - 30 * 24 * 60 * 60 * 1000;
-      const startStr = new Date(startMs).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
+      const startStr = formatDate(startMs);
       return `${startStr} – ${endStr} (30 Days)`;
     }
     return `All Recorded Queries up to ${endStr}`;
@@ -823,12 +808,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                 </div>
                 <span className="modal-sender-badge">
-                  Created: <strong>{activeViewingQuery.createdAt}</strong>
+                  Created: <strong>{formatDateTime(activeViewingQuery.createdAt)}</strong>
                   {activeViewingQuery.completedAt && (
                     <>
                       {' '}
                       &bull; Completed:{' '}
-                      <strong>{activeViewingQuery.completedAt}</strong>
+                      <strong>{formatDateTime(activeViewingQuery.completedAt)}</strong>
                     </>
                   )}
                 </span>
@@ -905,7 +890,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                               </span>
                               {att.uploadedAt && (
                                 <span className="query-attachment-card-date">
-                                  &bull; {new Date(att.uploadedAt).toLocaleDateString()}
+                                  &bull; {formatDate(att.uploadedAt)}
                                 </span>
                               )}
                             </div>

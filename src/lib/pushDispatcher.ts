@@ -3,6 +3,7 @@ import { Query, UserAccount, Appointment } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 import { supabase } from './supabase';
 import { showWebNotification } from './notifications';
+import { formatDateTime } from './dateUtils';
 
 export type NotificationEventType =
   | 'NEW_QUERY'
@@ -149,13 +150,13 @@ export function formatNotificationContent(
     case 'EXTENSION_REQUESTED':
       return {
         title: `⏳ Extension Requested: ${query.queryId}`,
-        body: `Manager ${actor.name} requested completion date extension to ${query.extensionProposedDueAt || 'new date'}: "${(query.extensionReason || '').slice(0, 80)}"`,
+        body: `Manager ${actor.name} requested completion date extension to ${formatDateTime(query.extensionProposedDueAt) || 'new date'}: "${(query.extensionReason || '').slice(0, 80)}"`,
       };
 
     case 'EXTENSION_APPROVED':
       return {
         title: `✅ Extension Approved: ${query.queryId}`,
-        body: `${actorRoleLabel} ${actor.name} approved completion extension until ${query.targetDueAt || query.extensionProposedDueAt || 'extended date'}.`,
+        body: `${actorRoleLabel} ${actor.name} approved completion extension until ${formatDateTime(query.targetDueAt || query.extensionProposedDueAt) || 'extended date'}.`,
       };
 
     case 'EXTENSION_DECLINED':
@@ -329,7 +330,7 @@ export function formatAppointmentNotificationContent(
   appointment: Appointment,
   actor: UserAccount
 ): { title: string; body: string } {
-  const timeLabel = appointment.scheduledAt;
+  const timeLabel = formatDateTime(appointment.scheduledAt);
 
   switch (event) {
     case 'APPOINTMENT_REQUESTED':
@@ -369,7 +370,7 @@ export function formatAppointmentNotificationContent(
     case 'APPOINTMENT_RESCHEDULE_REQUESTED':
       return {
         title: `⏳ Reschedule Requested: ${appointment.title}`,
-        body: `${actor.name} proposed a new time (${appointment.proposedScheduledAt || 'new date/time'}). Reason: "${appointment.rescheduleReason || 'Schedule conflict'}"`,
+        body: `${actor.name} proposed a new time (${formatDateTime(appointment.proposedScheduledAt) || 'new date/time'}). Reason: "${appointment.rescheduleReason || 'Schedule conflict'}"`,
       };
 
     case 'APPOINTMENT_RESCHEDULE_ACCEPTED':

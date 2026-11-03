@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { parseDateToMs } from './dateUtils';
 import {
   Query,
   QueryStatus,
@@ -213,7 +214,7 @@ export function mapRowToQuery(row: QueryRow): Query {
 
   const rawCreatedMs = Number(row.created_at_ms);
   const parsedCreatedMs = row.created_at
-    ? Date.parse(row.created_at.replace(' ', 'T'))
+    ? parseDateToMs(row.created_at)
     : 0;
   const createdAtMs =
     !Number.isNaN(rawCreatedMs) && rawCreatedMs > 0
@@ -1072,14 +1073,14 @@ export function mapRowToAppointment(row: AppointmentRow): Appointment {
     Number(row.scheduled_at_ms) && !Number.isNaN(Number(row.scheduled_at_ms))
       ? Number(row.scheduled_at_ms)
       : row.scheduled_at
-      ? Date.parse(row.scheduled_at.replace(' ', 'T')) || 0
+      ? parseDateToMs(row.scheduled_at) || 0
       : 0;
 
   const createdAtMs =
     Number(row.created_at_ms) && !Number.isNaN(Number(row.created_at_ms))
       ? Number(row.created_at_ms)
       : row.created_at
-      ? Date.parse(row.created_at.replace(' ', 'T')) || Date.now()
+      ? parseDateToMs(row.created_at) || Date.now()
       : Date.now();
 
   const { agenda: unpackedAgenda, meta: packedMeta } = unpackAppointmentAgenda(

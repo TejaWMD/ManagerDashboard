@@ -2,6 +2,7 @@
 import { Query, isQueryDelayed, isQueryDone, UserAccount } from '../types';
 import { supabase } from './supabase';
 import { dispatchQueryPushNotification } from './pushDispatcher';
+import { parseDateToMs } from './dateUtils';
 
 const SYSTEM_ACTOR: UserAccount = {
   id: 'system',
@@ -151,7 +152,7 @@ export async function checkAndNotifyUrgentReminders(
       continue;
     }
 
-    const createdMs = query.createdAtMs || Date.parse(query.createdAt.replace(' ', 'T')) || 0;
+    const createdMs = query.createdAtMs || parseDateToMs(query.createdAt) || 0;
     if (createdMs <= 0) continue;
 
     // Last reminder time is the maximum of locally recorded reminder, DB record, or creation time

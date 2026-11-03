@@ -54,6 +54,8 @@ export interface UserPresence {
   isOnline: boolean;
 }
 
+import { parseDateToMs } from '../lib/dateUtils';
+
 export interface UserAccount {
   id: string;
   name: string;
@@ -219,7 +221,7 @@ export function getQueryTimestampMs(query: Query): number {
     return query.createdAtMs;
   }
   if (query.createdAt) {
-    const parsed = Date.parse(query.createdAt.replace(' ', 'T'));
+    const parsed = parseDateToMs(query.createdAt);
     if (!Number.isNaN(parsed) && parsed > 0) {
       return parsed;
     }
@@ -241,7 +243,7 @@ export function getQueryDeadlineMs(query: Query): number {
     return query.targetDueAtMs;
   }
   if (query.targetDueAt) {
-    const parsed = Date.parse(query.targetDueAt.replace(' ', 'T'));
+    const parsed = parseDateToMs(query.targetDueAt);
     if (!Number.isNaN(parsed) && parsed > 0) {
       return parsed;
     }
@@ -297,7 +299,7 @@ export function isQueryDelayed(
       return query.completedAtMs > deadlineMs;
     }
     if (query.completedAt) {
-      const parsedCompleted = Date.parse(query.completedAt.replace(' ', 'T'));
+      const parsedCompleted = parseDateToMs(query.completedAt);
       if (!Number.isNaN(parsedCompleted) && parsedCompleted > 0) {
         return parsedCompleted > deadlineMs;
       }

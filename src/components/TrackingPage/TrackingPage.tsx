@@ -10,6 +10,7 @@ import {
   UserRole,
 } from '../../types';
 import { formatRelativeTime } from '../../lib/activityTracker';
+import { formatDateTime } from '../../lib/dateUtils';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './TrackingPage.css';
 
@@ -567,7 +568,7 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
               return (
                 <div key={act.id} className="track-feed-card">
                   <div className="track-feed-time-col">
-                    <span className="track-feed-time-ago" title={act.createdAt}>
+                    <span className="track-feed-time-ago" title={formatDateTime(act.createdAt)}>
                       {formatRelativeTime(act.createdAtMs)}
                     </span>
                     <span className="track-feed-time-exact">{act.createdAt.split(' ')[1] || ''}</span>
