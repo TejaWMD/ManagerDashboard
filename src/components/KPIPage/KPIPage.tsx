@@ -36,38 +36,12 @@ export const KPIPage: React.FC<KPIPageProps> = ({
   const nowMs = useMemo(() => Date.now(), []);
 
   // Compute rolling KPI stats for all managers
-  const { stats: managerStats, teamAverageKpi, teamAverageRating } = useMemo(() => {
+  const { stats: managerStats } = useMemo(() => {
     return calculateAllManagersKpi(queries, managers, {
       window: timeWindow,
       nowMs,
     });
   }, [queries, managers, timeWindow, nowMs]);
-
-  // Overall totals across the managers in the selected window
-  const overallTotals = useMemo(() => {
-    const totalOnTime = managerStats.reduce((sum, s) => sum + s.onTimeCount, 0);
-    const totalLate = managerStats.reduce((sum, s) => sum + s.lateCount, 0);
-    const totalOverdue = managerStats.reduce((sum, s) => sum + s.overdueCount, 0);
-    const totalDelayed = totalLate + totalOverdue;
-    const totalInProgress = managerStats.reduce((sum, s) => sum + s.inProgressCount, 0);
-    const totalEvaluated = managerStats.reduce((sum, s) => sum + s.totalEvaluated, 0);
-    const totalAssigned = managerStats.reduce((sum, s) => sum + s.totalAssigned, 0);
-    const totalCompleted = totalOnTime + totalLate;
-    const overallCompletionRate =
-      totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0;
-
-    return {
-      totalOnTime,
-      totalLate,
-      totalOverdue,
-      totalDelayed,
-      totalInProgress,
-      totalEvaluated,
-      totalAssigned,
-      totalCompleted,
-      overallCompletionRate,
-    };
-  }, [managerStats]);
 
   return (
     <div className="kpi-screen-container">
@@ -299,89 +273,6 @@ export const KPIPage: React.FC<KPIPageProps> = ({
               </div>
             );
           })}
-        </section>
-
-        {/* Bottom 2 Analytics Cards (Full-width 2-column balanced grid) */}
-        <section className="kpi-bottom-panels" aria-label="Analytics & Breakdown">
-          {/* Card 4: Team Score Comparison */}
-          <div className="kpi-uniform-card kpi-panel-card">
-            <div className="panel-header-clean">
-              <h2 className="panel-title-clean">Team Performance</h2>
-              <div className="panel-tags-cluster">
-                <span className="panel-tag-clean">Team KPI: {teamAverageKpi}%</span>
-                {teamAverageRating !== null && (
-                  <span className="panel-tag-clean">Team Rating: ⭐ {teamAverageRating}/5.0</span>
-                )}
-                <span className="panel-tag-clean panel-tag-clean--alt">
-                  {overallTotals.totalCompleted}/{overallTotals.totalAssigned} ({overallTotals.overallCompletionRate}%) Completion Rate
-                </span>
-              </div>
-            </div>
-
-            <div className="panel-bars-list">
-              {managerStats.map((stat) => {
-                const barColorClass =
-                  stat.totalEvaluated === 0 && stat.totalRated === 0
-                    ? 'comp-bar-fill--neutral'
-                    : stat.overallKpi >= 85
-                    ? 'comp-bar-fill--green'
-                    : stat.overallKpi >= 70
-                    ? 'comp-bar-fill--amber'
-                    : 'comp-bar-fill--red';
-
-                return (
-                  <div key={stat.manager.id} className="comp-bar-item">
-                    <div className="comp-user-col">
-                      <span className="comp-avatar">{stat.manager.avatarInitials}</span>
-                      <span className="comp-name">{stat.manager.name}</span>
-                    </div>
-
-                    <div className="comp-track-col">
-                      <div className="comp-bar-track">
-                        <div
-                          className={`comp-bar-fill ${barColorClass}`}
-                          style={{ width: `${stat.overallKpi}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="comp-nums-col">
-                      <span className="comp-rate-val">{stat.overallKpi}%</span>
-                      <span className="comp-pts-sub">
-                        <span className="comp-pts-item">Turnaround: {stat.turnaroundKpi}%</span>
-                        <span className="comp-pts-dot">·</span>
-                        <span className="comp-pts-item">{stat.avgRating !== null ? `⭐ ${stat.avgRating}` : 'No rating'}</span>
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 5-Column Full-Width Summary Bubbles */}
-            <div className="team-summary-pill-row">
-              <div className="summary-bubble">
-                <span className="summary-lbl">Received</span>
-                <strong className="summary-val">{overallTotals.totalAssigned}</strong>
-              </div>
-              <div className="summary-bubble summary-bubble--ontime">
-                <span className="summary-lbl">Completed</span>
-                <strong className="summary-val">{overallTotals.totalCompleted}</strong>
-              </div>
-              <div className="summary-bubble summary-bubble--overdue">
-                <span className="summary-lbl">Delayed</span>
-                <strong className="summary-val">{overallTotals.totalDelayed}</strong>
-              </div>
-              <div className="summary-bubble summary-bubble--late">
-                <span className="summary-lbl">Completion Rate</span>
-                <strong className="summary-val">{overallTotals.overallCompletionRate}%</strong>
-              </div>
-              <div className="summary-bubble summary-bubble--inprog">
-                <span className="summary-lbl">In-Prog</span>
-                <strong className="summary-val">{overallTotals.totalInProgress}</strong>
-              </div>
-            </div>
-          </div>
         </section>
       </div>
     </div>

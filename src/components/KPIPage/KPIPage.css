@@ -168,22 +168,21 @@
 }
 
 /* ==========================================================================
-   2. Card grid: 3+3 Manager cards + 1 Team Performance card at bottom
+   2. Card grid: 7 Manager cards (4 top row, 3 bottom row)
    ========================================================================== */
 .kpi-five-cards-grid {
   flex: 1 1 0;
   min-height: 0;
   height: 100%;
   width: 100%;
-  display: grid;
-  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
-  gap: var(--card-gap);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .kpi-managers-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: var(--card-gap);
   min-height: 0;
@@ -192,15 +191,13 @@
   overflow: hidden;
 }
 
-.kpi-bottom-panels {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: minmax(0, 1fr);
-  gap: var(--card-gap);
-  min-height: 0;
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
+/* 7 Managers layout: Top row has 4 cards (span 3), bottom row has 3 cards (span 4) */
+.kpi-managers-row > :nth-child(-n+4) {
+  grid-column: span 3;
+}
+
+.kpi-managers-row > :nth-child(n+5) {
+  grid-column: span 4;
 }
 
 /* Base bubbly card */
@@ -1259,6 +1256,15 @@
 
 /* ---------- Laptop & Medium Screens (Height under 780px) ---------- */
 @media (max-height: 780px) and (min-width: 681px) {
+  .kpi-screen-container {
+    overflow-y: auto;
+  }
+  .kpi-five-cards-grid {
+    overflow: visible;
+  }
+  .kpi-managers-row {
+    overflow: visible;
+  }
   .kpi-compact-header {
     height: 48px;
     min-height: 48px;
@@ -1298,8 +1304,32 @@
 /* ---------- Tablet & Medium Widths (681px - 1024px) ---------- */
 @media (min-width: 681px) and (max-width: 1024px) {
   .kpi-screen-container {
-    --card-gap: 0.35rem;
-    --card-pad: 0.45rem;
+    --card-gap: 0.6rem;
+    --card-pad: 0.65rem;
+    overflow-y: auto;
+    height: 100%;
+  }
+  .kpi-five-cards-grid {
+    overflow: visible;
+    height: auto;
+    min-height: 100%;
+  }
+  .kpi-managers-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-rows: auto !important;
+    gap: 0.65rem !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .kpi-managers-row > * {
+    grid-column: auto !important;
+    min-height: 230px;
+  }
+  .kpi-managers-row > :last-child:nth-child(odd) {
+    grid-column: 1 / -1 !important;
+    max-width: 520px;
+    margin: 0 auto;
+    width: 100%;
   }
   .mgr-footer-counts,
   .mgr-role-text,
@@ -1382,7 +1412,7 @@
     overflow: visible !important;
   }
 
-  /* 6 manager cards stack vertically (or 2 columns on small tablets) */
+  /* 7 manager cards stack vertically (or 2 columns on small tablets) */
   .kpi-managers-row {
     display: grid !important;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
@@ -1392,6 +1422,10 @@
     min-height: auto !important;
     width: 100% !important;
     overflow: visible !important;
+  }
+
+  .kpi-managers-row > * {
+    grid-column: auto !important;
   }
 
   .kpi-bottom-panels {
@@ -1757,6 +1791,12 @@
 
 /* Extra-compact phones (<= 480px) */
 @media (max-width: 480px) {
+  .kpi-managers-row {
+    grid-template-columns: 1fr !important;
+  }
+  .kpi-managers-row > * {
+    grid-column: auto !important;
+  }
   .kpi-uniform-card {
     padding: 0.8rem 0.75rem !important;
     border-radius: 16px !important;

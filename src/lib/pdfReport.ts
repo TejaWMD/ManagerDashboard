@@ -308,7 +308,7 @@ export function generateWeeklyManagerReportPdf({
 
   curY += headerHeight;
 
-  // Render Data Rows for all 6 managers
+  // Render Data Rows for all managers
   const rowHeight = 10;
   stats.forEach((mgr, idx) => {
     const isEven = idx % 2 === 0;
