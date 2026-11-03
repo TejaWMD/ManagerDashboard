@@ -1561,38 +1561,68 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     <td className="td-rating th-center">
                       {isAdmin ? (
                         item.rating ? (
-                          <span
-                            className="rating-badge rating-badge--admin"
-                            title={`Rated ${item.rating}/5 stars by sender (${item.accountManagerName})`}
-                          >
-                            <span className="rating-stars-gold">
-                              {'★'.repeat(item.rating)}
-                              <span className="rating-stars-dim">{'★'.repeat(5 - item.rating)}</span>
+                          <div className="rating-cell-sender-wrap">
+                            <span
+                              className="rating-badge rating-badge--admin"
+                              title={`Rated ${item.rating}/5 stars by sender (${item.accountManagerName})`}
+                            >
+                              <span className="rating-stars-gold">
+                                {'★'.repeat(item.rating)}
+                                <span className="rating-stars-dim">{'★'.repeat(5 - item.rating)}</span>
+                              </span>
+                              <span className="rating-score-num">{item.rating}/5</span>
                             </span>
-                            <span className="rating-score-num">{item.rating}/5</span>
-                          </span>
+                            <button
+                              type="button"
+                              className="btn-clear-rating-mini"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (window.confirm('Clear rating for this query?')) {
+                                  await onUpdateQuery(item.queryId, { rating: null });
+                                }
+                              }}
+                              title="Clear rating"
+                              aria-label="Clear rating"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         ) : (
                           <span className="rating-placeholder">—</span>
                         )
                       ) : isSender ? (
                         item.rating ? (
-                          <button
-                            type="button"
-                            className="rating-badge rating-badge--sender"
-                            onClick={() => {
-                              setRatingModalQuery(item);
-                              setRatingInput(item.rating || 0);
-                              setRatingHover(0);
-                              setRatingModalCompleteOnSubmit(false);
-                            }}
-                            title="Click to change your rating (can be updated anytime)"
-                          >
-                            <span className="rating-stars-gold">
-                              {'★'.repeat(item.rating)}
-                              <span className="rating-stars-dim">{'★'.repeat(5 - item.rating)}</span>
-                            </span>
-                            <span className="rating-score-num">{item.rating}/5</span>
-                          </button>
+                          <div className="rating-cell-sender-wrap">
+                            <button
+                              type="button"
+                              className="rating-badge rating-badge--sender"
+                              onClick={() => {
+                                setRatingModalQuery(item);
+                                setRatingInput(item.rating || 0);
+                                setRatingHover(0);
+                                setRatingModalCompleteOnSubmit(false);
+                              }}
+                              title="Click to change your rating (can be updated anytime)"
+                            >
+                              <span className="rating-stars-gold">
+                                {'★'.repeat(item.rating)}
+                                <span className="rating-stars-dim">{'★'.repeat(5 - item.rating)}</span>
+                              </span>
+                              <span className="rating-score-num">{item.rating}/5</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-clear-rating-mini"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await onUpdateQuery(item.queryId, { rating: null });
+                              }}
+                              title="Clear rating"
+                              aria-label="Clear rating"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         ) : (
                           <button
                             type="button"
@@ -3275,19 +3305,33 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <span className="query-view-rating-value">
                           {activeViewingQuery.rating} / 5 Stars
                         </span>
-                        {currentUser.id === activeViewingQuery.accountManagerId && (
-                          <button
-                            type="button"
-                            className="btn-inline-edit"
-                            onClick={() => {
-                              setRatingModalQuery(activeViewingQuery);
-                              setRatingInput(activeViewingQuery.rating || 0);
-                              setRatingHover(0);
-                              setRatingModalCompleteOnSubmit(false);
-                            }}
-                          >
-                            Change Rating
-                          </button>
+                        {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && (
+                          <div className="query-view-rating-actions">
+                            <button
+                              type="button"
+                              className="btn-inline-edit"
+                              onClick={() => {
+                                setRatingModalQuery(activeViewingQuery);
+                                setRatingInput(activeViewingQuery.rating || 0);
+                                setRatingHover(0);
+                                setRatingModalCompleteOnSubmit(false);
+                              }}
+                            >
+                              Change Rating
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-inline-clear-rating"
+                              onClick={async () => {
+                                await onUpdateQuery(activeViewingQuery.queryId, {
+                                  rating: null,
+                                });
+                              }}
+                              title="Clear rating for this query"
+                            >
+                              Clear Rating
+                            </button>
+                          </div>
                         )}
                       </div>
                     ) : currentUser.id === activeViewingQuery.accountManagerId ? (
@@ -3581,6 +3625,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               </div>
 
               <div className="modal-actions">
+                {ratingModalQuery.rating ? (
+                  <button
+                    type="button"
+                    className="btn-clear-rating-modal"
+                    onClick={async () => {
+                      await onUpdateQuery(ratingModalQuery.queryId, { rating: null });
+                      setRatingModalQuery(null);
+                    }}
+                  >
+                    Clear Rating
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn-secondary"
