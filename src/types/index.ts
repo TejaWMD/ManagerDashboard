@@ -277,12 +277,13 @@ export function isQueryDelayed(
     return false;
   }
 
-  if (query.isDelayed === true) {
-    return true;
-  }
-
   const deadlineMs = getQueryDeadlineMs(query);
   if (deadlineMs <= 0) {
+    return false;
+  }
+
+  // Open query with active approved extension: NOT delayed while within extended deadline!
+  if (query.extensionStatus === 'APPROVED' && nowMs <= deadlineMs) {
     return false;
   }
 
@@ -301,7 +302,11 @@ export function isQueryDelayed(
         return parsedCompleted > deadlineMs;
       }
     }
-    return false;
+    return query.isDelayed === true;
+  }
+
+  if (query.isDelayed === true) {
+    return true;
   }
 
   // Open query: delayed if current time has passed target completion deadline

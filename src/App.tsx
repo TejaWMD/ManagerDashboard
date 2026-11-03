@@ -963,17 +963,22 @@ export const App: React.FC = () => {
         ? createdMs + DELAY_THRESHOLD_MS
         : 0;
 
-    // If an extension was approved, recalculate whether it is delayed against the extended target!
-    const wasAlreadyDelayed =
-      updates.extensionStatus === 'APPROVED'
-        ? false
-        : isQueryDelayed(existing, nowMs);
+    // If an extension was approved (or is currently approved and within deadline), query is NOT delayed!
+    const isApprovedExtActive =
+      (updates.extensionStatus === 'APPROVED' ||
+        (existing.extensionStatus === 'APPROVED' && updates.extensionStatus !== 'DECLINED')) &&
+      effectiveDeadlineMs > 0 &&
+      nowMs <= effectiveDeadlineMs;
+
+    const wasAlreadyDelayed = isApprovedExtActive
+      ? false
+      : isQueryDelayed(existing, nowMs);
 
     const isUrgentQuery =
       updates.isUrgent !== undefined ? Boolean(updates.isUrgent) : Boolean(existing.isUrgent);
 
-    // Urgent queries have no delay threshold and are never classified as delayed
-    const nextIsDelayed = isUrgentQuery
+    // Urgent queries or active approved extensions have no delay threshold and are never classified as delayed
+    const nextIsDelayed = isUrgentQuery || isApprovedExtActive
       ? false
       : nextIsCompleted
       ? Boolean(

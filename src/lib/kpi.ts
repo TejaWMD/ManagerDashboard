@@ -72,7 +72,14 @@ export function evaluateQueryKpi(
   }
 
   // Sender has NOT completed yet. Urgent queries have no delay threshold and are never classified as delayed/overdue.
-  const isPastDeadline = !query.isUrgent && (nowMs > deadlineMs || query.isDelayed === true);
+  // Queries with an active approved extension are NOT overdue while within extended deadline.
+  const isApprovedExtensionActive =
+    query.extensionStatus === 'APPROVED' && deadlineMs > 0 && nowMs <= deadlineMs;
+
+  const isPastDeadline =
+    !query.isUrgent &&
+    !isApprovedExtensionActive &&
+    (nowMs > deadlineMs || query.isDelayed === true);
 
   if (isPastDeadline) {
     return {

@@ -300,10 +300,17 @@ export function mapRowToQuery(row: QueryRow): Query {
       ? createdAtMs + DELAY_THRESHOLD_MS
       : 0;
 
+  const isApprovedExtensionActive =
+    extensionStatus === 'APPROVED' &&
+    effectiveDeadlineMs > 0 &&
+    Date.now() <= effectiveDeadlineMs;
+
   const computedDelayed = isDone
     ? completedAtMs && effectiveDeadlineMs > 0
       ? completedAtMs > effectiveDeadlineMs
       : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)
+    : isApprovedExtensionActive
+    ? false
     : Boolean(effectiveDeadlineMs > 0 && Date.now() > effectiveDeadlineMs);
 
   const { cleanText: strippedQueryText, attachments: unpackedAttachments } =
