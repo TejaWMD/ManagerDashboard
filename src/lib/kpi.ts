@@ -18,9 +18,9 @@ export interface CalculateKpiOptions {
 
 /**
  * Evaluates a single query for weighted KPI points based on Director requirements:
- * - Completed On-Time (<= target completion date / 48h): +1.0 pt
- * - Completed Late (> target completion date / 48h):     +0.5 pt
- * - Open & Overdue (> target completion date / 48h):     0.0 pt (included in evaluated queries)
+ * - Completed On-Time (<= target completion date / 24h): +1.0 pt
+ * - Completed Late (> target completion date / 24h):     +0.5 pt
+ * - Open & Overdue (> target completion date / 24h):     0.0 pt (included in evaluated queries)
  * - Open & In-Progress (<= target completion deadline): Excluded from evaluation until deadline passes
  */
 export function evaluateQueryKpi(

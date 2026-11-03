@@ -485,7 +485,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        {/* Card 3: Pending (< 48h Open) */}
+        {/* Card 3: Pending (< 24h Open) */}
         <div className="kpi-card kpi-card--pending">
           <div className="kpi-card-top">
             <div className="kpi-icon-box kpi-icon-box--pending">
@@ -508,7 +508,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Overdue / Delayed (> 48h) */}
+        {/* Card 4: Overdue / Delayed (> 24h) */}
         <div className="kpi-card kpi-card--delayed">
           <div className="kpi-card-top">
             <div className="kpi-icon-box kpi-icon-box--delayed">
@@ -516,7 +516,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <span className="kpi-badge kpi-badge--delayed">&gt; 48h ({delayedPct}%)</span>
+            <span className="kpi-badge kpi-badge--delayed">&gt; 24h ({delayedPct}%)</span>
           </div>
           <div className="kpi-card-mid">
             <div className="kpi-value">{delayedCount}</div>

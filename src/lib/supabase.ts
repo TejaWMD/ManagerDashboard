@@ -306,7 +306,11 @@ export function mapRowToQuery(row: QueryRow): Query {
     effectiveDeadlineMs > 0 &&
     Date.now() <= effectiveDeadlineMs;
 
-  const computedDelayed = isDone
+  const isUrgent = Boolean(row.is_urgent);
+
+  const computedDelayed = isUrgent
+    ? false
+    : isDone
     ? completedAtMs && effectiveDeadlineMs > 0
       ? completedAtMs > effectiveDeadlineMs
       : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)

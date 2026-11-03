@@ -44,7 +44,12 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
   const [visibleCount, setVisibleCount] = useState<number>(40);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const scrollContainer = document.querySelector('.app-body-column');
+    if (scrollContainer) {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
 
   // Compute live presence status for each user
@@ -144,9 +149,10 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
         return false;
       }
       if (q) {
-        const matchesUser =
-          act.userName.toLowerCase().includes(q) || act.userEmail.toLowerCase().includes(q);
-        const matchesTitle = act.actionTitle.toLowerCase().includes(q);
+        const uName = (act.userName || '').toLowerCase();
+        const uEmail = (act.userEmail || '').toLowerCase();
+        const matchesUser = uName.includes(q) || uEmail.includes(q);
+        const matchesTitle = (act.actionTitle || '').toLowerCase().includes(q);
         const matchesDetails = (act.actionDetails || '').toLowerCase().includes(q);
         const matchesTarget = (act.targetId || '').toLowerCase().includes(q);
         return matchesUser || matchesTitle || matchesDetails || matchesTarget;
@@ -425,7 +431,7 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
 
                   <div className="track-user-location-row">
                     <span className="track-location-pill" title={presence?.currentAction}>
-                      📍 {presence?.currentAction || `Viewing ${page.toUpperCase()}`}
+                      📍 {presence?.currentAction || `Viewing ${(page || 'home').toUpperCase()}`}
                     </span>
                     <span className="track-device-tag">
                       {presence?.deviceType === 'mobile' ? '📱 Mobile' : '💻 PC'}
@@ -571,13 +577,20 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
                     <span className="track-feed-time-ago" title={formatDateTime(act.createdAt)}>
                       {formatRelativeTime(act.createdAtMs)}
                     </span>
-                    <span className="track-feed-time-exact">{act.createdAt.split(' ')[1] || ''}</span>
+                    <span className="track-feed-time-exact">
+                      {typeof act.createdAt === 'string' && act.createdAt.includes(' ')
+                        ? act.createdAt.split(' ')[1] || ''
+                        : typeof act.createdAtMs === 'number' && act.createdAtMs > 0
+                        ? new Date(act.createdAtMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : ''}
+                    </span>
                   </div>
 
                   <div className="track-feed-avatar-col">
                     <div className={`track-feed-user-avatar track-feed-user-avatar--${act.userRole}`}>
-                      {act.userName
+                      {(act.userName || 'WM')
                         .split(' ')
+                        .filter(Boolean)
                         .map((n) => n[0])
                         .join('')
                         .slice(0, 2)

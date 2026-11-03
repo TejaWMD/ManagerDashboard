@@ -225,7 +225,7 @@ export function generateWeeklyManagerReportPdf({
     {
       title: 'AVG RESPONSE SPEED',
       value: teamAvgTurnaroundHours !== null ? `${teamAvgTurnaroundHours} hrs` : '—',
-      sub: 'Standard Performance: < 48 hrs',
+      sub: 'Standard Performance: < 24 hrs',
       barColor: COLOR_BRAND_ORANGE,
       valColor: COLOR_SLATE_900,
     },
@@ -536,10 +536,10 @@ export function generateWeeklyManagerReportPdf({
 
   // if (totalDelayed > 0) {
   //   insightLines.push(
-  //     `PERFORMANCE Monitoring: ${totalDelayed} total queries exceeded the 48-hour threshold (${totalLate} resolved late, ${totalOverdue} currently active overdue requiring intervention).`
+  //     `PERFORMANCE Monitoring: ${totalDelayed} total queries exceeded the 24-hour threshold (${totalLate} resolved late, ${totalOverdue} currently active overdue requiring intervention).`
   //   );
   // } else {
-  //   insightLines.push('PERFORMANCE Excellence: 100% of evaluated queries were completed strictly within the standard 48-hour performance deadline.');
+  //   insightLines.push('PERFORMANCE Excellence: 100% of evaluated queries were completed strictly within the standard 24-hour performance deadline.');
   // }
 
   // if (bestTurnaround && bestTurnaround.avgManagerTurnaroundHours !== null) {
@@ -582,7 +582,7 @@ export function generateWeeklyManagerReportPdf({
   // doc.setFontSize(5.6);
   // doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
   // doc.text(
-  //   'Turnaround Score: On-Time (+1.0 pt), Late (>48h) (+0.5 pt), Overdue Open (0.0 pt penalty). In-Progress (<48h) excluded until deadline expires.',
+  //   'Turnaround Score: On-Time (+1.0 pt), Late (>24h) (+0.5 pt), Overdue Open (0.0 pt penalty). In-Progress (<24h) excluded until deadline expires.',
   //   margin + 4,
   //   curY + 7.2
   // );
@@ -811,7 +811,7 @@ export function generateWeeklyManagerReportPdf({
   //   doc.setFontSize(7.8);
   //   doc.setTextColor(COLOR_RED[0], COLOR_RED[1], COLOR_RED[2]);
   //   doc.text(
-  //     `Priority Attention Required: ${overdueActive.length} Open Queries Exceeding 48-Hour SLA`,
+  //     `Priority Attention Required: ${overdueActive.length} Open Queries Exceeding 24-Hour SLA`,
   //     margin + 4,
   //     curY + 5.5
   //   );
@@ -889,7 +889,7 @@ export function generateWeeklyManagerReportPdf({
   //   doc.setFontSize(6.8);
   //   doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
   //   doc.text(
-  //     'All active open queries are currently progressing strictly within the 48-hour service level agreement.',
+  //     'All active open queries are currently progressing strictly within the 24-hour service level agreement.',
   //     margin + 4,
   //     curY + 10.5
   //   );

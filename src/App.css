@@ -72,6 +72,23 @@
   overflow: hidden;
 }
 
+/* Tracking Page (PC & Desktop): Enable full vertical scrolling with dynamic height */
+.app-body-column--tracking {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-main-content--tracking {
+  flex: none !important;
+  min-height: auto !important;
+  height: auto !important;
+  overflow: visible !important;
+  padding-bottom: 3.5rem !important;
+}
+
 .db-setup-banner,
 .db-error-banner {
   flex-shrink: 0;

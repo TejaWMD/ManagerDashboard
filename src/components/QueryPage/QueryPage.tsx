@@ -1956,7 +1956,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 <div className="urgent-mode-notice">
                   <span className="urgent-mode-notice-icon">🚨</span>
                   <span>
-                    <strong>URGENT Query Mode Active:</strong> This query will be immediately due with no 48h delay threshold, highlighted in red at the top of the table, and notify the receiver every 24h until completed.
+                    <strong>URGENT Query Mode Active:</strong> This query will be immediately due with no 24h delay threshold, highlighted in red at the top of the table, and notify the receiver every 24h until completed.
                   </span>
                 </div>
               )}
@@ -1977,7 +1977,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   type="button"
                   className={`btn-urgent-action ${isUrgentDraft ? 'btn-urgent-action--active' : ''}`}
                   onClick={handleUrgentButtonClick}
-                  title="Mark and submit query as URGENT (Immediate priority, no 48h delay threshold)"
+                  title="Mark and submit query as URGENT (Immediate priority, no 24h delay threshold)"
                   disabled={isSubmittingNew}
                 >
                   🚨 URGENT
@@ -2706,7 +2706,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   <span className="query-view-due-text">
                     {activeViewingQuery.isUrgent ? (
                       <span className="pill-urgent-badge-strong">
-                        🚨 Immediately Due (No 48h delay threshold)
+                        🚨 Immediately Due (No 24h delay threshold)
                       </span>
                     ) : activeViewingQuery.targetDueAt ? (
                       <>
@@ -2714,7 +2714,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <span className="pill-extended-badge">Extended</span>
                       </>
                     ) : (
-                      <>Standard: 48 hours from creation</>
+                      <>Standard: 24 hours from creation</>
                     )}
                   </span>
                 </div>

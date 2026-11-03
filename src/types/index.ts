@@ -120,7 +120,7 @@ export interface Query {
   extensionReviewNote?: string | null;
   extensionReviewedAt?: string | null;
   linkedAppointmentId?: string | null; // e.g. 'APT-001' if query was raised following an appointment
-  isUrgent?: boolean; // Flag indicating query is urgent (immediate response required, no 48h delay threshold)
+  isUrgent?: boolean; // Flag indicating query is urgent (immediate response required, no 24h delay threshold)
   lastUrgentReminderAtMs?: number | null; // Epoch ms of the latest 24h reminder notification sent to receiver
   attachments?: QueryAttachment[]; // Attached documents from user's device (sender)
   managerAttachments?: QueryAttachment[]; // Attached documents from receiving manager / solution
@@ -183,7 +183,7 @@ export interface Appointment {
   updatedAt?: string | null;
 }
 
-export const DELAY_THRESHOLD_MS = 48 * 60 * 60 * 1000; // 48 hours (172,800,000 ms)
+export const DELAY_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours (86,400,000 ms)
 
 export function isQueryDone(query: Query): boolean {
   return Boolean(query.managerDone && query.accountManagerDone);
@@ -232,7 +232,7 @@ export function getQueryTimestampMs(query: Query): number {
 /**
  * Returns the effective target completion deadline in epoch ms:
  * If an approved extension (or explicit targetDueAt) is set, returns targetDueAtMs.
- * Otherwise defaults to createdAt + 48 hours.
+ * Otherwise defaults to createdAt + 24 hours.
  */
 export function getQueryDeadlineMs(query: Query): number {
   if (
@@ -274,7 +274,7 @@ export function isQueryDelayed(
   query: Query,
   nowMs: number = Date.now()
 ): boolean {
-  // Urgent queries do not have a 48h delay threshold and are never classified as delayed
+  // Urgent queries do not have a 24h delay threshold and are never classified as delayed
   if (query.isUrgent) {
     return false;
   }
@@ -608,16 +608,16 @@ export function getLinkedQueryForAppointment(
 // Manager KPI Weighted Scoring Types
 // -----------------------------------------------------------------------------
 export type QueryKpiStatus =
-  | 'ON_TIME' // Completed on-time (<= 48h): +1.0 pt
-  | 'LATE' // Completed late (> 48h): +0.5 pt
-  | 'OVERDUE' // Open and overdue (> 48h): 0.0 pt
-  | 'IN_PROGRESS'; // Open and within 48h: Excluded from evaluation
+  | 'ON_TIME' // Completed on-time (<= 24h): +1.0 pt
+  | 'LATE' // Completed late (> 24h): +0.5 pt
+  | 'OVERDUE' // Open and overdue (> 24h): 0.0 pt
+  | 'IN_PROGRESS'; // Open and within 24h: Excluded from evaluation
 
 export interface EvaluatedQueryDetail {
   query: Query;
   status: QueryKpiStatus;
   points: number; // 1.0, 0.5, 0.0
-  isEvaluated: boolean; // false if in-progress (<48h)
+  isEvaluated: boolean; // false if in-progress (<24h)
   managerTurnaroundHours: number | null; // Hours from creation to manager done
   senderVerificationHours: number | null; // Hours from manager done to sender confirmation
 }
@@ -635,7 +635,7 @@ export interface ManagerKpiStats {
   onTimeCount: number; // +1.0
   lateCount: number; // +0.5
   overdueCount: number; // 0.0
-  inProgressCount: number; // excluded (<48h)
+  inProgressCount: number; // excluded (<24h)
   avgRating: number | null; // Average sender rating (1.0 to 5.0)
   totalRated: number; // Number of rated queries in window
   overallKpi: number; // Combined score: average of turnaround KPI and average rating percentage

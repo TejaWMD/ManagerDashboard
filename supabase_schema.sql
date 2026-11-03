@@ -136,13 +136,21 @@ WHERE manager_done = TRUE
   AND account_manager_done = TRUE
   AND completed_at_ms IS NULL;
 
--- Backfill is_delayed for existing rows (> 48 hours = 172,800,000 ms)
+-- Backfill is_delayed for existing rows (> 24 hours = 86,400,000 ms or target due date)
 UPDATE public.queries
 SET is_delayed = CASE
+  WHEN is_urgent = TRUE THEN FALSE
+  WHEN extension_status = 'APPROVED' AND target_due_at_ms IS NOT NULL AND target_due_at_ms > 0 THEN
+    CASE
+      WHEN manager_done = TRUE AND account_manager_done = TRUE THEN
+        (COALESCE(completed_at_ms, created_at_ms) > target_due_at_ms)
+      ELSE
+        (((EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT) > target_due_at_ms)
+    END
   WHEN manager_done = TRUE AND account_manager_done = TRUE THEN
-    ((COALESCE(completed_at_ms, created_at_ms) - created_at_ms) > 172800000)
+    ((COALESCE(completed_at_ms, created_at_ms) - created_at_ms) > 86400000)
   ELSE
-    (((EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT - created_at_ms) > 172800000)
+    (((EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT - created_at_ms) > 86400000)
 END;
 
 -- Indexes for fast filtering & metric calculations
@@ -152,16 +160,24 @@ CREATE INDEX IF NOT EXISTS idx_queries_created_at_ms ON public.queries(created_a
 CREATE INDEX IF NOT EXISTS idx_queries_status ON public.queries(status);
 CREATE INDEX IF NOT EXISTS idx_queries_is_delayed ON public.queries(is_delayed);
 
--- 3. Trigger to enforce query rules & delay calculations
+-- 3. Trigger to enforce query rules & delay calculations (24h threshold)
 CREATE OR REPLACE FUNCTION public.enforce_query_rules()
 RETURNS TRIGGER AS $$
 DECLARE
   now_ms BIGINT := (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT;
-  delay_threshold_ms BIGINT := 172800000; -- 48 hours
+  delay_threshold_ms BIGINT := 86400000; -- 24 hours
+  effective_deadline_ms BIGINT;
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     NEW.created_at := OLD.created_at;
     NEW.created_at_ms := OLD.created_at_ms;
+  END IF;
+
+  -- Determine effective deadline (approved extension target due date or created_at + 24 hours)
+  IF NEW.target_due_at_ms IS NOT NULL AND NEW.target_due_at_ms > 0 THEN
+    effective_deadline_ms := NEW.target_due_at_ms;
+  ELSE
+    effective_deadline_ms := NEW.created_at_ms + delay_threshold_ms;
   END IF;
 
   IF NEW.manager_done = FALSE THEN
@@ -189,7 +205,10 @@ BEGIN
       NEW.completed_at_ms := now_ms;
     END IF;
 
-    IF ((NEW.completed_at_ms - NEW.created_at_ms) > delay_threshold_ms)
+    -- Urgent queries are never marked delayed
+    IF NEW.is_urgent = TRUE THEN
+      NEW.is_delayed := FALSE;
+    ELSIF (NEW.completed_at_ms > effective_deadline_ms)
        OR (TG_OP = 'UPDATE' AND OLD.is_delayed = TRUE)
        OR (NEW.is_delayed = TRUE) THEN
       NEW.is_delayed := TRUE;
@@ -201,7 +220,12 @@ BEGIN
     NEW.completed_at := NULL;
     NEW.completed_at_ms := NULL;
 
-    IF ((now_ms - NEW.created_at_ms) > delay_threshold_ms) THEN
+    -- Open queries: urgent or active approved extensions within deadline are NOT delayed
+    IF NEW.is_urgent = TRUE THEN
+      NEW.is_delayed := FALSE;
+    ELSIF NEW.extension_status = 'APPROVED' AND effective_deadline_ms > 0 AND now_ms <= effective_deadline_ms THEN
+      NEW.is_delayed := FALSE;
+    ELSIF (now_ms > effective_deadline_ms) THEN
       NEW.is_delayed := TRUE;
     ELSE
       NEW.is_delayed := FALSE;
