@@ -16,6 +16,54 @@ import { AUTHORIZED_USERS } from '../data/users';
 export const ACTIVITIES_STORAGE_KEY = 'wm_portal_activities_v2';
 export const PRESENCE_STORAGE_KEY = 'wm_portal_presence_v2';
 
+const DB_ACTIVITIES_UNAVAILABLE_KEY = 'wm_portal_db_activities_missing';
+const DB_PRESENCE_UNAVAILABLE_KEY = 'wm_portal_db_presence_missing';
+
+let isActivitiesTableMissing: boolean = (() => {
+  try {
+    return sessionStorage.getItem(DB_ACTIVITIES_UNAVAILABLE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+})();
+
+let isPresenceTableMissing: boolean = (() => {
+  try {
+    return sessionStorage.getItem(DB_PRESENCE_UNAVAILABLE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+})();
+
+function markActivitiesTableMissing() {
+  isActivitiesTableMissing = true;
+  try {
+    sessionStorage.setItem(DB_ACTIVITIES_UNAVAILABLE_KEY, 'true');
+  } catch {
+    // Ignore
+  }
+}
+
+function markPresenceTableMissing() {
+  isPresenceTableMissing = true;
+  try {
+    sessionStorage.setItem(DB_PRESENCE_UNAVAILABLE_KEY, 'true');
+  } catch {
+    // Ignore
+  }
+}
+
+export function resetDbTableAvailability(): void {
+  isActivitiesTableMissing = false;
+  isPresenceTableMissing = false;
+  try {
+    sessionStorage.removeItem(DB_ACTIVITIES_UNAVAILABLE_KEY);
+    sessionStorage.removeItem(DB_PRESENCE_UNAVAILABLE_KEY);
+  } catch {
+    // Ignore
+  }
+}
+
 export function detectDeviceType(): 'desktop' | 'mobile' | 'tablet' {
   if (typeof navigator === 'undefined') return 'desktop';
   const ua = navigator.userAgent;
@@ -225,30 +273,38 @@ export async function logUserActivity(payload: {
   safeBroadcast('user_activity', activity);
 
   // 4. Optional DB insert if table exists
-  try {
-    supabase
-      .from('user_activities')
-      .insert({
-        id: activity.id,
-        user_id: activity.userId,
-        user_name: activity.userName,
-        user_email: activity.userEmail,
-        user_role: activity.userRole,
-        action_type: activity.actionType,
-        action_title: activity.actionTitle,
-        action_details: activity.actionDetails,
-        target_id: activity.targetId,
-        target_type: activity.targetType,
-        device_type: activity.deviceType,
-        created_at: activity.createdAt,
-        created_at_ms: activity.createdAtMs,
-      })
-      .then(
-        () => {},
-        () => {}
-      );
-  } catch {
-    // Silent
+  if (!isActivitiesTableMissing) {
+    try {
+      supabase
+        .from('user_activities')
+        .insert({
+          id: activity.id,
+          user_id: activity.userId,
+          user_name: activity.userName,
+          user_email: activity.userEmail,
+          user_role: activity.userRole,
+          action_type: activity.actionType,
+          action_title: activity.actionTitle,
+          action_details: activity.actionDetails,
+          target_id: activity.targetId,
+          target_type: activity.targetType,
+          device_type: activity.deviceType,
+          created_at: activity.createdAt,
+          created_at_ms: activity.createdAtMs,
+        })
+        .then(
+          ({ error }) => {
+            if (error && (error.code === 'PGRST205' || error.message?.includes('schema cache'))) {
+              markActivitiesTableMissing();
+            }
+          },
+          () => {
+            markActivitiesTableMissing();
+          }
+        );
+    } catch {
+      markActivitiesTableMissing();
+    }
   }
 
   return activity;
@@ -310,27 +366,35 @@ export async function updateUserPresence(
   safeBroadcast('user_presence', presence);
 
   // 4. Optional DB write
-  try {
-    supabase
-      .from('user_presence')
-      .upsert({
-        user_id: presence.userId,
-        user_name: presence.userName,
-        user_email: presence.userEmail,
-        user_role: presence.userRole,
-        current_page: presence.currentPage,
-        current_action: presence.currentAction,
-        device_type: presence.deviceType,
-        last_seen_at: presence.lastSeenAt,
-        last_seen_at_ms: presence.lastSeenAtMs,
-        is_online: true,
-      })
-      .then(
-        () => {},
-        () => {}
-      );
-  } catch {
-    // Silent
+  if (!isPresenceTableMissing) {
+    try {
+      supabase
+        .from('user_presence')
+        .upsert({
+          user_id: presence.userId,
+          user_name: presence.userName,
+          user_email: presence.userEmail,
+          user_role: presence.userRole,
+          current_page: presence.currentPage,
+          current_action: presence.currentAction,
+          device_type: presence.deviceType,
+          last_seen_at: presence.lastSeenAt,
+          last_seen_at_ms: presence.lastSeenAtMs,
+          is_online: true,
+        })
+        .then(
+          ({ error }) => {
+            if (error && (error.code === 'PGRST205' || error.message?.includes('schema cache'))) {
+              markPresenceTableMissing();
+            }
+          },
+          () => {
+            markPresenceTableMissing();
+          }
+        );
+    } catch {
+      markPresenceTableMissing();
+    }
   }
 }
 
@@ -447,19 +511,25 @@ export async function fetchRecentActivitiesFromDb(
   const synthesized = synthesizeHistoricalActivities(existingQueries, existingAppointments);
 
   // Attempt to check if DB table exists (optional)
-  try {
-    const { data, error } = await supabase
-      .from('user_activities')
-      .select('*')
-      .order('created_at_ms', { ascending: false })
-      .limit(80);
+  if (!isActivitiesTableMissing) {
+    try {
+      const { data, error } = await supabase
+        .from('user_activities')
+        .select('*')
+        .order('created_at_ms', { ascending: false })
+        .limit(80);
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const dbActivities = data.map((row) => mapRowToActivity(row as ActivityRow));
-      return mergeUniqueActivities(dbActivities, localLogged, synthesized);
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          markActivitiesTableMissing();
+        }
+      } else if (Array.isArray(data) && data.length > 0) {
+        const dbActivities = data.map((row) => mapRowToActivity(row as ActivityRow));
+        return mergeUniqueActivities(dbActivities, localLogged, synthesized);
+      }
+    } catch {
+      markActivitiesTableMissing();
     }
-  } catch {
-    // Silent
   }
 
   return mergeUniqueActivities(localLogged, synthesized);
@@ -481,19 +551,25 @@ function mergeUniqueActivities(...lists: UserActivity[][]): UserActivity[] {
 
 export async function fetchUserPresencesFromDb(): Promise<Record<string, UserPresence>> {
   const cached = readCachedPresences();
-  try {
-    const { data, error } = await supabase.from('user_presence').select('*');
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const map: Record<string, UserPresence> = { ...cached };
-      data.forEach((row) => {
-        const pres = mapRowToPresence(row as PresenceRow);
-        map[pres.userId] = pres;
-      });
-      writeCachedPresences(map);
-      return map;
+  if (!isPresenceTableMissing) {
+    try {
+      const { data, error } = await supabase.from('user_presence').select('*');
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          markPresenceTableMissing();
+        }
+      } else if (!error && Array.isArray(data) && data.length > 0) {
+        const map: Record<string, UserPresence> = { ...cached };
+        data.forEach((row) => {
+          const pres = mapRowToPresence(row as PresenceRow);
+          map[pres.userId] = pres;
+        });
+        writeCachedPresences(map);
+        return map;
+      }
+    } catch {
+      markPresenceTableMissing();
     }
-  } catch {
-    // Silent
   }
   return cached;
 }

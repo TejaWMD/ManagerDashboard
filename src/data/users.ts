@@ -119,7 +119,7 @@ export const AUTHORIZED_USERS: UserAccount[] = [
   {
     id: 'adm-2',
     name: 'Teja',
-    email: 'admin2@gmail.com',
+    email: 'wmgteja@gmail.com',
     password: '981834',
     role: 'admin',
     roleLabel: 'Admin',
@@ -153,6 +153,27 @@ export const ROLE_META: Record<
   },
 };
 
+export const CUSTOM_USERS_STORAGE_KEY = 'wm_portal_custom_users_v1';
+
+export function getStoredCustomUsers(): UserAccount[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_USERS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveStoredCustomUser(user: UserAccount): void {
+  try {
+    const existing = getStoredCustomUsers();
+    const filtered = existing.filter((u) => u.email.toLowerCase() !== user.email.toLowerCase());
+    localStorage.setItem(CUSTOM_USERS_STORAGE_KEY, JSON.stringify([...filtered, user]));
+  } catch {
+    // ignore
+  }
+}
+
 export function authenticateUser(
   emailInput: string,
   passwordInput: string,
@@ -161,33 +182,77 @@ export function authenticateUser(
   const normalizedEmail = emailInput.trim().toLowerCase();
   const trimmedPassword = passwordInput.trim();
 
+  // 1. Check predefined authorized users
   const matchedUser = AUTHORIZED_USERS.find(
     (u) => u.email.toLowerCase() === normalizedEmail
   );
 
-  if (!matchedUser) {
+  if (matchedUser) {
+    if (matchedUser.role !== selectedRole) {
+      return {
+        success: false,
+        error: `Please select the ${matchedUser.roleLabel} tab to sign in with this account.`,
+      };
+    }
+
+    if (matchedUser.password !== trimmedPassword) {
+      return {
+        success: false,
+        error: 'Invalid password.',
+      };
+    }
+
     return {
-      success: false,
-      error: 'Email not found.',
+      success: true,
+      user: matchedUser,
     };
   }
 
-  if (matchedUser.role !== selectedRole) {
+  // 2. Check previously saved custom users
+  const customUsers = getStoredCustomUsers();
+  const matchedCustom = customUsers.find(
+    (u) => u.email.toLowerCase() === normalizedEmail
+  );
+
+  if (matchedCustom) {
+    if (matchedCustom.role !== selectedRole) {
+      return {
+        success: false,
+        error: `Please select the ${matchedCustom.roleLabel} tab to sign in with this account.`,
+      };
+    }
+    if (matchedCustom.password !== trimmedPassword) {
+      return {
+        success: false,
+        error: 'Invalid password.',
+      };
+    }
     return {
-      success: false,
-      error: `Please select the ${matchedUser.roleLabel} tab to sign in with this account.`,
+      success: true,
+      user: matchedCustom,
     };
   }
 
-  if (matchedUser.password !== trimmedPassword) {
-    return {
-      success: false,
-      error: 'Invalid password.',
-    };
-  }
+  // 3. Allow signing in with a new / different email on the fly
+  const roleMeta = ROLE_META[selectedRole];
+  const nameFromEmail = normalizedEmail.split('@')[0];
+  const capitalizedName =
+    nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
+  const newAccount: UserAccount = {
+    id: `custom-usr-${Date.now()}`,
+    name: capitalizedName,
+    email: normalizedEmail,
+    password: trimmedPassword,
+    role: selectedRole,
+    roleLabel: roleMeta.title,
+    avatarInitials: capitalizedName.substring(0, 2).toUpperCase(),
+    phone: '',
+  };
+
+  saveStoredCustomUser(newAccount);
 
   return {
     success: true,
-    user: matchedUser,
+    user: newAccount,
   };
 }

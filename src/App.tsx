@@ -17,7 +17,7 @@ import {
   UserActivity,
   UserPresence,
 } from './types';
-import { AUTHORIZED_USERS } from './data/users';
+import { AUTHORIZED_USERS, getStoredCustomUsers } from './data/users';
 import { INITIAL_QUERIES } from './data/initialQueries';
 import {
   QueryRow,
@@ -89,6 +89,8 @@ import { TrackingPage } from './components/TrackingPage/TrackingPage';
 import { BookAppointmentModal } from './components/Appointments/BookAppointmentModal';
 import { RescheduleAppointmentModal } from './components/Appointments/RescheduleAppointmentModal';
 import { NotificationModal } from './components/NotificationModal/NotificationModal';
+import { MyTrello } from './components/MyTrello/MyTrello';
+import { AdminTrello } from './components/AdminTrello/AdminTrello';
 import sqlSchemaText from '../supabase_schema.sql?raw';
 import './App.css';
 
@@ -123,13 +125,10 @@ export const App: React.FC = () => {
       const saved = sessionStorage.getItem(STORAGE_KEY_SESSION);
       if (!saved) return null;
       const parsed = JSON.parse(saved) as UserAccount;
-      const verified = AUTHORIZED_USERS.find(
-        (u) =>
-          u.email.toLowerCase() === parsed.email.toLowerCase() &&
-          u.password === parsed.password &&
-          u.role === parsed.role
-      );
-      return verified || null;
+      if (parsed && parsed.email) {
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -137,7 +136,17 @@ export const App: React.FC = () => {
 
   const [activePage, setActivePage] = useState<PageView>('home');
   const [tvMode, setTvMode] = useState<boolean>(false);
-  const [allUsers, setAllUsers] = useState<UserAccount[]>(AUTHORIZED_USERS);
+  const [allUsers, setAllUsers] = useState<UserAccount[]>(() => {
+    const custom = getStoredCustomUsers();
+    const map = new Map<string, UserAccount>();
+    AUTHORIZED_USERS.forEach((u) => map.set(u.email.toLowerCase(), u));
+    custom.forEach((u) => {
+      if (!map.has(u.email.toLowerCase())) {
+        map.set(u.email.toLowerCase(), u);
+      }
+    });
+    return Array.from(map.values());
+  });
   const [isNotifModalOpen, setIsNotifModalOpen] = useState<boolean>(false);
 
   const [queries, setQueries] = useState<Query[]>(INITIAL_QUERIES);
@@ -176,6 +185,18 @@ export const App: React.FC = () => {
       }
     });
   }, []);
+
+  // Protect My Trello access: Only Account Managers and Admins allowed
+  useEffect(() => {
+    if (
+      activePage === 'my-trello' &&
+      currentUser &&
+      currentUser.role !== 'admin' &&
+      currentUser.role !== 'account_manager'
+    ) {
+      setActivePage('home');
+    }
+  }, [activePage, currentUser]);
 
   // Monitor for SLA delay breaches and urgent 24h reminders and dispatch push notifications
   useEffect(() => {
@@ -795,6 +816,12 @@ export const App: React.FC = () => {
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
+    setAllUsers((prev) => {
+      if (prev.some((u) => u.email.toLowerCase() === user.email.toLowerCase())) {
+        return prev;
+      }
+      return [...prev, user];
+    });
     setActivePage('home');
     try {
       sessionStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(user));
@@ -1924,6 +1951,37 @@ export const App: React.FC = () => {
               onNavigate={setActivePage}
               onRefresh={handleRefresh}
               isRefreshing={isRefreshing}
+            />
+          ) : activePage === 'my-trello' && (currentUser.role === 'admin' || currentUser.role === 'account_manager') ? (
+            <MyTrello
+              currentUser={currentUser}
+              onLogActivity={(title, details) => {
+                logUserActivity({
+                  userId: currentUser.id,
+                  userName: currentUser.name,
+                  userEmail: currentUser.email,
+                  userRole: currentUser.role,
+                  actionType: 'PAGE_VIEW',
+                  actionTitle: title,
+                  actionDetails: details,
+                });
+              }}
+            />
+          ) : activePage === 'admin-trello' ? (
+            <AdminTrello
+              currentUser={currentUser}
+              allUsers={allUsers}
+              onLogActivity={(title, details) => {
+                logUserActivity({
+                  userId: currentUser.id,
+                  userName: currentUser.name,
+                  userEmail: currentUser.email,
+                  userRole: currentUser.role,
+                  actionType: 'PAGE_VIEW',
+                  actionTitle: title,
+                  actionDetails: details,
+                });
+              }}
             />
           ) : (
             <QueryPage

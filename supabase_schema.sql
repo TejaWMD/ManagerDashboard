@@ -33,7 +33,7 @@ VALUES
   ('mgr-6', 'Usha', 'wmdusha@gmail.com', 'manager', 'Manager', 'US', NULL),
   ('mgr-7', 'Muttha', 'wmgmuttha@gmail.com', 'manager', 'Manager', 'MT', NULL),
   ('adm-1', 'Mani', 'admin1@gmail.com', 'admin', 'Admin', 'MN', '+601157350949'),
-  ('adm-2', 'Teja', 'admin2@gmail.com', 'admin', 'Admin', 'TJ', NULL)
+  ('adm-2', 'Teja', 'wmgteja@gmail.com', 'admin', 'Admin', 'TJ', NULL)
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   email = EXCLUDED.email,
@@ -432,3 +432,40 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.user_presence;
   END IF;
 END $$;
+
+-- ============================================================================
+-- 5. Trello Integration Tables
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.user_trello_integrations (
+  user_id TEXT PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+  trello_member_id TEXT NOT NULL,
+  trello_username TEXT NOT NULL,
+  trello_full_name TEXT NOT NULL,
+  trello_email TEXT DEFAULT NULL,
+  trello_avatar_url TEXT DEFAULT NULL,
+  trello_token TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.user_trello_integrations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow full access to user_trello_integrations" ON public.user_trello_integrations;
+CREATE POLICY "Allow full access to user_trello_integrations"
+  ON public.user_trello_integrations FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- System Settings table (for storing Trello API Key or global configuration)
+CREATE TABLE IF NOT EXISTS public.system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow full access to system_settings" ON public.system_settings;
+CREATE POLICY "Allow full access to system_settings"
+  ON public.system_settings FOR ALL
+  USING (true)
+  WITH CHECK (true);

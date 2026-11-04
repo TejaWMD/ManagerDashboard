@@ -176,6 +176,46 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
+        {(currentUser.role === 'admin' || currentUser.role === 'account_manager') && (
+          <button
+            type="button"
+            className={`sidebar-link-btn ${
+              activePage === 'my-trello' ? 'sidebar-link-btn--active' : ''
+            }`}
+            onClick={() => onNavigate('my-trello')}
+            title="My Trello Boards & Reports"
+          >
+            <svg
+              className="sidebar-nav-icon"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M19.5 2h-15A2.5 2.5 0 0 0 2 4.5v15A2.5 2.5 0 0 0 4.5 22h15a2.5 2.5 0 0 0 2.5-2.5v-15A2.5 2.5 0 0 0 19.5 2zm-9 14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v10zm8-5a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v5z" />
+            </svg>
+            {!isCollapsed && <span className="sidebar-link-text">My Trello</span>}
+          </button>
+        )}
+
+        {currentUser.role === 'admin' && (
+          <button
+            type="button"
+            className={`sidebar-link-btn ${
+              activePage === 'admin-trello' ? 'sidebar-link-btn--active' : ''
+            }`}
+            onClick={() => onNavigate('admin-trello')}
+            title="Trello Team Management & Reports"
+          >
+            <svg
+              className="sidebar-nav-icon"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M19.5 2h-15A2.5 2.5 0 0 0 2 4.5v15A2.5 2.5 0 0 0 4.5 22h15a2.5 2.5 0 0 0 2.5-2.5v-15A2.5 2.5 0 0 0 19.5 2zm-9 14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v10zm8-5a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v5z" />
+            </svg>
+            {!isCollapsed && <span className="sidebar-link-text">Trello (Team)</span>}
+          </button>
+        )}
+
         {onOpenNotifications && (
           <button
             type="button"

@@ -1,6 +1,73 @@
 export type UserRole = 'account_manager' | 'manager' | 'admin';
 
-export type PageView = 'home' | 'queries' | 'kpi' | 'tracking';
+export type PageView = 'home' | 'queries' | 'kpi' | 'tracking' | 'my-trello' | 'admin-trello';
+
+export interface UserTrelloIntegration {
+  userId: string;
+  trelloMemberId: string;
+  trelloUsername: string;
+  trelloFullName: string;
+  trelloEmail?: string;
+  trelloAvatarUrl?: string;
+  trelloToken: string;
+  updatedAt: string;
+}
+
+export interface TrelloBoard {
+  id: string;
+  name: string;
+  desc?: string;
+  url: string;
+  closed?: boolean;
+}
+
+export interface TrelloList {
+  id: string;
+  name: string;
+  closed?: boolean;
+  idBoard: string;
+}
+
+export interface TrelloCardLabel {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface TrelloCard {
+  id: string;
+  name: string;
+  desc?: string;
+  idList: string;
+  idBoard: string;
+  due?: string | null;
+  dueComplete?: boolean;
+  idMembers?: string[];
+  labels?: TrelloCardLabel[];
+  shortUrl?: string;
+  dateLastActivity?: string;
+}
+
+export interface TrelloCardAction {
+  id: string;
+  idMemberCreator: string;
+  type: string;
+  date: string;
+  data: {
+    text?: string;
+    card?: { id: string; name: string };
+    board?: { id: string; name: string };
+    list?: { id: string; name: string };
+    listBefore?: { id: string; name: string };
+    listAfter?: { id: string; name: string };
+  };
+  memberCreator?: {
+    id: string;
+    username: string;
+    fullName: string;
+    avatarUrl?: string;
+  };
+}
 
 export type ActivityActionType =
   | 'QUERY_CREATED'
