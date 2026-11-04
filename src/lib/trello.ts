@@ -11,6 +11,10 @@ const LOCAL_STORAGE_API_KEY = 'wm_portal_trello_api_key_v1';
 const LOCAL_STORAGE_INTEGRATION_PREFIX = 'wm_portal_trello_user_';
 const LOCAL_STORAGE_DEFAULT_TOKEN = 'wm_portal_trello_default_token';
 
+export const DEFAULT_TRELLO_API_KEY = '37488d863baa1417dafd9951a2556200';
+export const DEFAULT_TRELLO_TOKEN =
+  'ATTA4ff280f13a4adab3cfd1f540cdd0b8356cd0cb64f32daa3837911da811e3b613B810A599';
+
 export function getTrelloApiKey(): string {
   const envKey = (import.meta.env.VITE_TRELLO_API_KEY || '').trim();
   if (envKey) return envKey;
@@ -20,7 +24,7 @@ export function getTrelloApiKey(): string {
   } catch {
     // ignore
   }
-  return '';
+  return DEFAULT_TRELLO_API_KEY;
 }
 
 export function getTrelloDefaultToken(): string {
@@ -32,7 +36,7 @@ export function getTrelloDefaultToken(): string {
   } catch {
     // ignore
   }
-  return '';
+  return DEFAULT_TRELLO_TOKEN;
 }
 
 export function isValidTrelloToken(
@@ -176,9 +180,10 @@ export async function loadTrelloApiKeyFromDb(): Promise<string> {
   return '';
 }
 
-export function getTrelloAuthUrl(apiKey: string): string {
+export function getTrelloAuthUrl(apiKey?: string): string {
+  const activeKey = (apiKey || '').trim() || getTrelloApiKey();
   const appName = encodeURIComponent('WMD Manager Dashboard');
-  return `https://trello.com/1/authorize?expiration=never&name=${appName}&scope=read,write&response_type=token&key=${apiKey}`;
+  return `https://trello.com/1/authorize?expiration=never&name=${appName}&scope=read,write&response_type=token&key=${activeKey}`;
 }
 
 export interface TrelloMemberProfile {
