@@ -3039,3 +3039,34 @@
     flex: 1 1 100%;
   }
 }
+
+/* Fix for New Query Modal Top Grid Overflow */
+.query-modal-top-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  /* NEW: Ensure the grid itself doesn't overflow its parent */
+  width: 100%;
+  min-width: 0;
+}
+
+.query-modal-top-grid > .cp-form-group {
+  /* NEW: Force grid items to shrink below their content size */
+  min-width: 0;
+  width: 100%;
+}
+
+/* Ensure the select dropdown wraps text instead of pushing the container */
+.query-modal-top-grid select {
+  width: 100%;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .query-modal-top-grid {
+    grid-template-columns: 1fr;
+  }
+}

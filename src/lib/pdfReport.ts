@@ -1,15 +1,6 @@
 import jsPDF from 'jspdf';
-import {
-  Query,
-  isQueryDelayed,
-  isQueryDone,
-  UserAccount,
-} from '../types';
-import {
-  calculateAllManagersKpi,
-  filterQueriesByWindow,
-  KpiTimeWindow,
-} from './kpi';
+import { Query, isQueryDelayed, isQueryDone, UserAccount } from '../types';
+import { calculateAllManagersKpi, filterQueriesByWindow, KpiTimeWindow } from './kpi';
 import { formatDate } from './dateUtils';
 
 export interface GenerateWeeklyReportOptions {
@@ -20,11 +11,7 @@ export interface GenerateWeeklyReportOptions {
   timeWindow?: KpiTimeWindow;
 }
 
-/**
- * Generates an executive-ready 2-page Portrait PDF report designed for Director-level review.
- * Page 1: Executive Overview, Team Benchmarks, and Manager Leaderboard.
- * Page 2: Individual Manager Performance Cards, General Overdue Watchlist, and SLA Extension Tracking.
- */
+/** Executive-grade 2-page A4 portrait KPI report. */
 export function generateWeeklyManagerReportPdf({
   queries,
   managers,
@@ -32,988 +19,643 @@ export function generateWeeklyManagerReportPdf({
   nowMs = Date.now(),
   timeWindow = '7d',
 }: GenerateWeeklyReportOptions): void {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // ── Layout constants ────────────────────────────────────────────────────
+  const PAGE_W = 210;
+  const M = 14;
+  const CW = PAGE_W - M * 2; // 182
+  const FOOTER_Y = 284;
+
+  // ── Palette (single source of truth) ────────────────────────────────────
+  const C = {
+    brandOrange: [214, 116, 43] as RGB,
+    brandDark: [37, 26, 10] as RGB,
+    slate: {
+      900: [15, 23, 42] as RGB,
+      800: [30, 41, 59] as RGB,
+      700: [51, 65, 85] as RGB,
+      500: [100, 116, 139] as RGB,
+      400: [148, 163, 184] as RGB,
+      300: [203, 213, 225] as RGB,
+      200: [226, 232, 240] as RGB,
+      100: [241, 245, 249] as RGB,
+      50: [248, 250, 252] as RGB,
+    },
+    green: [16, 185, 129] as RGB,
+    greenBg: [236, 253, 245] as RGB,
+    amber: [217, 119, 6] as RGB,
+    amberBg: [254, 243, 199] as RGB,
+    red: [220, 38, 38] as RGB,
+    redBg: [254, 242, 242] as RGB,
+    blue: [14, 165, 233] as RGB,
+    blueBg: [240, 249, 255] as RGB,
+    white: [255, 255, 255] as RGB,
+  };
+  type RGB = [number, number, number];
+
+  // ── Primitives ─────────────────────────────────────────────────────────
+  const fill = (c: RGB) => doc.setFillColor(c[0], c[1], c[2]);
+  const stroke = (c: RGB, w = 0.3) => {
+    doc.setDrawColor(c[0], c[1], c[2]);
+    doc.setLineWidth(w);
+  };
+  const text = (
+    s: string,
+    x: number,
+    y: number,
+    opts: { size?: number; bold?: boolean; color?: RGB; align?: 'left' | 'center' | 'right' } = {},
+  ) => {
+    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+    doc.setFontSize(opts.size ?? 7);
+    const col = opts.color ?? C.slate[900];
+    doc.setTextColor(col[0], col[1], col[2]);
+    doc.text(s, x, y, { align: opts.align ?? 'left' });
+  };
+  const box = (x: number, y: number, w: number, h: number, opts: { fill?: RGB; stroke?: RGB; r?: number } = {}) => {
+    if (opts.fill) fill(opts.fill);
+    if (opts.stroke) stroke(opts.stroke);
+    const r = opts.r ?? 1.2;
+    doc.roundedRect(x, y, w, h, r, r, opts.fill && opts.stroke ? 'FD' : opts.fill ? 'F' : 'S');
+  };
+  const kpiColorFor = (v: number) => (v >= 85 ? C.green : v >= 70 ? C.amber : C.red);
+  const kpiBgFor = (v: number) => (v >= 85 ? C.greenBg : v >= 70 ? C.amberBg : C.redBg);
+  const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+  // ── Chrome (top accent, footer) ────────────────────────────────────────
+  const drawChrome = () => {
+    fill(C.brandOrange); doc.rect(0, 0, PAGE_W, 4, 'F');
+    fill(C.brandDark); doc.rect(0, 4, PAGE_W, 1.2, 'F');
+  };
+  const drawFooter = (page: number, total: number) => {
+    stroke(C.slate[300]); doc.line(M, FOOTER_Y, PAGE_W - M, FOOTER_Y);
+    const fy = FOOTER_Y + 4.5;
+    text('CONFIDENTIAL & PROPRIETARY · WMD MANAGEMENT', M, fy, { size: 6.5, color: C.slate[500] });
+    text(`Page ${page} of ${total}`, PAGE_W / 2, fy, { size: 6.5, color: C.slate[500], align: 'center' });
+    text('WMD Manager Portal System', PAGE_W - M, fy, { size: 6.5, color: C.slate[500], align: 'right' });
+  };
+
+  // ── Aggregate metrics ──────────────────────────────────────────────────
+  const { stats, teamAverageKpi, teamAverageRating } = calculateAllManagersKpi(queries, managers, {
+    window: timeWindow,
+    nowMs,
   });
-
-  const pageWidth = 210;
-  const margin = 14;
-  const contentWidth = pageWidth - margin * 2; // 182 mm
-  const footerY = 284;
-
-  // 1. Calculate KPI data using the official weighted scoring system
-  const { stats, teamAverageKpi, teamAverageRating } = calculateAllManagersKpi(
-    queries,
-    managers,
-    { window: timeWindow, nowMs }
-  );
-
-  // Scoped queries in the selected time window (with anti-cheat overdue carry-over)
   const windowQueries = filterQueriesByWindow(queries, timeWindow, nowMs);
 
-  // Calculate team-level aggregate volume metrics
   const totalReceived = windowQueries.length;
-  const totalCompleted = windowQueries.filter((q) => isQueryDone(q)).length;
+  const totalCompleted = windowQueries.filter(isQueryDone).length;
   const totalDelayed = windowQueries.filter((q) => isQueryDelayed(q, nowMs)).length;
   const overdueActive = windowQueries.filter((q) => isQueryDelayed(q, nowMs) && !isQueryDone(q));
 
-  const totalOnTime = stats.reduce((sum, s) => sum + s.onTimeCount, 0);
-  const totalLate = stats.reduce((sum, s) => sum + s.lateCount, 0);
-  const totalOverdue = stats.reduce((sum, s) => sum + s.overdueCount, 0);
-  const totalInProgress = stats.reduce((sum, s) => sum + s.inProgressCount, 0);
+  const sum = (k: keyof (typeof stats)[number]) => stats.reduce((a, s) => a + (s[k] as number), 0);
+  const totalOnTime = sum('onTimeCount');
+  const totalLate = sum('lateCount');
+  const totalOverdue = sum('overdueCount');
+  const totalInProgress = sum('inProgressCount');
   const totalEvaluated = totalOnTime + totalLate + totalOverdue;
-  const totalPoints = stats.reduce((sum, s) => sum + s.earnedPoints, 0);
+  const totalPoints = sum('earnedPoints');
+  const totalRatings = sum('totalRated');
 
-  const teamTurnaroundKpi =
-    totalEvaluated > 0 ? Math.round((totalPoints / totalEvaluated) * 100) : 0;
+  const teamTurnaroundKpi = totalEvaluated > 0 ? Math.round((totalPoints / totalEvaluated) * 100) : 0;
+  const teamSlaRate = totalCompleted > 0 ? Math.min(100, Math.round((totalOnTime / totalCompleted) * 100)) : 100;
 
-  const teamSlaComplianceRate =
-    totalCompleted > 0 ? Math.min(100, Math.round((totalOnTime / totalCompleted) * 100)) : 100;
-
-  // Turnaround hours average across all evaluated manager queries
-  const allTurnaroundTimes: number[] = [];
-  stats.forEach((s) => {
-    s.evaluatedQueries.forEach((eq) => {
-      if (eq.managerTurnaroundHours !== null) {
-        allTurnaroundTimes.push(eq.managerTurnaroundHours);
-      }
-    });
-  });
-  const teamAvgTurnaroundHours =
-    allTurnaroundTimes.length > 0
-      ? Math.round(
-          (allTurnaroundTimes.reduce((acc, v) => acc + v, 0) /
-            allTurnaroundTimes.length) *
-            10
-        ) / 10
+  const turnaroundSamples = stats.flatMap((s) =>
+    s.evaluatedQueries.map((e) => e.managerTurnaroundHours).filter((v): v is number => v !== null),
+  );
+  const teamAvgTurnaround =
+    turnaroundSamples.length > 0
+      ? Math.round((turnaroundSamples.reduce((a, v) => a + v, 0) / turnaroundSamples.length) * 10) / 10
       : null;
 
-  // Total ratings count across team
-  const totalRatingsCount = stats.reduce((sum, s) => sum + s.totalRated, 0);
+  const ext = {
+    requested: windowQueries.filter((q) => q.extensionStatus && q.extensionStatus !== 'NONE').length,
+    approved: windowQueries.filter((q) => q.extensionStatus === 'APPROVED').length,
+    pending: windowQueries.filter((q) => q.extensionStatus === 'PENDING').length,
+  };
 
-  // SLA Extensions statistics
-  const extensionsRequested = windowQueries.filter((q) => Boolean(q.extensionStatus && q.extensionStatus !== 'NONE')).length;
-  const extensionsApproved = windowQueries.filter((q) => q.extensionStatus === 'APPROVED').length;
-  const extensionsPending = windowQueries.filter((q) => q.extensionStatus === 'PENDING').length;
-
-  // Date and Time labels
+  // ── Period labels (collapsed switch) ───────────────────────────────────
   const formattedNow = formatDate(nowMs);
-  const formattedTime = new Date(nowMs).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const timeNow = new Date(nowMs).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const periodMeta: Record<string, { label: string; days?: number }> = {
+    '7d': { label: 'Weekly Briefing (7-Day Rolling)', days: 7 },
+    '14d': { label: 'Bi-Weekly Briefing (14 Days)', days: 14 },
+    '30d': { label: 'Monthly Operations Review (30 Days)', days: 30 },
+    all: { label: 'All-Time Cumulative Review' },
+  };
+  const pm = periodMeta[timeWindow] ?? periodMeta['7d'];
+  const dateRange = pm.days
+    ? `Period: ${formatDate(nowMs - pm.days * 864e5)} to ${formattedNow}`
+    : `Cumulative Overview up to ${formattedNow}`;
 
-  let periodLabel = 'Last 7 Days (Weekly Review)';
-  let dateRangeSubtitle = '';
-  if (timeWindow === '7d') {
-    const startMs = nowMs - 7 * 24 * 60 * 60 * 1000;
-    const startStr = formatDate(startMs);
-    periodLabel = 'Weekly Briefing (7-Day Rolling)';
-    dateRangeSubtitle = `Period: ${startStr} – ${formattedNow}`;
-  } else if (timeWindow === '14d') {
-    const startMs = nowMs - 14 * 24 * 60 * 60 * 1000;
-    const startStr = formatDate(startMs);
-    periodLabel = 'Bi-Weekly Briefing (14 Days)';
-    dateRangeSubtitle = `Period: ${startStr} – ${formattedNow}`;
-  } else if (timeWindow === '30d') {
-    const startMs = nowMs - 30 * 24 * 60 * 60 * 1000;
-    const startStr = formatDate(startMs);
-    periodLabel = 'Monthly Operations Review (30 Days)';
-    dateRangeSubtitle = `Period: ${startStr} – ${formattedNow}`;
-  } else {
-    periodLabel = 'All-Time Cumulative Review';
-    dateRangeSubtitle = `Cumulative Overview up to ${formattedNow}`;
-  }
+  // ══════════════════════════════════════════════════════════════════════
+  // PAGE 1
+  // ══════════════════════════════════════════════════════════════════════
+  drawChrome();
+  let y = 13.5;
 
-  // Brand Palette Constants (RGB)
-  const COLOR_BRAND_ORANGE = [214, 116, 43]; // #D6742B Warm Spice Orange
-  const COLOR_BRAND_DARK = [37, 26, 10]; // #251A0A Russet Dark Slate
-  const COLOR_SLATE_900 = [15, 23, 42]; // #0F172A
-  const COLOR_SLATE_700 = [51, 65, 85]; // #334155
-  const COLOR_SLATE_500 = [100, 116, 139]; // #64748B
-  const COLOR_SLATE_300 = [203, 213, 225]; // #CBD5E1
-  const COLOR_GREEN = [16, 185, 129]; // #10B981
-  const COLOR_AMBER = [217, 119, 6]; // #D97706
-  const COLOR_RED = [220, 38, 38]; // #DC2626
-  const COLOR_BLUE = [14, 165, 233]; // #0EA5E9
+  text('WMD OPERATIONS & SERVICE MANAGEMENT', M, y, { size: 8, bold: true, color: C.brandOrange });
+  text('Weekly Executive Manager KPI Report', M, (y += 5.5), { size: 14.5, bold: true });
+  text(`${pm.label}  |  ${dateRange}`, M, (y += 4.5), { size: 8, color: C.slate[500] });
 
-  // ===========================================================================
-  // PAGE 1: EXECUTIVE KPI SUMMARY & MANAGER LEADERBOARD
-  // ===========================================================================
+  // Metadata card (right-aligned)
+  const metaW = 62, metaX = PAGE_W - M - metaW;
+  box(metaX, 10, metaW, 17, { fill: C.slate[50], stroke: C.slate[300], r: 1.5 });
+  const mc = metaX + metaW / 2;
+  text('WEEKLY EXECUTIVE AUDIT', mc, 14, { size: 6.8, bold: true, color: C.slate[700], align: 'center' });
+  [
+    `Generated: ${formattedNow} ${timeNow}`,
+    `Admin: ${adminUser.name} (${adminUser.roleLabel ?? 'Admin'})`,
+    `Scope: ${stats.length} Managers · ${totalReceived} Queries`,
+  ].forEach((line, i) => text(line, mc, 17.8 + i * 3.4, { size: 6.2, color: C.slate[500], align: 'center' }));
 
-  // Top Accent Stripes
-  doc.setFillColor(COLOR_BRAND_ORANGE[0], COLOR_BRAND_ORANGE[1], COLOR_BRAND_ORANGE[2]);
-  doc.rect(0, 0, pageWidth, 4, 'F');
-  doc.setFillColor(COLOR_BRAND_DARK[0], COLOR_BRAND_DARK[1], COLOR_BRAND_DARK[2]);
-  doc.rect(0, 4, pageWidth, 1.2, 'F');
+  stroke(C.slate[300], 0.4);
+  doc.line(M, (y += 5), PAGE_W - M, y);
+  y += 4.5;
 
-  // Header Left: Organization & Report Title
-  let curY = 13.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(COLOR_BRAND_ORANGE[0], COLOR_BRAND_ORANGE[1], COLOR_BRAND_ORANGE[2]);
-  doc.text('WMD OPERATIONS & SERVICE MANAGEMENT', margin, curY);
-
-  curY += 5.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  doc.text('Executive KPI Summary Report', margin, curY);
-
-  curY += 4.5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  doc.text(`${dateRangeSubtitle}`, margin, curY);
-
-  // Header Right: Metadata Box
-  const metaRightX = pageWidth - margin;
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(COLOR_SLATE_300[0], COLOR_SLATE_300[1], COLOR_SLATE_300[2]);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(metaRightX - 60, 10, 60, 16, 1.5, 1.5, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.8);
-  doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
-  doc.text('EXECUTIVE SUMMARY', metaRightX - 30, 14, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  doc.text(`Generated: ${formattedNow} ${formattedTime}`, metaRightX - 30, 18, { align: 'center' });
-  doc.text(`Admin: ${adminUser.name}`, metaRightX - 30, 22, { align: 'center' });
-
-  // Divider Line
-  curY += 5;
-  doc.setDrawColor(COLOR_SLATE_300[0], COLOR_SLATE_300[1], COLOR_SLATE_300[2]);
-  doc.setLineWidth(0.4);
-  doc.line(margin, curY, pageWidth - margin, curY);
-
-  // ---------------------------------------------------------------------------
-  // Top 4 Executive Score Cards
-  // ---------------------------------------------------------------------------
-  curY += 5;
-  const cardGap = 3.5;
-  const cardWidth = (contentWidth - cardGap * 3) / 4; // ~42.8mm
-  const cardHeight = 20;
-
-  const topCards = [
+  // ── Top KPI cards ──────────────────────────────────────────────────────
+  const cards = [
+    { t: 'TEAM OVERALL KPI', v: `${teamAverageKpi}%`, s: 'Target: >= 85%', c: kpiColorFor(teamAverageKpi) },
+    { t: 'ON-TIME RESOLUTIONS', v: `${totalOnTime}`, s: `${teamSlaRate}% SLA rate`, c: C.green },
     {
-      title: 'TEAM OVERALL KPI',
-      value: `${teamAverageKpi}%`,
-      sub: `Turnaround: ${teamTurnaroundKpi}%`,
-      barColor: teamAverageKpi >= 85 ? COLOR_GREEN : teamAverageKpi >= 70 ? COLOR_AMBER : COLOR_RED,
-      valColor: teamAverageKpi >= 85 ? COLOR_GREEN : teamAverageKpi >= 70 ? COLOR_AMBER : COLOR_RED,
+      t: 'DELAYED & OVERDUE',
+      v: `${totalDelayed}`,
+      s: `${totalLate} late · ${totalOverdue} overdue`,
+      c: totalDelayed === 0 ? C.green : totalDelayed > 2 ? C.red : C.amber,
     },
     {
-      title: 'SENDER SATISFACTION',
-      value: teamAverageRating !== null ? `${teamAverageRating} / 5.0` : 'N/A',
-      sub: totalRatingsCount > 0 ? `${totalRatingsCount} reviews logged` : 'No ratings yet',
-      barColor: COLOR_BLUE,
-      valColor: COLOR_SLATE_900,
+      t: 'SENDER SATISFACTION',
+      v: teamAverageRating !== null ? `${teamAverageRating} / 5.0` : 'N/A',
+      s: totalRatings > 0 ? `${totalRatings} reviews logged` : 'No reviews yet',
+      c: C.slate[900],
     },
     {
-      title: 'PERFORMANCE COMPLIANCE',
-      value: `${teamSlaComplianceRate}%`,
-      sub: `${totalOnTime} on-time · ${totalDelayed} delayed`,
-      barColor: teamSlaComplianceRate >= 80 ? COLOR_GREEN : COLOR_AMBER,
-      valColor: COLOR_SLATE_900,
-    },
-    {
-      title: 'AVG RESPONSE SPEED',
-      value: teamAvgTurnaroundHours !== null ? `${teamAvgTurnaroundHours} hrs` : '—',
-      sub: 'Standard Performance: < 24 hrs',
-      barColor: COLOR_BRAND_ORANGE,
-      valColor: COLOR_SLATE_900,
+      t: 'AVG RESPONSE SPEED',
+      v: teamAvgTurnaround !== null ? `${teamAvgTurnaround}h` : '—',
+      s: 'Standard SLA: < 24h',
+      c: C.slate[900],
     },
   ];
-
-  topCards.forEach((c, idx) => {
-    const cardX = margin + idx * (cardWidth + cardGap);
-    // Box
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(cardX, curY, cardWidth, cardHeight, 1.5, 1.5, 'FD');
-
-    // Colored top pill
-    doc.setFillColor(c.barColor[0], c.barColor[1], c.barColor[2]);
-    doc.rect(cardX, curY, cardWidth, 1.8, 'F');
-
-    // Title
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.2);
-    doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    doc.text(c.title, cardX + cardWidth / 2, curY + 6.2, { align: 'center' });
-
-    // Value
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(c.valColor[0], c.valColor[1], c.valColor[2]);
-    doc.text(c.value, cardX + cardWidth / 2, curY + 12.8, { align: 'center' });
-
-    // Subtitle
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
-    doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    doc.text(c.sub, cardX + cardWidth / 2, curY + 17.5, { align: 'center' });
+  const gap = 3, cardW = (CW - gap * 4) / 5, cardH = 19;
+  cards.forEach((c, i) => {
+    const x = M + i * (cardW + gap);
+    box(x, y, cardW, cardH, { fill: C.white, stroke: C.slate[200] });
+    fill(c.c);
+    doc.rect(x, y, cardW, 1.6, 'F');
+    text(c.t, x + cardW / 2, y + 5.8, { size: 5.8, bold: true, color: C.slate[500], align: 'center' });
+    text(c.v, x + cardW / 2, y + 12.0, { size: 12.5, bold: true, color: c.c, align: 'center' });
+    text(c.s, x + cardW / 2, y + 16.5, { size: 5.6, color: C.slate[500], align: 'center' });
   });
+  y += cardH + 6;
 
-  curY += cardHeight + 7;
-
-  // ---------------------------------------------------------------------------
-  // Manager Leaderboard Table (Ranked #1 to #6)
-  // ---------------------------------------------------------------------------
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  doc.text('Manager Performance Leaderboard', margin, curY);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  doc.text('Ranked by Overall KPI', pageWidth - margin, curY, {
+  // ── Leaderboard table ──────────────────────────────────────────────────
+  text('Manager Performance Leaderboard', M, y, { size: 10, bold: true });
+  text('Ranked by Director KPI Scoring Policy (Turnaround 50% + Sender Rating 50%)', PAGE_W - M, y, {
+    size: 6.8,
+    color: C.slate[500],
     align: 'right',
   });
+  y += 3.5;
 
-  curY += 3.5;
-
-  // Table Column Definitions
   const cols = [
-    { label: 'RANK', x: margin, width: 14, align: 'center' as const },
-    { label: 'MANAGER', x: margin + 14, width: 42, align: 'left' as const },
-    { label: 'OVERALL KPI', x: margin + 56, width: 24, align: 'center' as const },
-    { label: 'TURNAROUND', x: margin + 80, width: 26, align: 'center' as const },
-    { label: 'SENDER RATING', x: margin + 106, width: 24, align: 'center' as const },
-    { label: 'COMPLETED / REC', x: margin + 130, width: 26, align: 'center' as const },
-    { label: 'PERFORMANCE', x: margin + 156, width: 26, align: 'center' as const },
+    { l: 'RANK', x: M, w: 12, a: 'center' as const },
+    { l: 'MANAGER', x: M + 12, w: 38, a: 'left' as const },
+    { l: 'OVERALL KPI', x: M + 50, w: 22, a: 'center' as const },
+    { l: 'ON-TIME', x: M + 72, w: 22, a: 'center' as const },
+    { l: 'DELAYED', x: M + 94, w: 22, a: 'center' as const },
+    { l: 'AVG RATING', x: M + 116, w: 22, a: 'center' as const },
+    { l: 'TURNAROUND', x: M + 138, w: 22, a: 'center' as const },
+    { l: 'WORKLOAD', x: M + 160, w: 22, a: 'center' as const },
   ];
+  const headerH = 6.5;
+  fill(C.slate[800]);
+  doc.rect(M, y, CW, headerH, 'F');
+  cols.forEach((c) => text(c.l, c.a === 'center' ? c.x + c.w / 2 : c.x + 3, y + 4.5, {
+    size: 6.2, bold: true, color: C.white, align: c.a,
+  }));
+  y += headerH;
+  const tableTop = y;
 
-  // Header Row
-  const headerHeight = 6.5;
-  doc.setFillColor(30, 41, 59); // Slate-800
-  doc.rect(margin, curY, contentWidth, headerHeight, 'F');
+  const rowH = 9.5;
+  stats.forEach((m, i) => {
+    if (i % 2 === 0) { fill(C.white); doc.rect(M, y, CW, rowH, 'F'); }
+    stroke(C.slate[200], 0.2);
+    doc.line(M, y + rowH, PAGE_W - M, y + rowH);
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(255, 255, 255);
+    // Rank
+    const rankColors = [C.amber, C.slate[500], [180, 83, 9] as RGB, C.slate[700]];
+    text(`#${i + 1}`, cols[0].x + cols[0].w / 2, y + 5.8, {
+      size: 7.5, bold: true, color: rankColors[Math.min(i, 3)], align: 'center',
+    });
 
-  cols.forEach((col) => {
-    const textX = col.align === 'center' ? col.x + col.width / 2 : col.x + 3;
-    doc.text(col.label, textX, curY + 4.5, { align: col.align });
+    // Manager
+    text(m.manager.name, cols[1].x + 3, y + 4.2, { size: 7.5, bold: true });
+    text(truncate(m.manager.email, 24), cols[1].x + 3, y + 7.6, { size: 5.5, color: C.slate[500] });
+
+    // KPI badge
+    const bW = 16, bH = 5.2, bX = cols[2].x + (cols[2].w - bW) / 2, bY = y + 2.1;
+    box(bX, bY, bW, bH, { fill: kpiBgFor(m.overallKpi), r: 1 });
+    text(`${m.overallKpi}%`, bX + bW / 2, bY + 3.8, {
+      size: 7.5, bold: true, color: kpiColorFor(m.overallKpi), align: 'center',
+    });
+
+    // On-time
+    const onRate = m.totalAssigned > 0 ? Math.round((m.onTimeCount / m.totalAssigned) * 100) : 0;
+    text(`${m.onTimeCount} on-time`, cols[3].x + cols[3].w / 2, y + 4.2, {
+      size: 7.2, bold: true, color: C.green, align: 'center',
+    });
+    text(`${onRate}% of assigned`, cols[3].x + cols[3].w / 2, y + 7.6, {
+      size: 5.5, color: C.slate[500], align: 'center',
+    });
+
+    // Delayed
+    const hasDelay = m.delayedCount > 0;
+    text(hasDelay ? `${m.delayedCount} delayed` : '0 (Clean)', cols[4].x + cols[4].w / 2, y + 4.2, {
+      size: 7.2, bold: true, color: hasDelay ? C.red : C.green, align: 'center',
+    });
+    text(
+      hasDelay ? `${m.lateCount} late · ${m.overdueCount} od` : '100% on SLA',
+      cols[4].x + cols[4].w / 2,
+      y + 7.6,
+      { size: 5.5, color: C.slate[500], align: 'center' },
+    );
+
+    // Rating
+    text(
+      m.avgRating !== null ? `${m.avgRating} / 5.0` : '—',
+      cols[5].x + cols[5].w / 2, y + 4.2,
+      { size: 7.2, bold: true, color: m.avgRating !== null ? C.amber : C.slate[400], align: 'center' },
+    );
+    text(
+      m.avgRating !== null ? `${m.totalRated} review${m.totalRated === 1 ? '' : 's'}` : 'No reviews',
+      cols[5].x + cols[5].w / 2, y + 7.6,
+      { size: 5.5, color: C.slate[500], align: 'center' },
+    );
+
+    // Turnaround
+    text(`${m.turnaroundKpi}% score`, cols[6].x + cols[6].w / 2, y + 4.2, { size: 7.2, bold: true, align: 'center' });
+    text(
+      m.avgManagerTurnaroundHours !== null ? `${m.avgManagerTurnaroundHours}h avg` : '—',
+      cols[6].x + cols[6].w / 2, y + 7.6,
+      { size: 5.5, color: C.slate[500], align: 'center' },
+    );
+
+    // Workload
+    text(`${m.completedCount} / ${m.totalAssigned}`, cols[7].x + cols[7].w / 2, y + 4.2, { size: 7.2, bold: true, align: 'center' });
+    text(`${m.completionRate}% resolved`, cols[7].x + cols[7].w / 2, y + 7.6, {
+      size: 5.5, color: C.slate[500], align: 'center',
+    });
+
+    y += rowH;
   });
 
-  curY += headerHeight;
+  // Summary row
+  const sumH = 7.5;
+  fill(C.slate[100]);
+  doc.rect(M, y, CW, sumH, 'F');
+  stroke(C.slate[300]);
+  doc.line(M, y, PAGE_W - M, y);
+  doc.line(M, y + sumH, PAGE_W - M, y + sumH);
 
-  // Render Data Rows for all managers
-  const rowHeight = 10;
-  stats.forEach((mgr, idx) => {
-    const isEven = idx % 2 === 0;
-    doc.setFillColor(isEven ? 255 : 248, isEven ? 255 : 250, isEven ? 255 : 252);
-    doc.rect(margin, curY, contentWidth, rowHeight, 'F');
-
-    // Row border bottom
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.2);
-    doc.line(margin, curY + rowHeight, pageWidth - margin, curY + rowHeight);
-
-    // 1. Rank
-    const rankLabel = idx === 0 ? '#1' : idx === 1 ? '#2' : idx === 2 ? '#3' : `#${idx + 1}`;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(idx === 0 ? 217 : idx === 1 ? 100 : idx === 2 ? 180 : 71, idx === 0 ? 119 : idx === 1 ? 116 : idx === 2 ? 83 : 85, idx === 0 ? 6 : idx === 1 ? 139 : idx === 2 ? 9 : 105);
-    doc.text(rankLabel, cols[0].x + cols[0].width / 2, curY + 6.2, { align: 'center' });
-
-    // 2. Manager Name & Email
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.8);
-    doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-    doc.text(mgr.manager.name, cols[1].x + 3, curY + 4.5);
-
-    // doc.setFont('helvetica', 'normal');
-    // doc.setFontSize(6);
-    // doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    // doc.text(mgr.manager.email, cols[1].x + 3, curY + 8);
-
-    // 3. Overall KPI Badge
-    const kpiBadgeColor =
-      mgr.overallKpi >= 85 ? COLOR_GREEN : mgr.overallKpi >= 70 ? COLOR_AMBER : COLOR_RED;
-    const badgeW = 16;
-    const badgeH = 5.2;
-    const badgeX = cols[2].x + (cols[2].width - badgeW) / 2;
-    const badgeY = curY + 2.4;
-
-    doc.setFillColor(kpiBadgeColor[0] === 16 ? 236 : kpiBadgeColor[0] === 217 ? 254 : 254, kpiBadgeColor[1] === 185 ? 253 : kpiBadgeColor[1] === 119 ? 243 : 242, kpiBadgeColor[2] === 129 ? 245 : kpiBadgeColor[2] === 6 ? 199 : 242);
-    doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(kpiBadgeColor[0], kpiBadgeColor[1], kpiBadgeColor[2]);
-    doc.text(`${mgr.overallKpi}%`, badgeX + badgeW / 2, badgeY + 3.8, { align: 'center' });
-
-    // 4. Turnaround Score
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.2);
-    doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-    doc.text(`${mgr.turnaroundKpi}%`, cols[3].x + cols[3].width / 2, curY + 4.5, { align: 'center' });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(5.8);
-    doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    doc.text(`${mgr.earnedPoints}/${mgr.totalEvaluated} pts`, cols[3].x + cols[3].width / 2, curY + 8, {
-      align: 'center',
-    });
-
-    // 5. Sender Rating
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.2);
-    if (mgr.avgRating !== null) {
-      doc.setTextColor(217, 119, 6);
-      doc.text(`${mgr.avgRating}`, cols[4].x + cols[4].width / 2, curY + 4.5, { align: 'center' });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(5.8);
-      doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-      doc.text(`${mgr.totalRated} review${mgr.totalRated === 1 ? '' : 's'}`, cols[4].x + cols[4].width / 2, curY + 8, {
-        align: 'center',
-      });
-    } else {
-      doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-      doc.text('—', cols[4].x + cols[4].width / 2, curY + 6.2, { align: 'center' });
-    }
-
-    // 6. Volume (Completed / Received)
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.2);
-    doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-    doc.text(`${mgr.completedCount} / ${mgr.totalAssigned}`, cols[5].x + cols[5].width / 2, curY + 4.5, {
-      align: 'center',
-    });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(5.8);
-    doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    doc.text(`${mgr.completionRate}% resolved`, cols[5].x + cols[5].width / 2, curY + 8, {
-      align: 'center',
-    });
-
-    // 7. SLA Delayed (Late + Overdue)
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.2);
-    if (mgr.delayedCount > 0) {
-      doc.setTextColor(COLOR_RED[0], COLOR_RED[1], COLOR_RED[2]);
-      doc.text(String(mgr.delayedCount), cols[6].x + cols[6].width / 2, curY + 4.5, { align: 'center' });
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(5.8);
-      doc.text(`(${mgr.overdueCount} overdue)`, cols[6].x + cols[6].width / 2, curY + 8, {
-        align: 'center',
-      });
-    } else {
-      doc.setTextColor(COLOR_GREEN[0], COLOR_GREEN[1], COLOR_GREEN[2]);
-      doc.text('0 (Clean)', cols[6].x + cols[6].width / 2, curY + 6.2, { align: 'center' });
-    }
-
-    curY += rowHeight;
+  text('TEAM', cols[0].x + cols[0].w / 2, y + 4.8, { size: 6.8, bold: true, color: C.slate[800], align: 'center' });
+  text('Team Totals & Averages', cols[1].x + 3, y + 4.8, { size: 6.8, bold: true, color: C.slate[800] });
+  text(`${teamAverageKpi}% avg`, cols[2].x + cols[2].w / 2, y + 4.8, {
+    size: 6.8, bold: true, color: kpiColorFor(teamAverageKpi), align: 'center',
   });
+  text(`${totalOnTime} total`, cols[3].x + cols[3].w / 2, y + 4.8, { size: 6.8, bold: true, color: C.green, align: 'center' });
+  text(
+    totalDelayed > 0 ? `${totalDelayed} (${totalOverdue} od)` : '0 (Clean)',
+    cols[4].x + cols[4].w / 2, y + 4.8,
+    { size: 6.8, bold: true, color: totalDelayed > 0 ? C.red : C.green, align: 'center' },
+  );
+  text(teamAverageRating !== null ? `${teamAverageRating} avg` : '—', cols[5].x + cols[5].w / 2, y + 4.8, {
+    size: 6.8, bold: true, color: C.amber, align: 'center',
+  });
+  text(`${teamTurnaroundKpi}% pts`, cols[6].x + cols[6].w / 2, y + 4.8, { size: 6.8, bold: true, color: C.slate[800], align: 'center' });
+  text(`${totalCompleted} / ${totalReceived}`, cols[7].x + cols[7].w / 2, y + 4.8, { size: 6.8, bold: true, color: C.slate[800], align: 'center' });
+  y += sumH;
 
-  // Table Outer Frame Box
-  doc.setDrawColor(203, 213, 225);
-  doc.setLineWidth(0.3);
-  doc.rect(margin, curY - (stats.length * rowHeight + headerHeight), contentWidth, stats.length * rowHeight + headerHeight, 'S');
+  stroke(C.slate[300]);
+  doc.rect(M, tableTop - headerH, CW, y - (tableTop - headerH), 'S');
+  y += 5.5;
 
-  curY += 7;
+  // ── Pipeline strip ─────────────────────────────────────────────────────
+  text('Weekly Operations Pipeline & Resolution Breakdown', M, y, { size: 9, bold: true });
+  y += 3.5;
 
-  // ---------------------------------------------------------------------------
-  // Team Workload & Pipeline Distribution Strip
-  // ---------------------------------------------------------------------------
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  doc.text('Weekly Overview', margin, curY);
-
-  curY += 3.5;
-
-  // 5 Status Capsules
-  const distGap = 3;
-  const distWidth = (contentWidth - distGap * 4) / 5;
-  const distHeight = 14;
-
-  const pipelinePills = [
-    { label: 'TOTAL RECEIVED', count: totalReceived, color: COLOR_SLATE_700, bg: [248, 250, 252] },
-    { label: 'RESOLVED ON-TIME', count: totalOnTime, color: COLOR_GREEN, bg: [236, 253, 245] },
-    { label: 'RESOLVED LATE', count: totalLate, color: COLOR_AMBER, bg: [254, 243, 199] },
-    { label: 'OPEN OVERDUE', count: totalOverdue, color: COLOR_RED, bg: [254, 242, 242] },
-    { label: 'IN PROGRESS', count: totalInProgress, color: COLOR_BLUE, bg: [240, 249, 255] },
+  const pills = [
+    { l: 'TOTAL RECEIVED', n: totalReceived, c: C.slate[700], bg: C.slate[50] },
+    { l: 'RESOLVED ON-TIME', n: totalOnTime, c: C.green, bg: C.greenBg },
+    { l: 'RESOLVED LATE', n: totalLate, c: C.amber, bg: C.amberBg },
+    { l: 'OPEN OVERDUE', n: totalOverdue, c: C.red, bg: C.redBg },
+    { l: 'IN PROGRESS', n: totalInProgress, c: C.blue, bg: C.blueBg },
   ];
-
-  pipelinePills.forEach((p, idx) => {
-    const px = margin + idx * (distWidth + distGap);
-    doc.setFillColor(p.bg[0], p.bg[1], p.bg[2]);
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(px, curY, distWidth, distHeight, 1.2, 1.2, 'FD');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(5.8);
-    doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    doc.text(p.label, px + distWidth / 2, curY + 4.5, { align: 'center' });
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
-    doc.setTextColor(p.color[0], p.color[1], p.color[2]);
-    doc.text(String(p.count), px + distWidth / 2, curY + 10.8, { align: 'center' });
+  const pGap = 3, pW = (CW - pGap * 4) / 5, pH = 12.5;
+  pills.forEach((p, i) => {
+    const x = M + i * (pW + pGap);
+    box(x, y, pW, pH, { fill: p.bg, stroke: C.slate[200] });
+    text(p.l, x + pW / 2, y + 4.2, { size: 5.6, bold: true, color: C.slate[500], align: 'center' });
+    text(String(p.n), x + pW / 2, y + 9.8, { size: 9.5, bold: true, color: p.c, align: 'center' });
   });
+  y += pH + 3;
 
-  curY += distHeight + 4;
-
-  // // Stacked Segment Progress Bar
-  // const barHeight = 3.5;
-  // doc.setFillColor(241, 245, 249);
-  // doc.roundedRect(margin, curY, contentWidth, barHeight, 0.8, 0.8, 'F');
-
-  // if (totalReceived > 0) {
-  //   const onTimeW = (totalOnTime / totalReceived) * contentWidth;
-  //   const lateW = (totalLate / totalReceived) * contentWidth;
-  //   const overdueW = (totalOverdue / totalReceived) * contentWidth;
-  //   const inProgW = (totalInProgress / totalReceived) * contentWidth;
-
-  //   let segX = margin;
-  //   if (onTimeW > 0) {
-  //     doc.setFillColor(COLOR_GREEN[0], COLOR_GREEN[1], COLOR_GREEN[2]);
-  //     doc.rect(segX, curY, onTimeW, barHeight, 'F');
-  //     segX += onTimeW;
-  //   }
-  //   if (lateW > 0) {
-  //     doc.setFillColor(COLOR_AMBER[0], COLOR_AMBER[1], COLOR_AMBER[2]);
-  //     doc.rect(segX, curY, lateW, barHeight, 'F');
-  //     segX += lateW;
-  //   }
-  //   if (overdueW > 0) {
-  //     doc.setFillColor(COLOR_RED[0], COLOR_RED[1], COLOR_RED[2]);
-  //     doc.rect(segX, curY, overdueW, barHeight, 'F');
-  //     segX += overdueW;
-  //   }
-  //   if (inProgW > 0) {
-  //     doc.setFillColor(COLOR_BLUE[0], COLOR_BLUE[1], COLOR_BLUE[2]);
-  //     doc.rect(segX, curY, inProgW, barHeight, 'F');
-  //   }
-  // }
-
-  // curY += barHeight + 6;
-
-  // // ---------------------------------------------------------------------------
-  // // Executive Commentary & Operations Highlights
-  // // ---------------------------------------------------------------------------
-  // const insightsBoxHeight = 36;
-  // doc.setFillColor(255, 255, 255);
-  // doc.setDrawColor(226, 232, 240);
-  // doc.roundedRect(margin, curY, contentWidth, insightsBoxHeight, 1.5, 1.5, 'FD');
-
-  // doc.setFillColor(COLOR_BRAND_ORANGE[0], COLOR_BRAND_ORANGE[1], COLOR_BRAND_ORANGE[2]);
-  // doc.rect(margin, curY, 2, insightsBoxHeight, 'F');
-
-  // doc.setFont('helvetica', 'bold');
-  // doc.setFontSize(8);
-  // doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  // doc.text('Key Operational Observations & Leadership Notes:', margin + 6, curY + 5.5);
-
-  // const topMgr = stats.length > 0 ? stats[0] : null;
-  // const bestTurnaround = stats
-  //   .filter((s) => s.avgManagerTurnaroundHours !== null)
-  //   .sort((a, b) => (a.avgManagerTurnaroundHours ?? 999) - (b.avgManagerTurnaroundHours ?? 999))[0];
-
-  // const insightLines: string[] = [];
-
-  // if (topMgr && topMgr.overallKpi > 0) {
-  //   insightLines.push(
-  //     `Leading Performer: ${topMgr.manager.name} achieved the top overall ranking with a score of ${topMgr.overallKpi}% and ${topMgr.completedCount} completed queries.`
-  //   );
-  // } else {
-  //   insightLines.push('Weekly Performance: Operations tracking active across all registered managers.');
-  // }
-
-  // if (totalDelayed > 0) {
-  //   insightLines.push(
-  //     `PERFORMANCE Monitoring: ${totalDelayed} total queries exceeded the 24-hour threshold (${totalLate} resolved late, ${totalOverdue} currently active overdue requiring intervention).`
-  //   );
-  // } else {
-  //   insightLines.push('PERFORMANCE Excellence: 100% of evaluated queries were completed strictly within the standard 24-hour performance deadline.');
-  // }
-
-  // if (bestTurnaround && bestTurnaround.avgManagerTurnaroundHours !== null) {
-  //   insightLines.push(
-  //     `Speed Benchmark: Fastest response speed logged by ${bestTurnaround.manager.name} averaging ${bestTurnaround.avgManagerTurnaroundHours} hours per query.`
-  //   );
-  // }
-
-  // if (extensionsApproved > 0 || extensionsPending > 0) {
-  //   insightLines.push(
-  //     `Extension Activity: ${extensionsRequested} extensions requested this period (${extensionsApproved} approved, ${extensionsPending} pending review).`
-  //   );
-  // } else {
-  //   insightLines.push(`Satisfaction Metric: Team average sender rating is ${teamAverageRating !== null ? `${teamAverageRating} / 5.0` : 'N/A'} based on ${totalRatingsCount} verified evaluations.`);
-  // }
-
-  // doc.setFont('helvetica', 'normal');
-  // doc.setFontSize(6.8);
-  // doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
-
-  // insightLines.slice(0, 4).forEach((line, lIdx) => {
-  //   doc.text(`* ${line}`, margin + 6, curY + 11.5 + lIdx * 5.5);
-  // });
-
-  // curY += insightsBoxHeight + 5;
-
-  // // ---------------------------------------------------------------------------
-  // // KPI Formula & Scoring Policy Notice (Footnote Box)
-  // // ---------------------------------------------------------------------------
-  // doc.setFillColor(248, 250, 252);
-  // doc.setDrawColor(226, 232, 240);
-  // doc.roundedRect(margin, curY, contentWidth, 11, 1, 1, 'FD');
-
-  // doc.setFont('helvetica', 'bold');
-  // doc.setFontSize(6);
-  // doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
-  // doc.text('OFFICIAL DIRECTOR SCORING POLICY:', margin + 4, curY + 4);
-
-  // doc.setFont('helvetica', 'normal');
-  // doc.setFontSize(5.6);
-  // doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  // doc.text(
-  //   'Turnaround Score: On-Time (+1.0 pt), Late (>24h) (+0.5 pt), Overdue Open (0.0 pt penalty). In-Progress (<24h) excluded until deadline expires.',
-  //   margin + 4,
-  //   curY + 7.2
-  // );
-  // doc.text(
-  //   'Overall KPI: Equal 50/50 blend of Turnaround Score and Anonymous Sender Satisfaction Rating (5.0 stars = 100%).',
-  //   margin + 4,
-  //   curY + 9.8
-  // );
-
-  // Page 1 Footer
-  doc.setDrawColor(COLOR_SLATE_300[0], COLOR_SLATE_300[1], COLOR_SLATE_300[2]);
-  doc.setLineWidth(0.3);
-  doc.line(margin, footerY, pageWidth - margin, footerY);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  // doc.text('CONFIDENTIAL & PROPRIETARY · WMD MANAGEMENT', margin, footerY + 5);
-  doc.text('Page 1 of 2', pageWidth / 2, footerY + 5, { align: 'center' });
-  doc.text('WMD Manager Portal System', pageWidth - margin, footerY + 5, { align: 'right' });
-
-  // ===========================================================================
-  // PAGE 2: INDIVIDUAL SCORECARDS, OVERDUE WATCHLIST & SIGN-OFF
-  // ===========================================================================
-  doc.addPage();
-
-  // Top Accent Stripes
-  doc.setFillColor(COLOR_BRAND_ORANGE[0], COLOR_BRAND_ORANGE[1], COLOR_BRAND_ORANGE[2]);
-  doc.rect(0, 0, pageWidth, 4, 'F');
-  doc.setFillColor(COLOR_BRAND_DARK[0], COLOR_BRAND_DARK[1], COLOR_BRAND_DARK[2]);
-  doc.rect(0, 4, pageWidth, 1.2, 'F');
-
-  curY = 12;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(COLOR_BRAND_ORANGE[0], COLOR_BRAND_ORANGE[1], COLOR_BRAND_ORANGE[2]);
-  doc.text('WMD EXECUTIVE KPI REPORT · INDIVIDUAL PERFORMANCE BREAKDOWN', margin, curY);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  doc.text(`Page 2 of 2`, pageWidth - margin, curY, { align: 'right' });
-
-  curY += 3.5;
-  doc.setDrawColor(COLOR_SLATE_300[0], COLOR_SLATE_300[1], COLOR_SLATE_300[2]);
-  doc.setLineWidth(0.3);
-  doc.line(margin, curY, pageWidth - margin, curY);
-
-  // ---------------------------------------------------------------------------
-  // 6 Individual Manager Scorecards (2 Columns x 3 Rows)
-  // ---------------------------------------------------------------------------
-  curY += 5;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  doc.text('Individual Manager Scorecards', margin, curY);
-
-  // doc.setFont('helvetica', 'normal');
-  // doc.setFontSize(7);
-  // doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  // doc.text('Comprehensive turnaround time, rating, and resolution breakdown', pageWidth - margin, curY, {
-  //   align: 'right',
-  // });
-
-  curY += 4;
-  const gridGap = 4;
-  const mCardWidth = (contentWidth - gridGap) / 2; // ~89mm
-  const mCardHeight = 33;
-
-  stats.forEach((mgr, idx) => {
-    const col = idx % 2;
-    const row = Math.floor(idx / 2);
-    const cardX = margin + col * (mCardWidth + gridGap);
-    const cardY = curY + row * (mCardHeight + gridGap);
-
-    // Outer Card Container
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(cardX, cardY, mCardWidth, mCardHeight, 1.5, 1.5, 'FD');
-
-    // Left Border Highlight (Red if overdue queries exist, otherwise Green)
-    if (mgr.overdueCount > 0) {
-      doc.setFillColor(COLOR_RED[0], COLOR_RED[1], COLOR_RED[2]);
-    } else if (mgr.overallKpi >= 85) {
-      doc.setFillColor(COLOR_GREEN[0], COLOR_GREEN[1], COLOR_GREEN[2]);
-    } else {
-      doc.setFillColor(COLOR_AMBER[0], COLOR_AMBER[1], COLOR_AMBER[2]);
-    }
-    doc.rect(cardX, cardY + 2, 1.8, mCardHeight - 4, 'F');
-
-    // Rank Badge
-    const rankNum = idx + 1;
-    doc.setFillColor(241, 245, 249);
-    doc.roundedRect(cardX + 4, cardY + 3.2, 7, 5, 0.8, 0.8, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
-    doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
-    doc.text(`#${rankNum}`, cardX + 7.5, cardY + 6.8, { align: 'center' });
-
-    // Manager Name & Email
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.2);
-    doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-    doc.text(mgr.manager.name, cardX + 13, cardY + 5.5);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(5.8);
-    doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    doc.text(mgr.manager.email, cardX + 13, cardY + 8.8);
-
-    // Overall KPI Badge Right
-    const badgeW = 16;
-    const badgeH = 5.2;
-    const badgeX = cardX + mCardWidth - badgeW - 3;
-    const badgeY = cardY + 3.2;
-
-    const kpiColor =
-      mgr.overallKpi >= 85 ? COLOR_GREEN : mgr.overallKpi >= 70 ? COLOR_AMBER : COLOR_RED;
-    doc.setFillColor(kpiColor[0] === 16 ? 236 : kpiColor[0] === 217 ? 254 : 254, kpiColor[1] === 185 ? 253 : kpiColor[1] === 119 ? 243 : 242, kpiColor[2] === 129 ? 245 : kpiColor[2] === 6 ? 199 : 242);
-    doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1, 1, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(kpiColor[0], kpiColor[1], kpiColor[2]);
-    doc.text(`${mgr.overallKpi}%`, badgeX + badgeW / 2, badgeY + 3.8, { align: 'center' });
-
-    // Progress Bar Track (On-time, Late, Overdue, In-Prog)
-    const pBarY = cardY + 12.2;
-    const pBarW = mCardWidth - 8;
-    const pBarH = 2.4;
-
-    doc.setFillColor(241, 245, 249);
-    doc.roundedRect(cardX + 4, pBarY, pBarW, pBarH, 0.6, 0.6, 'F');
-
-    if (mgr.totalAssigned > 0) {
-      const oW = (mgr.onTimeCount / mgr.totalAssigned) * pBarW;
-      const lW = (mgr.lateCount / mgr.totalAssigned) * pBarW;
-      const odW = (mgr.overdueCount / mgr.totalAssigned) * pBarW;
-      const ipW = (mgr.inProgressCount / mgr.totalAssigned) * pBarW;
-
-      let bX = cardX + 4;
-      if (oW > 0) {
-        doc.setFillColor(COLOR_GREEN[0], COLOR_GREEN[1], COLOR_GREEN[2]);
-        doc.rect(bX, pBarY, oW, pBarH, 'F');
-        bX += oW;
-      }
-      if (lW > 0) {
-        doc.setFillColor(COLOR_AMBER[0], COLOR_AMBER[1], COLOR_AMBER[2]);
-        doc.rect(bX, pBarY, lW, pBarH, 'F');
-        bX += lW;
-      }
-      if (odW > 0) {
-        doc.setFillColor(COLOR_RED[0], COLOR_RED[1], COLOR_RED[2]);
-        doc.rect(bX, pBarY, odW, pBarH, 'F');
-        bX += odW;
-      }
-      if (ipW > 0) {
-        doc.setFillColor(COLOR_BLUE[0], COLOR_BLUE[1], COLOR_BLUE[2]);
-        doc.rect(bX, pBarY, ipW, pBarH, 'F');
-      }
-    }
-
-    // 4 Micro Metric Capsules
-    const subColWidth = (mCardWidth - 8) / 4;
-    const miniKpis = [
-      { label: 'ON-TIME', val: mgr.onTimeCount, isRed: false, color: COLOR_GREEN },
-      { label: 'LATE', val: mgr.lateCount, isRed: false, color: COLOR_AMBER },
-      { label: 'OVERDUE', val: mgr.overdueCount, isRed: mgr.overdueCount > 0, color: COLOR_RED },
-      { label: 'IN-PROG', val: mgr.inProgressCount, isRed: false, color: COLOR_BLUE },
+  // Stacked bar
+  const barH = 3.2;
+  box(M, y, CW, barH, { fill: C.slate[100], r: 0.8 });
+  if (totalReceived > 0) {
+    const segs: Array<[number, RGB]> = [
+      [totalOnTime, C.green],
+      [totalLate, C.amber],
+      [totalOverdue, C.red],
+      [totalInProgress, C.blue],
     ];
-
-    const kpiY = cardY + 17.5;
-    miniKpis.forEach((mk, mIdx) => {
-      const mkX = cardX + 4 + mIdx * subColWidth + subColWidth / 2;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(5.2);
-      doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-      doc.text(mk.label, mkX, kpiY, { align: 'center' });
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(mk.color[0], mk.color[1], mk.color[2]);
-      doc.text(String(mk.val), mkX, kpiY + 4, { align: 'center' });
+    let sx = M;
+    segs.forEach(([count, color]) => {
+      const w = (count / totalReceived) * CW;
+      if (w > 0) { fill(color); doc.rect(sx, y, w, barH, 'F'); sx += w; }
     });
+  }
+  y += barH + 5;
 
-    // Bottom Speed & Satisfaction Strip
-    const bottomY = cardY + 28.5;
-    doc.setDrawColor(241, 245, 249);
-    doc.setLineWidth(0.2);
-    doc.line(cardX + 4, bottomY - 3, cardX + mCardWidth - 4, bottomY - 3);
+  // ── Observations ───────────────────────────────────────────────────────
+  const insightsH = 32;
+  box(M, y, CW, insightsH, { fill: C.white, stroke: C.slate[200], r: 1.5 });
+  fill(C.brandOrange);
+  doc.rect(M, y, 2, insightsH, 'F');
+  text('Key Operational Observations & Leadership Notes:', M + 6, y + 5.2, { size: 7.8, bold: true });
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(5.8);
-    doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    const respSpeedStr = mgr.avgManagerTurnaroundHours !== null ? `${mgr.avgManagerTurnaroundHours}h` : '—';
-    const ratingStr = mgr.avgRating !== null ? `* ${mgr.avgRating}/5.0` : 'No reviews';
-    doc.text(`Avg Speed: ${respSpeedStr}  ·  Rating: ${ratingStr}`, cardX + 4, bottomY);
+  const top = stats[0];
+  const fastest = stats
+    .filter((s) => s.avgManagerTurnaroundHours !== null)
+    .sort((a, b) => (a.avgManagerTurnaroundHours ?? 999) - (b.avgManagerTurnaroundHours ?? 999))[0];
 
-    doc.text(`${mgr.completedCount}/${mgr.totalAssigned} resolved`, cardX + mCardWidth - 4, bottomY, {
-      align: 'right',
-    });
-  });
-
-  const totalCardRows = Math.ceil(stats.length / 2);
-  curY += totalCardRows * (mCardHeight + gridGap) + 5;
-
-  // ---------------------------------------------------------------------------
-  // Section 2: Priority Action Watchlist (General / Non-Sensitive Summary)
-  // ---------------------------------------------------------------------------
-  // doc.setFont('helvetica', 'bold');
-  // doc.setFontSize(10.5);
-  // doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  // doc.text('Operational Escalations & SLA Watchlist', margin, curY);
-
-  // curY += 3.5;
-
-  // if (overdueActive.length > 0) {
-  //   // Red Alert Card
-  //   const watchHeight = Math.min(40, 16 + overdueActive.length * 6);
-  //   doc.setFillColor(254, 242, 242);
-  //   doc.setDrawColor(254, 202, 202);
-  //   doc.roundedRect(margin, curY, contentWidth, watchHeight, 1.5, 1.5, 'FD');
-
-  //   doc.setFont('helvetica', 'bold');
-  //   doc.setFontSize(7.8);
-  //   doc.setTextColor(COLOR_RED[0], COLOR_RED[1], COLOR_RED[2]);
-  //   doc.text(
-  //     `Priority Attention Required: ${overdueActive.length} Open Queries Exceeding 24-Hour SLA`,
-  //     margin + 4,
-  //     curY + 5.5
-  //   );
-
-  //   doc.setFont('helvetica', 'normal');
-  //   doc.setFontSize(6.5);
-  //   doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
-  //   doc.text(
-  //     'General tracking view (confidential remarks withheld for team distribution):',
-  //     margin + 4,
-  //     curY + 9.5
-  //   );
-
-  //   // General Overdue Table Items
-  //   overdueActive.slice(0, 4).forEach((oq, oIdx) => {
-  //     const rowY = curY + 14.5 + oIdx * 5.8;
-  //     const createdDateStr = oq.createdAt ? oq.createdAt.slice(0, 10) : 'Recent';
-      
-  //     // Clean, general title or category snippet (no sensitive private text)
-  //     let generalTopic = oq.queryTitle ? oq.queryTitle.trim() : 'Operational Query';
-  //     if (generalTopic.length > 40) {
-  //       generalTopic = `${generalTopic.slice(0, 37)}...`;
-  //     }
-
-  //     const stageText = !oq.managerDone
-  //       ? 'Pending Manager Review'
-  //       : 'Pending Sender Confirmation';
-
-  //     doc.setFont('helvetica', 'bold');
-  //     doc.setFontSize(6.5);
-  //     doc.setTextColor(COLOR_RED[0], COLOR_RED[1], COLOR_RED[2]);
-  //     doc.text(`[${oq.queryId || oq.id}]`, margin + 4, rowY);
-
-  //     doc.setFont('helvetica', 'bold');
-  //     doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  //     doc.text(oq.managerName || 'Unassigned', margin + 26, rowY);
-
-  //     doc.setFont('helvetica', 'normal');
-  //     doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
-  //     doc.text(`Subject: ${generalTopic}`, margin + 55, rowY);
-
-  //     doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  //     doc.text(`Logged: ${createdDateStr}`, margin + 125, rowY);
-
-  //     doc.setFont('helvetica', 'bold');
-  //     doc.setTextColor(COLOR_AMBER[0], COLOR_AMBER[1], COLOR_AMBER[2]);
-  //     doc.text(stageText, pageWidth - margin - 4, rowY, { align: 'right' });
-  //   });
-
-  //   if (overdueActive.length > 4) {
-  //     doc.setFont('helvetica', 'normal');
-  //     doc.setFontSize(6);
-  //     doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  //     doc.text(
-  //       `+ ${overdueActive.length - 4} additional overdue items logged in system portal.`,
-  //       margin + 4,
-  //       curY + watchHeight - 3
-  //     );
-  //   }
-
-  //   curY += watchHeight + 6;
-  // } else {
-  //   // Green Positive Banner
-  //   const goodHeight = 14;
-  //   doc.setFillColor(240, 253, 244);
-  //   doc.setDrawColor(187, 247, 208);
-  //   doc.roundedRect(margin, curY, contentWidth, goodHeight, 1.5, 1.5, 'FD');
-
-  //   doc.setFont('helvetica', 'bold');
-  //   doc.setFontSize(8);
-  //   doc.setTextColor(COLOR_GREEN[0], COLOR_GREEN[1], COLOR_GREEN[2]);
-  //   doc.text('Optimal SLA Health: Zero Unresolved Overdue Queries', margin + 4, curY + 6);
-
-  //   doc.setFont('helvetica', 'normal');
-  //   doc.setFontSize(6.8);
-  //   doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
-  //   doc.text(
-  //     'All active open queries are currently progressing strictly within the 24-hour service level agreement.',
-  //     margin + 4,
-  //     curY + 10.5
-  //   );
-
-  //   curY += goodHeight + 6;
-  // }
-
-  // ---------------------------------------------------------------------------
-  // Section 3: SLA Extension Management Summary
-  // ---------------------------------------------------------------------------
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  doc.text('Target Due Date & Extension Governance', margin, curY);
-
-  curY += 3.5;
-
-  const extCardHeight = 15;
-  const extColW = (contentWidth - 9) / 4;
-
-  const extItems = [
-    { label: 'EXTENSIONS REQUESTED', val: extensionsRequested, color: COLOR_SLATE_700 },
-    { label: 'APPROVED BY SENDER', val: extensionsApproved, color: COLOR_GREEN },
-    { label: 'PENDING MUTUAL REVIEW', val: extensionsPending, color: COLOR_AMBER },
-    {
-      label: 'EXTENDED ON-TIME RATE',
-      val:
-        extensionsApproved > 0
-          ? `${Math.round(
-              (windowQueries.filter((q) => q.extensionStatus === 'APPROVED' && isQueryDone(q) && !isQueryDelayed(q, nowMs)).length /
-                extensionsApproved) *
-                100
-            )}%`
-          : '100%',
-      color: COLOR_BLUE,
-    },
+  const insights: string[] = [
+    top && top.overallKpi > 0
+      ? `Leading Performer: ${top.manager.name} led at ${top.overallKpi}% with ${top.completedCount} completed queries (${top.onTimeCount} on-time).`
+      : `Weekly Performance: Operations tracking active across ${stats.length} managers.`,
+    totalDelayed > 0
+      ? `SLA Monitoring: ${totalDelayed} queries breached 24h SLA (${totalLate} late, ${totalOverdue} active overdue).`
+      : 'SLA Excellence: 100% of evaluated queries resolved within the 24h deadline.',
+    fastest?.avgManagerTurnaroundHours != null
+      ? `Speed Benchmark: Fastest responder was ${fastest.manager.name} (${fastest.avgManagerTurnaroundHours}h avg).`
+      : `Speed Benchmark: Team average is ${teamAvgTurnaround ?? 0}h.`,
+    ext.approved > 0 || ext.pending > 0
+      ? `Extension Activity: ${ext.requested} requested (${ext.approved} approved, ${ext.pending} pending).`
+      : `Sender Satisfaction: ${teamAverageRating ?? 'N/A'} / 5.0 across ${totalRatings} reviews.`,
   ];
+  insights.forEach((line, i) => text(`* ${line}`, M + 6, y + 11.0 + i * 5.0, {
+    size: 6.5, color: C.slate[700],
+  }));
+  y += insightsH + 4;
 
-  extItems.forEach((ei, eIdx) => {
-    const eX = margin + eIdx * (extColW + 3);
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(eX, curY, extColW, extCardHeight, 1.2, 1.2, 'FD');
+  // ── Footnote ───────────────────────────────────────────────────────────
+  const footH = 11;
+  box(M, y, CW, footH, { fill: C.slate[50], stroke: C.slate[200], r: 1 });
+  text('OFFICIAL DIRECTOR SCORING POLICY & SLA METHODOLOGY:', M + 4, y + 3.8, {
+    size: 5.8, bold: true, color: C.slate[700],
+  });
+  [
+    'Turnaround Score: On-Time (+1.0 pt), Late (>24h) (+0.5 pt), Overdue Open (0.0). In-Progress (<24h) excluded until deadline.',
+    'Overall KPI: 50/50 blend of Turnaround Score and Anonymous Sender Satisfaction Rating (5.0 stars = 100%). Overdue queries carry forward.',
+  ].forEach((line, i) => text(line, M + 4, y + 6.8 + i * 2.7, { size: 5.3, color: C.slate[500] }));
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(5.5);
-    doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-    doc.text(ei.label, eX + extColW / 2, curY + 4.8, { align: 'center' });
+  drawFooter(1, 2);
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(ei.color[0], ei.color[1], ei.color[2]);
-    doc.text(String(ei.val), eX + extColW / 2, curY + 11.5, { align: 'center' });
+  // ══════════════════════════════════════════════════════════════════════
+  // PAGE 2
+  // ══════════════════════════════════════════════════════════════════════
+  doc.addPage();
+  drawChrome();
+  y = 12;
+
+  text('WMD EXECUTIVE KPI REPORT · INDIVIDUAL PERFORMANCE BREAKDOWN', M, y, {
+    size: 7.5, bold: true, color: C.brandOrange,
+  });
+  text('Page 2 of 2', PAGE_W - M, y, { size: 7, color: C.slate[500], align: 'right' });
+  stroke(C.slate[300]);
+  doc.line(M, (y += 3.5), PAGE_W - M, y);
+
+  // ── Manager scorecards ─────────────────────────────────────────────────
+  y += 4.5;
+  text('Individual Manager Performance Scorecards', M, y, { size: 10, bold: true });
+  text('Detailed turnaround times, sender ratings, and resolution metrics', PAGE_W - M, y, {
+    size: 6.8, color: C.slate[500], align: 'right',
+  });
+  y += 3.5;
+
+  const gridGap = 3.5;
+  const mcW = (CW - gridGap) / 2;
+  const mcH = 28.5;
+
+  stats.forEach((m, idx) => {
+    const col = idx % 2, row = Math.floor(idx / 2);
+    const x = M + col * (mcW + gridGap);
+    const cy = y + row * (mcH + gridGap);
+
+    box(x, cy, mcW, mcH, { fill: C.white, stroke: C.slate[200], r: 1.5 });
+
+    // Left accent
+    const accent = m.overdueCount > 0 ? C.red : m.overallKpi >= 85 ? C.green : C.amber;
+    fill(accent); doc.rect(x, cy + 1.8, 1.6, mcH - 3.6, 'F');
+
+    // Rank chip
+    box(x + 3.5, cy + 2.8, 6.5, 4.5, { fill: C.slate[100], r: 0.8 });
+    text(`#${idx + 1}`, x + 6.75, cy + 6.0, { size: 6.2, bold: true, color: C.slate[700], align: 'center' });
+
+    // Name + email
+    text(m.manager.name, x + 11.5, cy + 4.8, { size: 7.8, bold: true });
+    text(truncate(m.manager.email, 22), x + 11.5, cy + 7.8, { size: 5.5, color: C.slate[500] });
+
+    // KPI badge
+    const bW = 15, bH = 4.8, bX = x + mcW - bW - 3, bY = cy + 2.6;
+    box(bX, bY, bW, bH, { fill: kpiBgFor(m.overallKpi), r: 1 });
+    text(`${m.overallKpi}%`, bX + bW / 2, bY + 3.5, {
+      size: 7.2, bold: true, color: kpiColorFor(m.overallKpi), align: 'center',
+    });
+
+    // Progress bar
+    const pBarY = cy + 10.5, pBarW = mcW - 7, pBarH = 2.0;
+    box(x + 3.5, pBarY, pBarW, pBarH, { fill: C.slate[100], r: 0.5 });
+    if (m.totalAssigned > 0) {
+      let bx = x + 3.5;
+      ([
+        [m.onTimeCount, C.green],
+        [m.lateCount, C.amber],
+        [m.overdueCount, C.red],
+        [m.inProgressCount, C.blue],
+      ] as Array<[number, RGB]>).forEach(([count, color]) => {
+        const w = (count / m.totalAssigned) * pBarW;
+        if (w > 0) { fill(color); doc.rect(bx, pBarY, w, pBarH, 'F'); bx += w; }
+      });
+    }
+
+    // Mini metrics
+    const mini: Array<[string, number, RGB]> = [
+      ['ON-TIME', m.onTimeCount, C.green],
+      ['LATE', m.lateCount, C.amber],
+      ['OVERDUE', m.overdueCount, C.red],
+      ['IN-PROG', m.inProgressCount, C.blue],
+    ];
+    const subW = (mcW - 7) / 4;
+    const kY = cy + 15.2;
+    mini.forEach(([label, val, color], i) => {
+      const mx = x + 3.5 + i * subW + subW / 2;
+      text(label, mx, kY, { size: 4.8, color: C.slate[500], align: 'center' });
+      text(String(val), mx, kY + 3.6, { size: 7, bold: true, color, align: 'center' });
+    });
+
+    // Bottom strip
+    const bottomY = cy + 25.2;
+    stroke(C.slate[100], 0.2);
+    doc.line(x + 3.5, bottomY - 2.5, x + mcW - 3.5, bottomY - 2.5);
+    const speed = m.avgManagerTurnaroundHours !== null ? `${m.avgManagerTurnaroundHours}h` : '—';
+    const rating = m.avgRating !== null ? `${m.avgRating} / 5.0` : 'No reviews';
+    text(`Speed: ${speed}  ·  Rating: ${rating}`, x + 3.5, bottomY, { size: 5.5, color: C.slate[500] });
+    text(`${m.completedCount}/${m.totalAssigned} resolved`, x + mcW - 3.5, bottomY, {
+      size: 5.5, color: C.slate[500], align: 'right',
+    });
   });
 
-  curY += extCardHeight + 7;
+  // Fill odd slot with team benchmark card
+  if (stats.length % 2 !== 0) {
+    const idx = stats.length;
+    const x = M + (idx % 2) * (mcW + gridGap);
+    const cy = y + Math.floor(idx / 2) * (mcH + gridGap);
 
-  // ---------------------------------------------------------------------------
-  // Section 4: Executive Review Sign-Off & Audit Block
-  // ---------------------------------------------------------------------------
-  // const signHeight = 22;
-  // doc.setFillColor(248, 250, 252);
-  // doc.setDrawColor(226, 232, 240);
-  // doc.roundedRect(margin, curY, contentWidth, signHeight, 1.5, 1.5, 'FD');
+    box(x, cy, mcW, mcH, { fill: C.slate[50], stroke: C.brandOrange, r: 1.5 });
+    fill(C.brandOrange); doc.rect(x, cy + 1.8, 1.6, mcH - 3.6, 'F');
 
-  // doc.setFont('helvetica', 'bold');
-  // doc.setFontSize(6.8);
-  // doc.setTextColor(COLOR_SLATE_700[0], COLOR_SLATE_700[1], COLOR_SLATE_700[2]);
-  // doc.text('EXECUTIVE VERIFICATION & AUDIT SIGN-OFF', margin + 4, curY + 5.5);
+    text('TEAM OPERATIONS BENCHMARK', x + 6, cy + 5.5, { size: 7.5, bold: true });
+    text('Departmental Aggregate & Target Standards', x + 6, cy + 8.8, { size: 5.5, color: C.slate[500] });
 
-  // const signColWidth = (contentWidth - 8) / 3;
+    const bW = (mcW - 10) / 3, bY = cy + 12.0;
+    const bench: Array<[string, string, RGB]> = [
+      ['OVERALL KPI', `${teamAverageKpi}%`, teamAverageKpi >= 85 ? C.green : C.amber],
+      ['SLA COMPLIANCE', `${teamSlaRate}%`, C.green],
+      ['RESOLVED', `${totalCompleted}/${totalReceived}`, C.blue],
+    ];
+    bench.forEach(([label, val, color], i) => {
+      const bx = x + 5 + i * bW + bW / 2;
+      text(label, bx, bY + 3.0, { size: 5.0, color: C.slate[500], align: 'center' });
+      text(val, bx, bY + 7.5, { size: 8.0, bold: true, color, align: 'center' });
+    });
 
-  // // Prepared by
-  // doc.setFont('helvetica', 'normal');
-  // doc.setFontSize(6.2);
-  // doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  // doc.text('Prepared By (Operations Admin):', margin + 4, curY + 10.5);
-  // doc.setFont('helvetica', 'bold');
-  // doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  // doc.text(`${adminUser.name} (${adminUser.email})`, margin + 4, curY + 15);
+    const bottomY = cy + 25.2;
+    stroke(C.slate[200], 0.2);
+    doc.line(x + 4, bottomY - 2.5, x + mcW - 4, bottomY - 2.5);
+    text(`Avg Speed: ${teamAvgTurnaround ?? '—'}h`, x + 5, bottomY, { size: 5.5, color: C.slate[500] });
+    text(`Rating: ${teamAverageRating ?? 'N/A'} / 5.0`, x + mcW - 5, bottomY, {
+      size: 5.5, color: C.slate[500], align: 'right',
+    });
+  }
 
-  // // Submitted To
-  // const subX = margin + 4 + signColWidth;
-  // doc.setFont('helvetica', 'normal');
-  // doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  // doc.text('Submitted To:', subX, curY + 10.5);
-  // doc.setFont('helvetica', 'bold');
-  // doc.setTextColor(COLOR_SLATE_900[0], COLOR_SLATE_900[1], COLOR_SLATE_900[2]);
-  // doc.text('Director & Management Board', subX, curY + 15);
+  y += Math.ceil(Math.max(stats.length, 1) / 2) * (mcH + gridGap) + 4.5;
 
-  // // Signature Line
-  // const sigX = margin + 4 + signColWidth * 2;
-  // doc.setFont('helvetica', 'normal');
-  // doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  // doc.text('Director Acknowledgment:', sigX, curY + 10.5);
-  // doc.setDrawColor(COLOR_SLATE_300[0], COLOR_SLATE_300[1], COLOR_SLATE_300[2]);
-  // doc.line(sigX, curY + 17, sigX + signColWidth - 8, curY + 17);
-  // doc.setFontSize(5.5);
-  // doc.text('Signature & Date', sigX, curY + 20);
+  // ── Watchlist ──────────────────────────────────────────────────────────
+  text('Operational Escalations & SLA Watchlist', M, y, { size: 9.5, bold: true });
+  text('Queries exceeding standard 24-hour service level agreement', PAGE_W - M, y, {
+    size: 6.5, color: C.slate[500], align: 'right',
+  });
+  y += 3.2;
 
-  // Page 2 Footer
-  doc.setDrawColor(COLOR_SLATE_300[0], COLOR_SLATE_300[1], COLOR_SLATE_300[2]);
-  doc.setLineWidth(0.3);
-  doc.line(margin, footerY, pageWidth - margin, footerY);
+  if (overdueActive.length > 0) {
+    const rows = Math.min(3, overdueActive.length);
+    const watchH = 11 + rows * 5.6;
+    box(M, y, CW, watchH, { fill: C.redBg, stroke: [254, 202, 202] as RGB, r: 1.5 });
+    text(`Priority Attention Required: ${overdueActive.length} Open Queries Exceeding SLA Deadline`, M + 4, y + 5, {
+      size: 7.2, bold: true, color: C.red,
+    });
+    text('Active bottlenecks requiring manager resolution or administrative intervention:', M + 4, y + 8.5, {
+      size: 5.8, color: C.slate[700],
+    });
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.setTextColor(COLOR_SLATE_500[0], COLOR_SLATE_500[1], COLOR_SLATE_500[2]);
-  // doc.text('CONFIDENTIAL & PROPRIETARY · WMD MANAGEMENT', margin, footerY + 5);
-  doc.text('Page 2 of 2', pageWidth / 2, footerY + 5, { align: 'center' });
-  doc.text('WMD Manager Portal System', pageWidth - margin, footerY + 5, { align: 'right' });
+    overdueActive.slice(0, 3).forEach((oq, i) => {
+      const ry = y + 13 + i * 5.4;
+      const stage = !oq.managerDone ? 'Pending Manager Review' : 'Pending Sender Confirmation';
+      text(`[${oq.queryId ?? oq.id}]`, M + 4, ry, { size: 6.2, bold: true, color: C.red });
+      text(oq.managerName ?? 'Unassigned', M + 26, ry, { size: 6.2, bold: true });
+      text(`Topic: ${truncate(oq.queryTitle?.trim() ?? 'Operational Query', 38)}`, M + 55, ry, {
+        size: 6.2, color: C.slate[700],
+      });
+      text(`Logged: ${oq.createdAt?.slice(0, 10) ?? 'Recent'}`, M + 124, ry, { size: 6.2, color: C.slate[500] });
+      text(stage, PAGE_W - M - 4, ry, { size: 6.2, bold: true, color: C.amber, align: 'right' });
+    });
 
-  // ---------------------------------------------------------------------------
-  // Save PDF Document with Clean Contextual Filename
-  // ---------------------------------------------------------------------------
-  const dateStr = formatDate(nowMs);
-  const prefix =
-    timeWindow === '7d'
-      ? 'Weekly'
-      : timeWindow === '14d'
-      ? 'BiWeekly'
-      : timeWindow === '30d'
-      ? 'Monthly'
-      : 'Cumulative';
+    if (overdueActive.length > 3) {
+      text(`+ ${overdueActive.length - 3} additional overdue items logged in system portal.`, M + 4, y + watchH - 2.5, {
+        size: 5.5, color: C.slate[500],
+      });
+    }
+    y += watchH + 4.5;
+  } else {
+    const goodH = 11.5;
+    box(M, y, CW, goodH, { fill: C.greenBg, stroke: [187, 247, 208] as RGB, r: 1.5 });
+    text('Optimal SLA Health: Zero Unresolved Overdue Queries', M + 4, y + 4.8, {
+      size: 7.5, bold: true, color: C.green,
+    });
+    text('All active open queries are currently progressing strictly within the 24-hour service level agreement.', M + 4, y + 8.8, {
+      size: 6.2, color: C.slate[700],
+    });
+    y += goodH + 4.5;
+  }
 
-  doc.save(`${prefix}_Manager_KPI_Report_${dateStr}.pdf`);
+  // ── Extension governance ───────────────────────────────────────────────
+  text('Target Due Date & Extension Governance', M, y, { size: 9, bold: true });
+  y += 3.0;
+
+  const extOnTime =
+    ext.approved > 0
+      ? `${Math.round(
+          (windowQueries.filter(
+            (q) => q.extensionStatus === 'APPROVED' && isQueryDone(q) && !isQueryDelayed(q, nowMs),
+          ).length /
+            ext.approved) *
+            100,
+        )}%`
+      : '100%';
+
+  const extItems: Array<[string, string | number, RGB]> = [
+    ['EXTENSIONS REQUESTED', ext.requested, C.slate[700]],
+    ['APPROVED BY SENDER', ext.approved, C.green],
+    ['PENDING MUTUAL REVIEW', ext.pending, C.amber],
+    ['EXTENDED ON-TIME RATE', extOnTime, C.blue],
+  ];
+  const extW = (CW - 9) / 4, extH = 13.5;
+  extItems.forEach(([label, val, color], i) => {
+    const ex = M + i * (extW + 3);
+    box(ex, y, extW, extH, { fill: C.white, stroke: C.slate[200] });
+    text(label, ex + extW / 2, y + 4.2, { size: 5.2, bold: true, color: C.slate[500], align: 'center' });
+    text(String(val), ex + extW / 2, y + 10.5, { size: 9.5, bold: true, color, align: 'center' });
+  });
+  y += extH + 5;
+
+  // ── Sign-off ───────────────────────────────────────────────────────────
+  const signH = 22;
+  box(M, y, CW, signH, { fill: C.slate[50], stroke: C.slate[200], r: 1.5 });
+  text('EXECUTIVE VERIFICATION & AUDIT SIGN-OFF', M + 4, y + 4.8, {
+    size: 6.5, bold: true, color: C.slate[700],
+  });
+
+  const colW = (CW - 8) / 3;
+  const signCols: Array<[string, string, string]> = [
+    ['Prepared By (Operations Admin):', `${adminUser.name} (${adminUser.email})`, `Stamping: ${formattedNow} ${timeNow}`],
+    ['Submitted To:', 'Director & Management Board', 'WMD Corporate Service Governance'],
+    ['Director Acknowledgment:', '', ''],
+  ];
+  signCols.forEach(([l1, l2, l3], i) => {
+    const cx = M + 4 + i * colW;
+    text(l1, cx, y + 9.5, { size: 5.8, color: C.slate[500] });
+    if (l2) text(l2, cx, y + 13.8, { size: 5.8, bold: true });
+    if (l3) text(l3, cx, y + 18.0, { size: 5.2, color: C.slate[500] });
+    if (i === 2) {
+      stroke(C.slate[300]);
+      doc.line(cx, y + 16.5, cx + colW - 8, y + 16.5);
+      text('Signature & Date', cx, y + 19.5, { size: 5.2, color: C.slate[500] });
+    }
+  });
+
+  drawFooter(2, 2);
+
+  // ── Save ───────────────────────────────────────────────────────────────
+  const prefix: Record<string, string> = { '7d': 'Weekly', '14d': 'BiWeekly', '30d': 'Monthly' };
+  doc.save(`${prefix[timeWindow] ?? 'Cumulative'}_Manager_KPI_Report_${formatDate(nowMs)}.pdf`);
 }
