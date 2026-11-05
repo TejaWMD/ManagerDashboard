@@ -90,9 +90,8 @@ export function generateWeeklyManagerReportPdf({
   const drawFooter = (page: number, total: number) => {
     stroke(C.slate[300]); doc.line(M, FOOTER_Y, PAGE_W - M, FOOTER_Y);
     const fy = FOOTER_Y + 4.5;
-    text('CONFIDENTIAL & PROPRIETARY · WMD MANAGEMENT', M, fy, { size: 6.5, color: C.slate[500] });
     text(`Page ${page} of ${total}`, PAGE_W / 2, fy, { size: 6.5, color: C.slate[500], align: 'center' });
-    text('WMD Manager Portal System', PAGE_W - M, fy, { size: 6.5, color: C.slate[500], align: 'right' });
+    text('WMD QUERY PORTAL', PAGE_W - M, fy, { size: 6.5, color: C.slate[500], align: 'right' });
   };
 
   // ── Aggregate metrics ──────────────────────────────────────────────────
@@ -144,7 +143,7 @@ export function generateWeeklyManagerReportPdf({
   };
   const pm = periodMeta[timeWindow] ?? periodMeta['7d'];
   const dateRange = pm.days
-    ? `Period: ${formatDate(nowMs - pm.days * 864e5)} to ${formattedNow}`
+    ? `${formatDate(nowMs - pm.days * 864e5)} to ${formattedNow}`
     : `Cumulative Overview up to ${formattedNow}`;
 
   // ══════════════════════════════════════════════════════════════════════
@@ -153,15 +152,15 @@ export function generateWeeklyManagerReportPdf({
   drawChrome();
   let y = 13.5;
 
-  text('WMD OPERATIONS & SERVICE MANAGEMENT', M, y, { size: 8, bold: true, color: C.brandOrange });
-  text('Weekly Executive Manager KPI Report', M, (y += 5.5), { size: 14.5, bold: true });
-  text(`${pm.label}  |  ${dateRange}`, M, (y += 4.5), { size: 8, color: C.slate[500] });
+  // text('WMD QUERY PORTAL', M, y, { size: 8, bold: true, color: C.brandOrange });
+  text('WEEKLY WMD QUERY PORTAL KPI REPORT', M, (y += 5.5), { size: 14.5, bold: true });
+  text(`${dateRange}`, M, (y += 4.5), { size: 8, color: C.slate[500] });
 
   // Metadata card (right-aligned)
   const metaW = 62, metaX = PAGE_W - M - metaW;
   box(metaX, 10, metaW, 17, { fill: C.slate[50], stroke: C.slate[300], r: 1.5 });
   const mc = metaX + metaW / 2;
-  text('WEEKLY EXECUTIVE AUDIT', mc, 14, { size: 6.8, bold: true, color: C.slate[700], align: 'center' });
+  text('WEEKLY KPI REPORT', mc, 14, { size: 6.8, bold: true, color: C.slate[700], align: 'center' });
   [
     `Generated: ${formattedNow} ${timeNow}`,
     `Admin: ${adminUser.name} (${adminUser.roleLabel ?? 'Admin'})`,
@@ -174,24 +173,21 @@ export function generateWeeklyManagerReportPdf({
 
   // ── Top KPI cards ──────────────────────────────────────────────────────
   const cards = [
-    { t: 'TEAM OVERALL KPI', v: `${teamAverageKpi}%`, s: 'Target: >= 85%', c: kpiColorFor(teamAverageKpi) },
-    { t: 'ON-TIME RESOLUTIONS', v: `${totalOnTime}`, s: `${teamSlaRate}% SLA rate`, c: C.green },
+    { t: 'TEAM OVERALL KPI', v: `${teamAverageKpi}%`, c: kpiColorFor(teamAverageKpi) },
+    { t: 'ON-TIME RESOLUTIONS', v: `${totalOnTime}`, c: C.green },
     {
       t: 'DELAYED & OVERDUE',
       v: `${totalDelayed}`,
-      s: `${totalLate} late · ${totalOverdue} overdue`,
       c: totalDelayed === 0 ? C.green : totalDelayed > 2 ? C.red : C.amber,
     },
     {
       t: 'SENDER SATISFACTION',
       v: teamAverageRating !== null ? `${teamAverageRating} / 5.0` : 'N/A',
-      s: totalRatings > 0 ? `${totalRatings} reviews logged` : 'No reviews yet',
       c: C.slate[900],
     },
     {
       t: 'AVG RESPONSE SPEED',
       v: teamAvgTurnaround !== null ? `${teamAvgTurnaround}h` : '—',
-      s: 'Standard SLA: < 24h',
       c: C.slate[900],
     },
   ];
@@ -203,17 +199,16 @@ export function generateWeeklyManagerReportPdf({
     doc.rect(x, y, cardW, 1.6, 'F');
     text(c.t, x + cardW / 2, y + 5.8, { size: 5.8, bold: true, color: C.slate[500], align: 'center' });
     text(c.v, x + cardW / 2, y + 12.0, { size: 12.5, bold: true, color: c.c, align: 'center' });
-    text(c.s, x + cardW / 2, y + 16.5, { size: 5.6, color: C.slate[500], align: 'center' });
   });
   y += cardH + 6;
 
   // ── Leaderboard table ──────────────────────────────────────────────────
   text('Manager Performance Leaderboard', M, y, { size: 10, bold: true });
-  text('Ranked by Director KPI Scoring Policy (Turnaround 50% + Sender Rating 50%)', PAGE_W - M, y, {
-    size: 6.8,
-    color: C.slate[500],
-    align: 'right',
-  });
+  // text('Ranked by Director KPI Scoring Policy (Turnaround 50% + Sender Rating 50%)', PAGE_W - M, y, {
+  //   size: 6.8,
+  //   color: C.slate[500],
+  //   align: 'right',
+  // });
   y += 3.5;
 
   const cols = [
@@ -249,7 +244,6 @@ export function generateWeeklyManagerReportPdf({
 
     // Manager
     text(m.manager.name, cols[1].x + 3, y + 4.2, { size: 7.5, bold: true });
-    text(truncate(m.manager.email, 24), cols[1].x + 3, y + 7.6, { size: 5.5, color: C.slate[500] });
 
     // KPI badge
     const bW = 16, bH = 5.2, bX = cols[2].x + (cols[2].w - bW) / 2, bY = y + 2.1;
@@ -263,21 +257,12 @@ export function generateWeeklyManagerReportPdf({
     text(`${m.onTimeCount} on-time`, cols[3].x + cols[3].w / 2, y + 4.2, {
       size: 7.2, bold: true, color: C.green, align: 'center',
     });
-    text(`${onRate}% of assigned`, cols[3].x + cols[3].w / 2, y + 7.6, {
-      size: 5.5, color: C.slate[500], align: 'center',
-    });
 
     // Delayed
     const hasDelay = m.delayedCount > 0;
     text(hasDelay ? `${m.delayedCount} delayed` : '0 (Clean)', cols[4].x + cols[4].w / 2, y + 4.2, {
       size: 7.2, bold: true, color: hasDelay ? C.red : C.green, align: 'center',
     });
-    text(
-      hasDelay ? `${m.lateCount} late · ${m.overdueCount} od` : '100% on SLA',
-      cols[4].x + cols[4].w / 2,
-      y + 7.6,
-      { size: 5.5, color: C.slate[500], align: 'center' },
-    );
 
     // Rating
     text(
@@ -285,25 +270,13 @@ export function generateWeeklyManagerReportPdf({
       cols[5].x + cols[5].w / 2, y + 4.2,
       { size: 7.2, bold: true, color: m.avgRating !== null ? C.amber : C.slate[400], align: 'center' },
     );
-    text(
-      m.avgRating !== null ? `${m.totalRated} review${m.totalRated === 1 ? '' : 's'}` : 'No reviews',
-      cols[5].x + cols[5].w / 2, y + 7.6,
-      { size: 5.5, color: C.slate[500], align: 'center' },
-    );
 
     // Turnaround
     text(`${m.turnaroundKpi}% score`, cols[6].x + cols[6].w / 2, y + 4.2, { size: 7.2, bold: true, align: 'center' });
-    text(
-      m.avgManagerTurnaroundHours !== null ? `${m.avgManagerTurnaroundHours}h avg` : '—',
-      cols[6].x + cols[6].w / 2, y + 7.6,
-      { size: 5.5, color: C.slate[500], align: 'center' },
-    );
+    
 
     // Workload
     text(`${m.completedCount} / ${m.totalAssigned}`, cols[7].x + cols[7].w / 2, y + 4.2, { size: 7.2, bold: true, align: 'center' });
-    text(`${m.completionRate}% resolved`, cols[7].x + cols[7].w / 2, y + 7.6, {
-      size: 5.5, color: C.slate[500], align: 'center',
-    });
 
     y += rowH;
   });
@@ -323,7 +296,7 @@ export function generateWeeklyManagerReportPdf({
   });
   text(`${totalOnTime} total`, cols[3].x + cols[3].w / 2, y + 4.8, { size: 6.8, bold: true, color: C.green, align: 'center' });
   text(
-    totalDelayed > 0 ? `${totalDelayed} (${totalOverdue} od)` : '0 (Clean)',
+    totalDelayed > 0 ? `${totalDelayed}` : '0 (Clean)',
     cols[4].x + cols[4].w / 2, y + 4.8,
     { size: 6.8, bold: true, color: totalDelayed > 0 ? C.red : C.green, align: 'center' },
   );
@@ -339,7 +312,7 @@ export function generateWeeklyManagerReportPdf({
   y += 5.5;
 
   // ── Pipeline strip ─────────────────────────────────────────────────────
-  text('Weekly Operations Pipeline & Resolution Breakdown', M, y, { size: 9, bold: true });
+  text('Weekly Average Breakdown', M, y, { size: 9, bold: true });
   y += 3.5;
 
   const pills = [
@@ -358,66 +331,6 @@ export function generateWeeklyManagerReportPdf({
   });
   y += pH + 3;
 
-  // Stacked bar
-  const barH = 3.2;
-  box(M, y, CW, barH, { fill: C.slate[100], r: 0.8 });
-  if (totalReceived > 0) {
-    const segs: Array<[number, RGB]> = [
-      [totalOnTime, C.green],
-      [totalLate, C.amber],
-      [totalOverdue, C.red],
-      [totalInProgress, C.blue],
-    ];
-    let sx = M;
-    segs.forEach(([count, color]) => {
-      const w = (count / totalReceived) * CW;
-      if (w > 0) { fill(color); doc.rect(sx, y, w, barH, 'F'); sx += w; }
-    });
-  }
-  y += barH + 5;
-
-  // ── Observations ───────────────────────────────────────────────────────
-  const insightsH = 32;
-  box(M, y, CW, insightsH, { fill: C.white, stroke: C.slate[200], r: 1.5 });
-  fill(C.brandOrange);
-  doc.rect(M, y, 2, insightsH, 'F');
-  text('Key Operational Observations & Leadership Notes:', M + 6, y + 5.2, { size: 7.8, bold: true });
-
-  const top = stats[0];
-  const fastest = stats
-    .filter((s) => s.avgManagerTurnaroundHours !== null)
-    .sort((a, b) => (a.avgManagerTurnaroundHours ?? 999) - (b.avgManagerTurnaroundHours ?? 999))[0];
-
-  const insights: string[] = [
-    top && top.overallKpi > 0
-      ? `Leading Performer: ${top.manager.name} led at ${top.overallKpi}% with ${top.completedCount} completed queries (${top.onTimeCount} on-time).`
-      : `Weekly Performance: Operations tracking active across ${stats.length} managers.`,
-    totalDelayed > 0
-      ? `SLA Monitoring: ${totalDelayed} queries breached 24h SLA (${totalLate} late, ${totalOverdue} active overdue).`
-      : 'SLA Excellence: 100% of evaluated queries resolved within the 24h deadline.',
-    fastest?.avgManagerTurnaroundHours != null
-      ? `Speed Benchmark: Fastest responder was ${fastest.manager.name} (${fastest.avgManagerTurnaroundHours}h avg).`
-      : `Speed Benchmark: Team average is ${teamAvgTurnaround ?? 0}h.`,
-    ext.approved > 0 || ext.pending > 0
-      ? `Extension Activity: ${ext.requested} requested (${ext.approved} approved, ${ext.pending} pending).`
-      : `Sender Satisfaction: ${teamAverageRating ?? 'N/A'} / 5.0 across ${totalRatings} reviews.`,
-  ];
-  insights.forEach((line, i) => text(`* ${line}`, M + 6, y + 11.0 + i * 5.0, {
-    size: 6.5, color: C.slate[700],
-  }));
-  y += insightsH + 4;
-
-  // ── Footnote ───────────────────────────────────────────────────────────
-  const footH = 11;
-  box(M, y, CW, footH, { fill: C.slate[50], stroke: C.slate[200], r: 1 });
-  text('OFFICIAL DIRECTOR SCORING POLICY & SLA METHODOLOGY:', M + 4, y + 3.8, {
-    size: 5.8, bold: true, color: C.slate[700],
-  });
-  [
-    'Turnaround Score: On-Time (+1.0 pt), Late (>24h) (+0.5 pt), Overdue Open (0.0). In-Progress (<24h) excluded until deadline.',
-    'Overall KPI: 50/50 blend of Turnaround Score and Anonymous Sender Satisfaction Rating (5.0 stars = 100%). Overdue queries carry forward.',
-  ].forEach((line, i) => text(line, M + 4, y + 6.8 + i * 2.7, { size: 5.3, color: C.slate[500] }));
-
   drawFooter(1, 2);
 
   // ══════════════════════════════════════════════════════════════════════
@@ -427,19 +340,15 @@ export function generateWeeklyManagerReportPdf({
   drawChrome();
   y = 12;
 
-  text('WMD EXECUTIVE KPI REPORT · INDIVIDUAL PERFORMANCE BREAKDOWN', M, y, {
+  text('WMD QUERY PORTAL · INDIVIDUAL PERFORMANCE BREAKDOWN', M, y, {
     size: 7.5, bold: true, color: C.brandOrange,
   });
-  text('Page 2 of 2', PAGE_W - M, y, { size: 7, color: C.slate[500], align: 'right' });
   stroke(C.slate[300]);
   doc.line(M, (y += 3.5), PAGE_W - M, y);
 
   // ── Manager scorecards ─────────────────────────────────────────────────
   y += 4.5;
   text('Individual Manager Performance Scorecards', M, y, { size: 10, bold: true });
-  text('Detailed turnaround times, sender ratings, and resolution metrics', PAGE_W - M, y, {
-    size: 6.8, color: C.slate[500], align: 'right',
-  });
   y += 3.5;
 
   const gridGap = 3.5;
@@ -463,7 +372,6 @@ export function generateWeeklyManagerReportPdf({
 
     // Name + email
     text(m.manager.name, x + 11.5, cy + 4.8, { size: 7.8, bold: true });
-    text(truncate(m.manager.email, 22), x + 11.5, cy + 7.8, { size: 5.5, color: C.slate[500] });
 
     // KPI badge
     const bW = 15, bH = 4.8, bX = x + mcW - bW - 3, bY = cy + 2.6;
@@ -530,7 +438,7 @@ export function generateWeeklyManagerReportPdf({
     const bW = (mcW - 10) / 3, bY = cy + 12.0;
     const bench: Array<[string, string, RGB]> = [
       ['OVERALL KPI', `${teamAverageKpi}%`, teamAverageKpi >= 85 ? C.green : C.amber],
-      ['SLA COMPLIANCE', `${teamSlaRate}%`, C.green],
+      ['COMPLETION RATE', `${teamSlaRate}%`, C.green],
       ['RESOLVED', `${totalCompleted}/${totalReceived}`, C.blue],
     ];
     bench.forEach(([label, val, color], i) => {
@@ -550,56 +458,8 @@ export function generateWeeklyManagerReportPdf({
 
   y += Math.ceil(Math.max(stats.length, 1) / 2) * (mcH + gridGap) + 4.5;
 
-  // ── Watchlist ──────────────────────────────────────────────────────────
-  text('Operational Escalations & SLA Watchlist', M, y, { size: 9.5, bold: true });
-  text('Queries exceeding standard 24-hour service level agreement', PAGE_W - M, y, {
-    size: 6.5, color: C.slate[500], align: 'right',
-  });
-  y += 3.2;
-
-  if (overdueActive.length > 0) {
-    const rows = Math.min(3, overdueActive.length);
-    const watchH = 11 + rows * 5.6;
-    box(M, y, CW, watchH, { fill: C.redBg, stroke: [254, 202, 202] as RGB, r: 1.5 });
-    text(`Priority Attention Required: ${overdueActive.length} Open Queries Exceeding SLA Deadline`, M + 4, y + 5, {
-      size: 7.2, bold: true, color: C.red,
-    });
-    text('Active bottlenecks requiring manager resolution or administrative intervention:', M + 4, y + 8.5, {
-      size: 5.8, color: C.slate[700],
-    });
-
-    overdueActive.slice(0, 3).forEach((oq, i) => {
-      const ry = y + 13 + i * 5.4;
-      const stage = !oq.managerDone ? 'Pending Manager Review' : 'Pending Sender Confirmation';
-      text(`[${oq.queryId ?? oq.id}]`, M + 4, ry, { size: 6.2, bold: true, color: C.red });
-      text(oq.managerName ?? 'Unassigned', M + 26, ry, { size: 6.2, bold: true });
-      text(`Topic: ${truncate(oq.queryTitle?.trim() ?? 'Operational Query', 38)}`, M + 55, ry, {
-        size: 6.2, color: C.slate[700],
-      });
-      text(`Logged: ${oq.createdAt?.slice(0, 10) ?? 'Recent'}`, M + 124, ry, { size: 6.2, color: C.slate[500] });
-      text(stage, PAGE_W - M - 4, ry, { size: 6.2, bold: true, color: C.amber, align: 'right' });
-    });
-
-    if (overdueActive.length > 3) {
-      text(`+ ${overdueActive.length - 3} additional overdue items logged in system portal.`, M + 4, y + watchH - 2.5, {
-        size: 5.5, color: C.slate[500],
-      });
-    }
-    y += watchH + 4.5;
-  } else {
-    const goodH = 11.5;
-    box(M, y, CW, goodH, { fill: C.greenBg, stroke: [187, 247, 208] as RGB, r: 1.5 });
-    text('Optimal SLA Health: Zero Unresolved Overdue Queries', M + 4, y + 4.8, {
-      size: 7.5, bold: true, color: C.green,
-    });
-    text('All active open queries are currently progressing strictly within the 24-hour service level agreement.', M + 4, y + 8.8, {
-      size: 6.2, color: C.slate[700],
-    });
-    y += goodH + 4.5;
-  }
-
   // ── Extension governance ───────────────────────────────────────────────
-  text('Target Due Date & Extension Governance', M, y, { size: 9, bold: true });
+  text('Extension', M, y, { size: 9, bold: true });
   y += 3.0;
 
   const extOnTime =
@@ -627,31 +487,6 @@ export function generateWeeklyManagerReportPdf({
     text(String(val), ex + extW / 2, y + 10.5, { size: 9.5, bold: true, color, align: 'center' });
   });
   y += extH + 5;
-
-  // ── Sign-off ───────────────────────────────────────────────────────────
-  const signH = 22;
-  box(M, y, CW, signH, { fill: C.slate[50], stroke: C.slate[200], r: 1.5 });
-  text('EXECUTIVE VERIFICATION & AUDIT SIGN-OFF', M + 4, y + 4.8, {
-    size: 6.5, bold: true, color: C.slate[700],
-  });
-
-  const colW = (CW - 8) / 3;
-  const signCols: Array<[string, string, string]> = [
-    ['Prepared By (Operations Admin):', `${adminUser.name} (${adminUser.email})`, `Stamping: ${formattedNow} ${timeNow}`],
-    ['Submitted To:', 'Director & Management Board', 'WMD Corporate Service Governance'],
-    ['Director Acknowledgment:', '', ''],
-  ];
-  signCols.forEach(([l1, l2, l3], i) => {
-    const cx = M + 4 + i * colW;
-    text(l1, cx, y + 9.5, { size: 5.8, color: C.slate[500] });
-    if (l2) text(l2, cx, y + 13.8, { size: 5.8, bold: true });
-    if (l3) text(l3, cx, y + 18.0, { size: 5.2, color: C.slate[500] });
-    if (i === 2) {
-      stroke(C.slate[300]);
-      doc.line(cx, y + 16.5, cx + colW - 8, y + 16.5);
-      text('Signature & Date', cx, y + 19.5, { size: 5.2, color: C.slate[500] });
-    }
-  });
 
   drawFooter(2, 2);
 
