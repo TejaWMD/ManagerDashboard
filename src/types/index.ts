@@ -399,12 +399,22 @@ export function sortQueriesByStatusAndTimestamp(
   });
 }
 
+export function isQueryExemptFromDelay(
+  query: Pick<Query, 'queryId' | 'isUrgent'>
+): boolean {
+  if (query.isUrgent) return true;
+  if (query.queryId && query.queryId.trim().toUpperCase() === 'QRY-009') {
+    return true;
+  }
+  return false;
+}
+
 export function isQueryDelayed(
   query: Query,
   nowMs: number = Date.now()
 ): boolean {
-  // Urgent queries do not have a 24h delay threshold and are never classified as delayed
-  if (query.isUrgent) {
+  // Urgent queries (and exempted QRY-009) do not have a 24h delay threshold and are never classified as delayed
+  if (isQueryExemptFromDelay(query)) {
     return false;
   }
 
@@ -420,10 +430,6 @@ export function isQueryDelayed(
 
   // If completed (both Manager Done & AM Done are checked), check if completion exceeded deadline
   if (isQueryDone(query)) {
-    // If the manager resolved their work on or before deadline, the manager was on time!
-    if (query.managerDoneAtMs && query.managerDoneAtMs <= deadlineMs) {
-      return false;
-    }
     if (
       typeof query.completedAtMs === 'number' &&
       !Number.isNaN(query.completedAtMs) &&
@@ -438,11 +444,6 @@ export function isQueryDelayed(
       }
     }
     return query.isDelayed === true;
-  }
-
-  // If manager marked Done on time, query is not delayed on the manager's side (handled by isSenderDelayed)
-  if (query.managerDone && query.managerDoneAtMs && query.managerDoneAtMs <= deadlineMs) {
-    return false;
   }
 
   if (query.isDelayed === true) {

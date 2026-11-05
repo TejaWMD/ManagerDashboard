@@ -146,7 +146,7 @@ WHERE manager_done = TRUE
 -- Backfill is_delayed for existing rows (> 24 hours = 86,400,000 ms or target due date)
 UPDATE public.queries
 SET is_delayed = CASE
-  WHEN is_urgent = TRUE THEN FALSE
+  WHEN is_urgent = TRUE OR UPPER(query_id) = 'QRY-009' THEN FALSE
   WHEN extension_status = 'APPROVED' AND target_due_at_ms IS NOT NULL AND target_due_at_ms > 0 THEN
     CASE
       WHEN manager_done = TRUE AND account_manager_done = TRUE THEN
@@ -212,8 +212,8 @@ BEGIN
       NEW.completed_at_ms := now_ms;
     END IF;
 
-    -- Urgent queries are never marked delayed
-    IF NEW.is_urgent = TRUE THEN
+    -- Urgent queries and exempted queries (QRY-009) are never marked delayed
+    IF NEW.is_urgent = TRUE OR UPPER(NEW.query_id) = 'QRY-009' THEN
       NEW.is_delayed := FALSE;
     ELSIF (NEW.completed_at_ms > effective_deadline_ms)
        OR (TG_OP = 'UPDATE' AND OLD.is_delayed = TRUE)
@@ -227,8 +227,8 @@ BEGIN
     NEW.completed_at := NULL;
     NEW.completed_at_ms := NULL;
 
-    -- Open queries: urgent or active approved extensions within deadline are NOT delayed
-    IF NEW.is_urgent = TRUE THEN
+    -- Open queries: urgent, exempted (QRY-009), or active approved extensions within deadline are NOT delayed
+    IF NEW.is_urgent = TRUE OR UPPER(NEW.query_id) = 'QRY-009' THEN
       NEW.is_delayed := FALSE;
     ELSIF NEW.extension_status = 'APPROVED' AND effective_deadline_ms > 0 AND now_ms <= effective_deadline_ms THEN
       NEW.is_delayed := FALSE;

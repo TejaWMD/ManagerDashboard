@@ -322,8 +322,10 @@ export function mapRowToQuery(row: QueryRow): Query {
     Date.now() <= effectiveDeadlineMs;
 
   const isUrgent = Boolean(row.is_urgent);
+  const isExemptFromDelay =
+    isUrgent || Boolean(row.query_id && row.query_id.trim().toUpperCase() === 'QRY-009');
 
-  const computedDelayed = isUrgent
+  const computedDelayed = isExemptFromDelay
     ? false
     : isDone
     ? completedAtMs && effectiveDeadlineMs > 0

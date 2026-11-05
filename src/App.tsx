@@ -1016,6 +1016,9 @@ export const App: React.FC = () => {
         | 'attachments'
         | 'managerAttachments'
         | 'remarks'
+        | 'completedAt'
+        | 'completedAtMs'
+        | 'isDelayed'
         | 'adminCompletedBy'
         | 'adminCompletedAt'
         | 'adminCompletedAtMs'
@@ -1086,16 +1089,12 @@ export const App: React.FC = () => {
 
     const isUrgentQuery =
       updates.isUrgent !== undefined ? Boolean(updates.isUrgent) : Boolean(existing.isUrgent);
+    const isExemptFromDelay =
+      isUrgentQuery ||
+      Boolean(existing.queryId && existing.queryId.trim().toUpperCase() === 'QRY-009');
 
-    const managerFinishedOnTime = Boolean(
-      nextManagerDoneAtMs && effectiveDeadlineMs > 0 && nextManagerDoneAtMs <= effectiveDeadlineMs
-    );
-
-    // Urgent queries or active approved extensions have no delay threshold and are never classified as delayed
-    // If manager finished on or before effective deadline, the query was resolved on time by the manager
-    const nextIsDelayed = isUrgentQuery || isApprovedExtActive
-      ? false
-      : managerFinishedOnTime
+    // Urgent queries, exempted QRY-009, or active approved extensions have no delay threshold and are never classified as delayed
+    const nextIsDelayed = isExemptFromDelay || isApprovedExtActive
       ? false
       : nextIsCompleted
       ? Boolean(

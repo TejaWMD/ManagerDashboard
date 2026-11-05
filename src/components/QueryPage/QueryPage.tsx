@@ -78,6 +78,8 @@ interface QueryPageProps {
         | 'attachments'
         | 'managerAttachments'
         | 'remarks'
+        | 'completedAt'
+        | 'completedAtMs'
         | 'adminCompletedBy'
         | 'adminCompletedAt'
         | 'adminCompletedAtMs'
@@ -1868,24 +1870,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           </>
                         ) : item.isUrgent ? (
                           managerOnlyChecked ? (
-                            <>
-                              <span className="table-status-pill table-status-pill--urgent-mgr" title="Urgent query checked by manager; awaiting sender verification">
-                                🚨 Urgent - Mgr Checked
-                              </span>
-                              {isSenderDelayed(item, nowMs) ? (
-                                <span className="table-status-pill table-status-pill--sender-delayed" title="Manager resolved on time. Sender delayed in confirming completion.">
-                                  ⚠️ Delayed by Sender
-                                </span>
-                              ) : delayed ? (
-                                <span className="table-status-pill table-status-pill--delayed">
-                                  Delayed
-                                </span>
-                              ) : (
-                                <span className="table-status-pill table-status-pill--grace" title="Manager marked done. 12h sender review grace period active.">
-                                  In Review
-                                </span>
-                              )}
-                            </>
+                            <span className="table-status-pill table-status-pill--urgent-mgr" title="Urgent query checked by manager; awaiting sender verification">
+                              🚨 Urgent - Mgr Checked
+                            </span>
                           ) : (
                             <span className="table-status-pill table-status-pill--urgent" title="Urgent query: Immediate response required, no delay threshold">
                               🚨 URGENT (Due Now)
@@ -1896,17 +1883,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             <span className="table-status-pill table-status-pill--mgr-done">
                               Mgr Checked
                             </span>
-                            {isSenderDelayed(item, nowMs) ? (
-                              <span className="table-status-pill table-status-pill--sender-delayed" title="Manager resolved on time. Sender delayed in confirming completion.">
-                                ⚠️ Delayed by Sender
-                              </span>
-                            ) : delayed ? (
+                            {delayed && (
                               <span className="table-status-pill table-status-pill--delayed">
                                 Delayed
-                              </span>
-                            ) : (
-                              <span className="table-status-pill table-status-pill--grace" title="Manager marked done. 12h sender review grace period active.">
-                                In Review
                               </span>
                             )}
                           </>
@@ -2455,17 +2434,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <span className="table-status-pill table-status-pill--mgr-done">
                           Mgr Checked
                         </span>
-                        {isSenderDelayed(activeViewingQuery, nowMs) ? (
-                          <span className="table-status-pill table-status-pill--sender-delayed" title="Manager resolved on time. Sender delayed in confirming completion.">
-                            ⚠️ Delayed by Sender
-                          </span>
-                        ) : isQueryDelayed(activeViewingQuery, nowMs) ? (
+                        {isQueryDelayed(activeViewingQuery, nowMs) && (
                           <span className="table-status-pill table-status-pill--delayed">
                             Delayed
-                          </span>
-                        ) : (
-                          <span className="table-status-pill table-status-pill--grace" title="Manager marked done. Awaiting sender verification.">
-                            In Review
                           </span>
                         )}
                       </>

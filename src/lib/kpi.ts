@@ -5,6 +5,7 @@ import {
   EvaluatedQueryDetail,
   getQueryDeadlineMs,
   getQueryTimestampMs,
+  isQueryExemptFromDelay,
   ManagerKpiStats,
   UserAccount,
 } from '../types';
@@ -47,12 +48,10 @@ export function evaluateQueryKpi(
     const managerDoneMs = query.managerDoneAtMs || completionMs;
     const turnaroundMs = Math.max(0, managerDoneMs - createdMs);
     const turnaroundHours = Math.round((turnaroundMs / (1000 * 60 * 60)) * 10) / 10;
-    // Urgent queries have no delay threshold; once completed they count normally as On-Time (+1.0 pt)
-    // If manager marked Done before or at deadline, manager is awarded On-Time even if sender delayed verification
-    const isOnTime = query.isUrgent
+    // Urgent queries (and exempted QRY-009) have no delay threshold; once completed they count normally as On-Time (+1.0 pt)
+    const isExempt = isQueryExemptFromDelay(query);
+    const isOnTime = isExempt
       ? true
-      : query.managerDoneAtMs
-      ? query.managerDoneAtMs <= deadlineMs
       : completionMs <= deadlineMs && !query.isDelayed;
 
     // Sender verification latency: completedAtMs - managerDoneAtMs
@@ -76,13 +75,13 @@ export function evaluateQueryKpi(
     };
   }
 
-  // Sender has NOT completed yet. Urgent queries have no delay threshold and are never classified as delayed/overdue.
+  // Sender has NOT completed yet. Urgent queries (and exempted QRY-009) have no delay threshold and are never classified as delayed/overdue.
   // Queries with an active approved extension are NOT overdue while within extended deadline.
   const isApprovedExtensionActive =
     query.extensionStatus === 'APPROVED' && deadlineMs > 0 && nowMs <= deadlineMs;
 
   const isPastDeadline =
-    !query.isUrgent &&
+    !isQueryExemptFromDelay(query) &&
     !isApprovedExtensionActive &&
     (nowMs > deadlineMs || query.isDelayed === true);
 
