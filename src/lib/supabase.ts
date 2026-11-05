@@ -14,6 +14,7 @@ import {
   UserRole,
   QueryAttachment,
   QueryRemark,
+  QueryCCUser,
 } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 
@@ -63,6 +64,7 @@ interface LocalCompletionMeta {
   attachments?: QueryAttachment[];
   managerAttachments?: QueryAttachment[];
   remarks?: QueryRemark[];
+  ccUsers?: QueryCCUser[];
   adminCompletedBy?: string | null;
   adminCompletedAt?: string | null;
   adminCompletedAtMs?: number | null;
@@ -146,6 +148,7 @@ export interface QueryRow {
   auto_completed_at?: string | null;
   auto_completed_at_ms?: number | null;
   completion_note?: string | null;
+  cc_users?: string | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -449,6 +452,19 @@ export function mapRowToQuery(row: QueryRow): Query {
       : localMeta?.autoCompletedAtMs ?? null;
   const completionNote = row.completion_note || localMeta?.completionNote || null;
 
+  let resolvedCcUsers: QueryCCUser[] = [];
+  if (row.cc_users) {
+    try {
+      const parsed = JSON.parse(row.cc_users);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        resolvedCcUsers = parsed;
+      }
+    } catch {}
+  }
+  if (resolvedCcUsers.length === 0 && localMeta?.ccUsers && localMeta.ccUsers.length > 0) {
+    resolvedCcUsers = localMeta.ccUsers;
+  }
+
   return {
     id: row.query_id,
     queryId: row.query_id,
@@ -506,6 +522,7 @@ export function mapRowToQuery(row: QueryRow): Query {
         : localMeta?.lastUrgentReminderAtMs ?? null,
     attachments: resolvedAttachments,
     managerAttachments: resolvedManagerAttachments,
+    ccUsers: resolvedCcUsers,
   };
 }
 
@@ -681,7 +698,8 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('admin_completed_at_ms') ||
     message.includes('auto_completed_at') ||
     message.includes('auto_completed_at_ms') ||
-    message.includes('completion_note')
+    message.includes('completion_note') ||
+    message.includes('cc_users')
   );
 }
 
@@ -725,12 +743,17 @@ export async function insertQueryInDb(query: Query): Promise<{
       query.managerAttachments && query.managerAttachments.length > 0
         ? JSON.stringify(query.managerAttachments)
         : null,
+    cc_users:
+      query.ccUsers && query.ccUsers.length > 0
+        ? JSON.stringify(query.ccUsers)
+        : null,
   };
   if (
     query.linkedAppointmentId ||
     query.isUrgent ||
     (query.attachments && query.attachments.length > 0) ||
-    (query.managerAttachments && query.managerAttachments.length > 0)
+    (query.managerAttachments && query.managerAttachments.length > 0) ||
+    (query.ccUsers && query.ccUsers.length > 0)
   ) {
     saveLocalCompletionMeta(query.queryId, {
       completedAt: query.completedAt ?? null,
@@ -740,6 +763,7 @@ export async function insertQueryInDb(query: Query): Promise<{
       isUrgent: Boolean(query.isUrgent),
       attachments: query.attachments || [],
       managerAttachments: query.managerAttachments || [],
+      ccUsers: query.ccUsers || [],
     });
   }
 
@@ -845,6 +869,7 @@ export async function updateQueryInDb(
     autoCompletedAt?: string | null;
     autoCompletedAtMs?: number | null;
     completionNote?: string | null;
+    ccUsers?: QueryCCUser[] | null;
   }
 ): Promise<{
   data: Query | null;
@@ -982,6 +1007,12 @@ export async function updateQueryInDb(
   if (updates.completionNote !== undefined) {
     extendedUpdates.completion_note = updates.completionNote;
   }
+  if (updates.ccUsers !== undefined) {
+    extendedUpdates.cc_users =
+      updates.ccUsers && updates.ccUsers.length > 0
+        ? JSON.stringify(updates.ccUsers)
+        : null;
+  }
 
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
@@ -1025,7 +1056,8 @@ export async function updateQueryInDb(
     updates.adminCompletedAtMs !== undefined ||
     updates.autoCompletedAt !== undefined ||
     updates.autoCompletedAtMs !== undefined ||
-    updates.completionNote !== undefined
+    updates.completionNote !== undefined ||
+    updates.ccUsers !== undefined
   ) {
     saveLocalCompletionMeta(queryId, {
       ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
@@ -1064,6 +1096,7 @@ export async function updateQueryInDb(
       ...(updates.autoCompletedAt !== undefined ? { autoCompletedAt: updates.autoCompletedAt } : {}),
       ...(updates.autoCompletedAtMs !== undefined ? { autoCompletedAtMs: updates.autoCompletedAtMs } : {}),
       ...(updates.completionNote !== undefined ? { completionNote: updates.completionNote } : {}),
+      ...(updates.ccUsers !== undefined ? { ccUsers: updates.ccUsers || [] } : {}),
     });
   }
 

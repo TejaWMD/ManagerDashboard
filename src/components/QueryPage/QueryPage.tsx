@@ -5,9 +5,11 @@ import {
   belongsToManager,
   getLinkedAppointmentForQuery,
   isUserParticipantInAppointment,
+  isUserCcOnQuery,
   Query,
   QueryAttachment,
   QueryRemark,
+  QueryCCUser,
   isQueryDelayed,
   isQueryDone,
   isQueryPending,
@@ -31,6 +33,7 @@ import {
   formatDateTime,
   formatTimestamp as formatTimestampUtil,
 } from '../../lib/dateUtils';
+import { dispatchQueryPushNotification } from '../../lib/pushDispatcher';
 import { AUTHORIZED_USERS } from '../../data/users';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './QueryPage.css';
@@ -51,6 +54,7 @@ interface QueryPageProps {
     linkedAppointmentId?: string | null;
     isUrgent?: boolean;
     attachments?: QueryAttachment[];
+    ccUsers?: QueryCCUser[];
   }) => Promise<void>;
   onUpdateQuery: (
     queryId: string,
@@ -89,6 +93,7 @@ interface QueryPageProps {
         | 'autoCompletedAt'
         | 'autoCompletedAtMs'
         | 'completionNote'
+        | 'ccUsers'
       >
     >
   ) => Promise<void>;
@@ -104,7 +109,7 @@ type StatusFilterValue =
   | 'Delayed'
   | 'Completed';
 
-type ManagerViewScope = 'ALL' | 'RECEIVED' | 'SENT';
+type ManagerViewScope = 'ALL' | 'RECEIVED' | 'SENT' | 'CC';
 
 export const QueryPage: React.FC<QueryPageProps> = ({
   currentUser,
@@ -163,6 +168,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [selectedManagerId, setSelectedManagerId] = useState<string>(
     targetManagersForCreation[0]?.id || ''
   );
+  const [selectedCcUserIds, setSelectedCcUserIds] = useState<string[]>([]);
   const [queryTitleInput, setQueryTitleInput] = useState<string>('');
   const [queryInput, setQueryInput] = useState<string>('');
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>('');
@@ -307,6 +313,48 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     setDetailAttachmentsDraft(activeViewingQuery.attachments ? [...activeViewingQuery.attachments] : []);
     setIsEditingDescription(false);
     setHasUnsavedDetailChanges(false);
+  };
+
+  const handleSaveModalCc = async () => {
+    if (!activeViewingQuery) return;
+    setIsSavingModalCc(true);
+    try {
+      const newCcUsers: QueryCCUser[] = modalCcDraftIds
+        .map((id) => {
+          const u = AUTHORIZED_USERS.find((usr) => usr.id === id);
+          return u ? { id: u.id, name: u.name, email: u.email, role: u.role } : null;
+        })
+        .filter((u): u is QueryCCUser => u !== null);
+
+      const previousIds = (activeViewingQuery.ccUsers || []).map((u) => u.id);
+      const newlyAddedUsers = newCcUsers.filter((u) => !previousIds.includes(u.id));
+
+      await onUpdateQuery(activeViewingQuery.queryId, {
+        ccUsers: newCcUsers,
+      });
+
+      setViewingQuery((prev) =>
+        prev && prev.queryId === activeViewingQuery.queryId
+          ? { ...prev, ccUsers: newCcUsers }
+          : prev
+      );
+
+      setIsEditingModalCc(false);
+      setModalCcSaveSuccess(true);
+      setTimeout(() => setModalCcSaveSuccess(false), 3500);
+
+      // Dispatch notification to newly CC'd users
+      if (newlyAddedUsers.length > 0) {
+        const updatedQuery = { ...activeViewingQuery, ccUsers: newCcUsers };
+        dispatchQueryPushNotification({
+          event: 'CC_ADDED',
+          query: updatedQuery,
+          actor: currentUser,
+        });
+      }
+    } finally {
+      setIsSavingModalCc(false);
+    }
   };
 
   // Manager Remark in-place editing in Query View modal (receiving manager & admin)
@@ -641,6 +689,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     if (targetManagersForCreation.length > 0) {
       setSelectedManagerId(targetManagersForCreation[0].id);
     }
+    setSelectedCcUserIds([]);
     setShowCreateModal(true);
   };
 
@@ -648,6 +697,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const selectedManagerForCreation = useMemo(() => {
     return managers.find((m) => m.id === selectedManagerId) || null;
   }, [managers, selectedManagerId]);
+
+  // Eligible CC users when creating a query: Any user except current sender and receiving manager
+  const eligibleCcUsersForCreation = useMemo(() => {
+    return AUTHORIZED_USERS.filter(
+      (u) => u.id !== currentUser.id && u.id !== selectedManagerId
+    );
+  }, [currentUser.id, selectedManagerId]);
 
   // Requirement 1: In query list, if linking an existing appointment to the query,
   // the receiving manager should be one of the attendees in the appointment.
@@ -824,6 +880,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [linkExistingError, setLinkExistingError] = useState<string | null>(null);
   const [isSubmittingLinkApt, setIsSubmittingLinkApt] = useState<boolean>(false);
 
+  // CC Editing in View Query Details Modal (for Sender AM & Admin)
+  const [isEditingModalCc, setIsEditingModalCc] = useState<boolean>(false);
+  const [modalCcDraftIds, setModalCcDraftIds] = useState<string[]>([]);
+  const [isSavingModalCc, setIsSavingModalCc] = useState<boolean>(false);
+  const [modalCcSaveSuccess, setModalCcSaveSuccess] = useState<boolean>(false);
+
   // Eligible existing appointments for the active viewing query:
   // Must belong to currentUser AND receiving manager of activeViewingQuery must be an attendee/participant
   const linkableAppointmentsForActiveQuery = useMemo(() => {
@@ -878,6 +940,10 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
       setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
       setModalSenderRemarkSaveSuccess(false);
+
+      setIsEditingModalCc(false);
+      setModalCcDraftIds((activeViewingQuery.ccUsers || []).map((u) => u.id));
+      setModalCcSaveSuccess(false);
       return;
     }
 
@@ -898,6 +964,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
       setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
     }
+    if (!isEditingModalCc) {
+      setModalCcDraftIds((activeViewingQuery.ccUsers || []).map((u) => u.id));
+    }
   }, [
     activeViewingQuery?.queryId,
     activeViewingQuery?.queryTitle,
@@ -915,22 +984,28 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   ]);
 
   // 1. Role-scoped queries
-  // Account Managers see queries they created.
-  // Managers see queries assigned to them AND queries they sent among themselves.
+  // Account Managers see queries they created + queries where they are CC'd.
+  // Managers see queries assigned to them, queries they sent, and queries where they are CC'd.
   // Admin sees all queries.
   const roleScopedQueries = useMemo(() => {
     return queries.filter((c) => {
       if (currentUser.role === 'account_manager') {
-        return belongsToAccountManager(c, currentUser);
+        return belongsToAccountManager(c, currentUser) || isUserCcOnQuery(c, currentUser);
       }
       if (currentUser.role === 'manager') {
         return (
           belongsToManager(c, currentUser) ||
-          belongsToAccountManager(c, currentUser)
+          belongsToAccountManager(c, currentUser) ||
+          isUserCcOnQuery(c, currentUser)
         );
       }
       return true;
     });
+  }, [queries, currentUser]);
+
+  // Count of queries where the current user is CC'd
+  const ccCountForUser = useMemo(() => {
+    return queries.filter((c) => isUserCcOnQuery(c, currentUser)).length;
   }, [queries, currentUser]);
 
   // 2. Apply header filters & automatic status + timestamp sorting
@@ -939,12 +1014,15 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     const selectedMgrObj = managers.find((m) => m.id === filterManagerId);
 
     const filtered = roleScopedQueries.filter((c) => {
-      // Manager view scope: All, Received, or Sent
-      if (currentUser.role === 'manager' && managerViewType !== 'ALL') {
+      // View scope (All, Received, Sent, or CC'd to Me)
+      if (managerViewType !== 'ALL') {
         if (managerViewType === 'RECEIVED' && !belongsToManager(c, currentUser)) {
           return false;
         }
         if (managerViewType === 'SENT' && !belongsToAccountManager(c, currentUser)) {
+          return false;
+        }
+        if (managerViewType === 'CC' && !isUserCcOnQuery(c, currentUser)) {
           return false;
         }
       }
@@ -1049,6 +1127,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
     setIsSubmittingNew(true);
     try {
+      const ccUsersToAttach: QueryCCUser[] = selectedCcUserIds
+        .map((id) => {
+          const u = AUTHORIZED_USERS.find((usr) => usr.id === id);
+          return u ? { id: u.id, name: u.name, email: u.email, role: u.role } : null;
+        })
+        .filter((u): u is QueryCCUser => u !== null);
+
       await onCreateQuery({
         managerId: targetManager.id,
         managerEmail: targetManager.email,
@@ -1058,11 +1143,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         linkedAppointmentId: selectedAppointmentId ? selectedAppointmentId : null,
         isUrgent: effectiveIsUrgent,
         attachments: attachedFiles,
+        ccUsers: ccUsersToAttach,
       });
 
       setQueryTitleInput('');
       setQueryInput('');
       setSelectedAppointmentId('');
+      setSelectedCcUserIds([]);
       setAttachedFiles([]);
       setIsUrgentDraft(false);
       setShowCreateModal(false);
@@ -1253,7 +1340,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
 
         <div className="query-header-controls">
-          {/* Manager View Scope Filter: All, Received, Sent */}
+          {/* Manager View Scope Filter: All, Received, Sent, CC */}
           {currentUser.role === 'manager' && (
             <div className="header-filter-group">
               <label htmlFor="filter-view-scope" className="header-filter-label">
@@ -1264,13 +1351,46 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 className="header-filter-select"
                 value={managerViewType}
                 onChange={(e) => setManagerViewType(e.target.value as ManagerViewScope)}
-                title="Filter queries by role: Received (Assigned to you) or Sent (Sent by you)"
+                title="Filter queries: All, Received (Assigned), Sent (By Me), or CC'd"
               >
                 <option value="ALL">All Queries</option>
                 <option value="RECEIVED">Received (Assigned)</option>
                 <option value="SENT">Sent (By Me)</option>
+                <option value="CC">CC'd to Me ({ccCountForUser})</option>
               </select>
             </div>
+          )}
+
+          {/* Account Manager View Scope Filter: All, Sent, CC */}
+          {currentUser.role === 'account_manager' && (
+            <div className="header-filter-group">
+              <label htmlFor="filter-view-scope-am" className="header-filter-label">
+                View
+              </label>
+              <select
+                id="filter-view-scope-am"
+                className="header-filter-select"
+                value={managerViewType}
+                onChange={(e) => setManagerViewType(e.target.value as ManagerViewScope)}
+                title="Filter queries: All, Sent by Me, or CC'd to Me"
+              >
+                <option value="ALL">All (Mine &amp; CC'd)</option>
+                <option value="SENT">Sent (By Me)</option>
+                <option value="CC">CC'd to Me ({ccCountForUser})</option>
+              </select>
+            </div>
+          )}
+
+          {/* Quick CC Pill button for instant filtering */}
+          {ccCountForUser > 0 && (
+            <button
+              type="button"
+              className={`header-cc-quick-toggle ${managerViewType === 'CC' ? 'header-cc-quick-toggle--active' : ''}`}
+              onClick={() => setManagerViewType((prev) => (prev === 'CC' ? 'ALL' : 'CC'))}
+              title={managerViewType === 'CC' ? 'Show all queries' : 'Quick toggle to view only queries where you are CC\'d'}
+            >
+              ✉️ CC'd to Me ({ccCountForUser})
+            </button>
           )}
 
           {/* Sender Filter: shown for Managers & Admin */}
@@ -1468,6 +1588,21 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         >
                           {item.queryId}
                         </span>
+                        {isUserCcOnQuery(item, currentUser) ? (
+                          <span
+                            className="query-cc-tag"
+                            title="You are CC'd on this query (View-Only)"
+                          >
+                            CC
+                          </span>
+                        ) : item.ccUsers && item.ccUsers.length > 0 ? (
+                          <span
+                            className="query-cc-tag query-cc-tag--other"
+                            title={`CC: ${item.ccUsers.map((u) => u.name).join(', ')}`}
+                          >
+                            CC ({item.ccUsers.length})
+                          </span>
+                        ) : null}
                         {item.isUrgent && (
                           <span
                             className={`query-urgent-tag ${completed ? 'query-urgent-tag--completed' : ''}`}
@@ -2082,6 +2217,65 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 </div>
               </div>
 
+              {/* CC Selection Field (Optional) */}
+              <div className="cp-form-group cc-form-group">
+                <div className="cc-selection-label">
+                  <span>👥 CC Other Team Members (Optional)</span>
+                  <span className="cc-selection-subtext">
+                    View-only awareness &bull; they receive notifications
+                  </span>
+                </div>
+
+                {selectedCcUserIds.length > 0 && (
+                  <div className="cc-chips-container">
+                    {selectedCcUserIds.map((userId) => {
+                      const u = AUTHORIZED_USERS.find((usr) => usr.id === userId);
+                      if (!u) return null;
+                      return (
+                        <span key={userId} className="cc-chip">
+                          <span className="cc-chip-name">{u.name}</span>
+                          <span className="cc-chip-role">
+                            ({u.role === 'manager' ? 'Mgr' : u.role === 'account_manager' ? 'AM' : 'Admin'})
+                          </span>
+                          <button
+                            type="button"
+                            className="cc-chip-remove"
+                            onClick={() =>
+                              setSelectedCcUserIds((prev) => prev.filter((id) => id !== userId))
+                            }
+                            aria-label={`Remove CC ${u.name}`}
+                            title="Remove"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <select
+                  className="cc-user-select"
+                  value=""
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (id && !selectedCcUserIds.includes(id)) {
+                      setSelectedCcUserIds((prev) => [...prev, id]);
+                    }
+                  }}
+                  aria-label="Add user to CC"
+                >
+                  <option value="">+ Select team member to CC...</option>
+                  {eligibleCcUsersForCreation
+                    .filter((u) => !selectedCcUserIds.includes(u.id))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role === 'manager' ? 'Manager' : u.role === 'account_manager' ? 'Account Manager' : 'Admin'}) &bull; {u.email}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
               <div className="cp-form-group">
                 <label htmlFor="query-title-input">Query Title *</label>
                 <input
@@ -2530,6 +2724,25 @@ export const QueryPage: React.FC<QueryPageProps> = ({
             </div>
 
             <div className="query-view-body">
+              {/* CC View-Only Awareness Banner */}
+              {(() => {
+                const isSender = currentUser.id === activeViewingQuery.accountManagerId;
+                const isAssignedMgr = currentUser.id === activeViewingQuery.managerId;
+                const isCc = isUserCcOnQuery(activeViewingQuery, currentUser);
+                const isCcOnly = isCc && !isSender && !isAssignedMgr && currentUser.role !== 'admin';
+
+                if (!isCcOnly) return null;
+                return (
+                  <div className="query-view-cc-banner">
+                    <span className="query-view-cc-banner-icon">ℹ️</span>
+                    <div className="query-view-cc-banner-text">
+                      <strong>You are CC'd on this query (View-Only Awareness).</strong>
+                      <span> You can track resolution progress, view remarks, and access attachments. Remarks and status actions are managed by the assigned manager and sender.</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Awaiting Sender Verification Banner (Manual Admin Force-Complete Available) */}
               {activeViewingQuery.managerDone && !activeViewingQuery.accountManagerDone && activeViewingQuery.managerDoneAtMs && (
                 <div className="query-view-grace-banner">
@@ -2600,6 +2813,124 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       {activeViewingQuery.managerName}
                     </span>
                   </div>
+                </div>
+
+                <div className="query-view-meta-box query-view-meta-box--cc" style={{ gridColumn: 'span 2' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                    <span className="query-view-meta-label">👥 CC'd Members (View-Only)</span>
+                    {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && !isEditingModalCc && (
+                      <button
+                        type="button"
+                        className="btn-meta-edit-cc"
+                        onClick={() => {
+                          setModalCcDraftIds((activeViewingQuery.ccUsers || []).map((u) => u.id));
+                          setIsEditingModalCc(true);
+                        }}
+                        title="Add or remove team members CC'd on this query"
+                      >
+                        {activeViewingQuery.ccUsers && activeViewingQuery.ccUsers.length > 0 ? '✏️ Edit CC' : '+ Add CC'}
+                      </button>
+                    )}
+                  </div>
+
+                  {isEditingModalCc ? (
+                    <div className="modal-cc-editor">
+                      {modalCcDraftIds.length > 0 && (
+                        <div className="cc-chips-container" style={{ marginBottom: '0.45rem' }}>
+                          {modalCcDraftIds.map((userId) => {
+                            const u = AUTHORIZED_USERS.find((usr) => usr.id === userId);
+                            if (!u) return null;
+                            return (
+                              <span key={userId} className="cc-chip">
+                                <span className="cc-chip-name">{u.name}</span>
+                                <span className="cc-chip-role">
+                                  ({u.role === 'manager' ? 'Mgr' : u.role === 'account_manager' ? 'AM' : 'Admin'})
+                                </span>
+                                <button
+                                  type="button"
+                                  className="cc-chip-remove"
+                                  onClick={() =>
+                                    setModalCcDraftIds((prev) => prev.filter((id) => id !== userId))
+                                  }
+                                  title="Remove"
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <select
+                        className="cc-user-select"
+                        value=""
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          if (id && !modalCcDraftIds.includes(id)) {
+                            setModalCcDraftIds((prev) => [...prev, id]);
+                          }
+                        }}
+                        aria-label="Add user to CC"
+                      >
+                        <option value="">+ Add team member to CC...</option>
+                        {AUTHORIZED_USERS
+                          .filter(
+                            (u) =>
+                              u.id !== activeViewingQuery.accountManagerId &&
+                              u.id !== activeViewingQuery.managerId &&
+                              !modalCcDraftIds.includes(u.id)
+                          )
+                          .map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name} ({u.role === 'manager' ? 'Manager' : u.role === 'account_manager' ? 'Account Manager' : 'Admin'}) &bull; {u.email}
+                            </option>
+                          ))}
+                      </select>
+                      <div className="modal-cc-editor-actions" style={{ marginTop: '0.5rem', display: 'flex', gap: '0.45rem' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ padding: '0.25rem 0.65rem', fontSize: '0.78rem' }}
+                          onClick={() => setIsEditingModalCc(false)}
+                          disabled={isSavingModalCc}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          style={{ padding: '0.25rem 0.65rem', fontSize: '0.78rem' }}
+                          onClick={handleSaveModalCc}
+                          disabled={isSavingModalCc}
+                        >
+                          {isSavingModalCc ? 'Saving...' : '💾 Save CC'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="query-view-cc-list">
+                      {activeViewingQuery.ccUsers && activeViewingQuery.ccUsers.length > 0 ? (
+                        <div className="cc-view-pills">
+                          {activeViewingQuery.ccUsers.map((u) => (
+                            <span key={u.id} className="cc-view-pill" title={`${u.name} (${u.email})`}>
+                              👤 {u.name}
+                              <span className="cc-view-pill-role">
+                                {u.role === 'manager' ? 'Mgr' : u.role === 'account_manager' ? 'AM' : 'Admin'}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="query-view-meta-empty">No one CC'd on this query.</span>
+                      )}
+                    </div>
+                  )}
+
+                  {modalCcSaveSuccess && (
+                    <div className="query-view-save-toast" style={{ marginTop: '0.4rem' }}>
+                      ✅ CC list updated and alerts sent!
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -3569,42 +3900,55 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 )}
 
               <div className="modal-actions" style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                {!activeViewingLinkedAppointment &&
-                  !activeViewingQuery.linkedAppointmentId &&
-                  !isLinkingExistingApt && (
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        setIsLinkingExistingApt(true);
-                        setLinkExistingError(null);
-                        if (linkableAppointmentsForActiveQuery.length > 0) {
-                          setChosenExistingAptId(linkableAppointmentsForActiveQuery[0].id);
-                        }
-                      }}
-                    >
-                      🔗 Link Existing Appointment
-                    </button>
-                  )}
-                {!activeViewingLinkedAppointment &&
-                  !activeViewingQuery.linkedAppointmentId &&
-                  onOpenBookAppointment && (
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        const q = activeViewingQuery;
-                        setViewingQuery(null);
-                        const targetUserId =
-                          currentUser.id === q.accountManagerId
-                            ? q.managerId
-                            : q.accountManagerId;
-                        onOpenBookAppointment(q.queryId, targetUserId);
-                      }}
-                    >
-                      📅 Book Appointment for this Query
-                    </button>
-                  )}
+                {(() => {
+                  const isSenderOrMgrOrAdmin =
+                    currentUser.id === activeViewingQuery.accountManagerId ||
+                    currentUser.id === activeViewingQuery.managerId ||
+                    currentUser.role === 'admin';
+
+                  if (!isSenderOrMgrOrAdmin) return null;
+
+                  return (
+                    <>
+                      {!activeViewingLinkedAppointment &&
+                        !activeViewingQuery.linkedAppointmentId &&
+                        !isLinkingExistingApt && (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => {
+                              setIsLinkingExistingApt(true);
+                              setLinkExistingError(null);
+                              if (linkableAppointmentsForActiveQuery.length > 0) {
+                                setChosenExistingAptId(linkableAppointmentsForActiveQuery[0].id);
+                              }
+                            }}
+                          >
+                            🔗 Link Existing Appointment
+                          </button>
+                        )}
+                      {!activeViewingLinkedAppointment &&
+                        !activeViewingQuery.linkedAppointmentId &&
+                        onOpenBookAppointment && (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => {
+                              const q = activeViewingQuery;
+                              setViewingQuery(null);
+                              const targetUserId =
+                                currentUser.id === q.accountManagerId
+                                  ? q.managerId
+                                  : q.accountManagerId;
+                              onOpenBookAppointment(q.queryId, targetUserId);
+                            }}
+                          >
+                            📅 Book Appointment for this Query
+                          </button>
+                        )}
+                    </>
+                  );
+                })()}
                 {currentUser.role === 'admin' &&
                   activeViewingQuery.managerDone &&
                   !activeViewingQuery.accountManagerDone && (

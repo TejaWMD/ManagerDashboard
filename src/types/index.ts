@@ -161,6 +161,13 @@ export interface QueryRemark {
   createdAtMs: number;
 }
 
+export interface QueryCCUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+}
+
 export interface Query {
   id: string; // matches queryId for React keys
   queryId: string; // e.g., QRY-001 (Primary Key in Supabase)
@@ -212,6 +219,7 @@ export interface Query {
   lastUrgentReminderAtMs?: number | null; // Epoch ms of the latest 24h reminder notification sent to receiver
   attachments?: QueryAttachment[]; // Attached documents from user's device (sender)
   managerAttachments?: QueryAttachment[]; // Attached documents from receiving manager / solution
+  ccUsers?: QueryCCUser[]; // Team members CC'd on this query (View-only awareness access)
 }
 
 export type MeetingType = 'Online Call' | 'Office/Desk' | 'Phone';
@@ -463,27 +471,59 @@ export function isQueryPending(
 
 export function belongsToAccountManager(
   query: Query,
-  user: Pick<UserAccount, 'id' | 'email'>
+  user: Pick<UserAccount, 'id' | 'email'> & { name?: string }
 ): boolean {
-  if (query.accountManagerId && user.id) {
-    return query.accountManagerId === user.id;
-  }
-  return (
-    Boolean(query.accountManagerEmail) &&
-    query.accountManagerEmail.toLowerCase() === user.email.toLowerCase()
-  );
+  if (!query || !user) return false;
+  const qId = (query.accountManagerId || '').trim().toLowerCase();
+  const uId = (user.id || '').trim().toLowerCase();
+  if (qId && uId && qId === uId) return true;
+
+  const qEmail = (query.accountManagerEmail || '').trim().toLowerCase();
+  const uEmail = (user.email || '').trim().toLowerCase();
+  if (qEmail && uEmail && qEmail === uEmail) return true;
+
+  const uName = (user.name || '').trim().toLowerCase();
+  const qName = (query.accountManagerName || '').trim().toLowerCase();
+  if (qId && uName && qId === uName) return true;
+  if (qId && uEmail && qId === uEmail) return true;
+  if (qName && uName && qName === uName) return true;
+
+  return false;
 }
 
 export function belongsToManager(
   query: Query,
-  manager: Pick<UserAccount, 'id' | 'email'>
+  manager: Pick<UserAccount, 'id' | 'email'> & { name?: string }
 ): boolean {
-  if (query.managerId && manager.id) {
-    return query.managerId === manager.id;
+  if (!query || !manager) return false;
+  const qId = (query.managerId || '').trim().toLowerCase();
+  const mId = (manager.id || '').trim().toLowerCase();
+  if (qId && mId && qId === mId) return true;
+
+  const qEmail = (query.managerEmail || '').trim().toLowerCase();
+  const mEmail = (manager.email || '').trim().toLowerCase();
+  if (qEmail && mEmail && qEmail === mEmail) return true;
+
+  const mName = (manager.name || '').trim().toLowerCase();
+  const qName = (query.managerName || '').trim().toLowerCase();
+  if (qId && mName && qId === mName) return true;
+  if (qId && mEmail && qId === mEmail) return true;
+  if (qName && mName && qName === mName) return true;
+
+  return false;
+}
+
+export function isUserCcOnQuery(
+  query: Query,
+  user: Pick<UserAccount, 'id' | 'email'>
+): boolean {
+  if (!query.ccUsers || !Array.isArray(query.ccUsers) || query.ccUsers.length === 0) {
+    return false;
   }
-  return (
-    Boolean(query.managerEmail) &&
-    query.managerEmail.toLowerCase() === manager.email.toLowerCase()
+  return query.ccUsers.some(
+    (u) =>
+      (u.id && user.id && u.id === user.id) ||
+      (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase())
   );
 }
 
@@ -493,12 +533,13 @@ export function isQueryRelevantToUser(
 ): boolean {
   if (user.role === 'admin') return true;
   if (user.role === 'account_manager') {
-    return belongsToAccountManager(query, user);
+    return belongsToAccountManager(query, user) || isUserCcOnQuery(query, user);
   }
   if (user.role === 'manager') {
     return (
       belongsToManager(query, user) ||
-      belongsToAccountManager(query, user)
+      belongsToAccountManager(query, user) ||
+      isUserCcOnQuery(query, user)
     );
   }
   return true;

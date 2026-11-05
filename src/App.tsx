@@ -14,6 +14,7 @@ import {
   AppointmentStatus,
   belongsToAppointment,
   QueryAttachment,
+  QueryCCUser,
   UserActivity,
   UserPresence,
 } from './types';
@@ -893,6 +894,7 @@ export const App: React.FC = () => {
     linkedAppointmentId?: string | null;
     isUrgent?: boolean;
     attachments?: QueryAttachment[];
+    ccUsers?: QueryCCUser[];
   }) => {
     if (!currentUser) return;
     const now = new Date();
@@ -924,6 +926,7 @@ export const App: React.FC = () => {
       linkedAppointmentId: payload.linkedAppointmentId || null,
       isUrgent: Boolean(payload.isUrgent),
       attachments: payload.attachments || [],
+      ccUsers: payload.ccUsers || [],
     };
 
     setQueries((prev) => {
@@ -1025,6 +1028,7 @@ export const App: React.FC = () => {
         | 'autoCompletedAt'
         | 'autoCompletedAtMs'
         | 'completionNote'
+        | 'ccUsers'
       >
     >
   ) => {
@@ -1146,6 +1150,7 @@ export const App: React.FC = () => {
         updates.completionNote !== undefined
           ? updates.completionNote
           : existing.completionNote,
+      ...(updates.ccUsers !== undefined ? { ccUsers: updates.ccUsers } : {}),
     };
 
     setSavingQueryId(queryId);
@@ -1971,6 +1976,7 @@ export const App: React.FC = () => {
               queries={queries}
               users={allUsers}
               onNavigate={setActivePage}
+              onRefreshQueries={loadQueries}
             />
           ) : activePage === 'tracking' ? (
             <TrackingPage

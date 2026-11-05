@@ -16,6 +16,7 @@ export type NotificationEventType =
   | 'EXTENSION_APPROVED'
   | 'EXTENSION_DECLINED'
   | 'URGENT_REMINDER'
+  | 'CC_ADDED'
   | 'TEST';
 
 export interface DispatchNotificationParams {
@@ -43,11 +44,17 @@ export function computeTargetRecipients(
 ): string[] {
   const adminIds = getAdminUserIds();
   const rawRecipients: string[] = [];
+  const ccIds = (query.ccUsers || []).map((u) => u.id);
 
   switch (event) {
     case 'NEW_QUERY':
-      // Sender submits query -> Notify Manager + Account Manager + Admin
-      rawRecipients.push(query.managerId, query.accountManagerId, ...adminIds);
+      // Sender submits query -> Notify Manager + Account Manager + CC'd Users + Admin
+      rawRecipients.push(query.managerId, query.accountManagerId, ...ccIds, ...adminIds);
+      break;
+
+    case 'CC_ADDED':
+      // CC added / edited -> Notify CC'd users + Admin
+      rawRecipients.push(...ccIds, ...adminIds);
       break;
 
     case 'MANAGER_REMARK':
@@ -58,10 +65,11 @@ export function computeTargetRecipients(
     case 'EXTENSION_REQUESTED':
     case 'EXTENSION_APPROVED':
     case 'EXTENSION_DECLINED':
-      // Notify all involved parties (Manager + Account Manager/Sender) + Admin
+      // Notify all involved parties (Manager + Account Manager/Sender + CC'd Users) + Admin
       rawRecipients.push(
         query.managerId,
         query.accountManagerId,
+        ...ccIds,
         ...adminIds
       );
       break;
@@ -163,6 +171,12 @@ export function formatNotificationContent(
       return {
         title: `❌ Extension Declined: ${query.queryId}`,
         body: `${actorRoleLabel} ${actor.name} declined completion extension request.`,
+      };
+
+    case 'CC_ADDED':
+      return {
+        title: `📋 You were CC'd on ${query.queryId}`,
+        body: `${actorRoleLabel} ${actor.name} CC'd you on "${(query.queryTitle || query.queryText).slice(0, 80)}" (View-only awareness).`,
       };
 
     case 'URGENT_REMINDER': {

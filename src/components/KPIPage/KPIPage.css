@@ -136,6 +136,42 @@
   transform: scale(1.02);
 }
 
+.kpi-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: clamp(0.18rem, 0.35vh, 0.28rem) clamp(0.55rem, 0.9vw, 0.8rem);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 9999px;
+  font-size: clamp(0.68rem, 1.25vh, 0.76rem);
+  font-weight: 700;
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.kpi-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.kpi-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kpi-refresh-btn--spinning .kpi-refresh-icon {
+  animation: kpi-spin 1s infinite linear;
+  display: inline-block;
+}
+
+@keyframes kpi-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .kpi-brand-logo-badge {
   display: flex;
   align-items: center;

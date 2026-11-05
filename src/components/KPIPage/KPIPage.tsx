@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Query,
   UserAccount,
@@ -16,6 +16,7 @@ interface KPIPageProps {
   queries: Query[];
   users?: UserAccount[];
   onNavigate?: (page: 'home' | 'queries' | 'kpi') => void;
+  onRefreshQueries?: () => Promise<Query[] | void>;
 }
 
 export const KPIPage: React.FC<KPIPageProps> = ({
@@ -23,6 +24,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
   queries,
   users,
   onNavigate,
+  onRefreshQueries,
 }) => {
   const userList = users && users.length > 0 ? users : AUTHORIZED_USERS;
   const managers = useMemo(
@@ -30,8 +32,27 @@ export const KPIPage: React.FC<KPIPageProps> = ({
     [userList]
   );
 
-  const [timeWindow, setTimeWindow] = useState<KpiTimeWindow>('7d');
+  // Default to 'all' so lifetime and historical queries from Supabase are fully displayed
+  const [timeWindow, setTimeWindow] = useState<KpiTimeWindow>('all');
   const [selectedManagerId, setSelectedManagerId] = useState<string>('ALL');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  // Automatically refresh queries straight from Supabase on mount
+  useEffect(() => {
+    if (onRefreshQueries) {
+      onRefreshQueries().catch(() => {});
+    }
+  }, [onRefreshQueries]);
+
+  const handleManualRefresh = async () => {
+    if (!onRefreshQueries || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await onRefreshQueries();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const nowMs = useMemo(() => Date.now(), []);
 
@@ -50,15 +71,33 @@ export const KPIPage: React.FC<KPIPageProps> = ({
         <div className="kpi-header-left">
           <div className="kpi-title-cluster">
             <h1 className="kpi-page-heading">Manager KPI</h1>
-            {/* <span className="kpi-badge-live">
-              <span className="kpi-live-dot" /> Live
-            </span> */}
           </div>
         </div>
 
         <div className="kpi-header-right">
+          {/* Sync / Refresh Button */}
+          {onRefreshQueries && (
+            <button
+              type="button"
+              className={`kpi-refresh-btn ${isRefreshing ? 'kpi-refresh-btn--spinning' : ''}`}
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              title="Click to fetch the latest query data directly from Supabase"
+            >
+              <span className="kpi-refresh-icon">🔄</span>
+              <span>{isRefreshing ? 'Syncing...' : 'Sync Supabase'}</span>
+            </button>
+          )}
+
           {/* Time Window Pills */}
           <div className="kpi-pill-group">
+            <button
+              type="button"
+              className={`kpi-pill-btn ${timeWindow === 'all' ? 'kpi-pill-btn--active' : ''}`}
+              onClick={() => setTimeWindow('all')}
+            >
+              All Time
+            </button>
             <button
               type="button"
               className={`kpi-pill-btn ${timeWindow === '7d' ? 'kpi-pill-btn--active' : ''}`}
@@ -79,13 +118,6 @@ export const KPIPage: React.FC<KPIPageProps> = ({
               onClick={() => setTimeWindow('30d')}
             >
               30 Days
-            </button>
-            <button
-              type="button"
-              className={`kpi-pill-btn ${timeWindow === 'all' ? 'kpi-pill-btn--active' : ''}`}
-              onClick={() => setTimeWindow('all')}
-            >
-              All Time
             </button>
           </div>
 
