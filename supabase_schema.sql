@@ -117,7 +117,14 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS is_urgent BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS last_urgent_reminder_at_ms BIGINT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS manager_attachments TEXT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS manager_attachments TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS remarks_log TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_completed_by TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_completed_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_completed_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS auto_completed_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS auto_completed_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS completion_note TEXT DEFAULT NULL;
 
 -- Backfill existing manager_done rows that do not have manager_done_at_ms yet
 UPDATE public.queries

@@ -48,7 +48,12 @@ export function evaluateQueryKpi(
     const turnaroundMs = Math.max(0, managerDoneMs - createdMs);
     const turnaroundHours = Math.round((turnaroundMs / (1000 * 60 * 60)) * 10) / 10;
     // Urgent queries have no delay threshold; once completed they count normally as On-Time (+1.0 pt)
-    const isOnTime = query.isUrgent ? true : completionMs <= deadlineMs && !query.isDelayed;
+    // If manager marked Done before or at deadline, manager is awarded On-Time even if sender delayed verification
+    const isOnTime = query.isUrgent
+      ? true
+      : query.managerDoneAtMs
+      ? query.managerDoneAtMs <= deadlineMs
+      : completionMs <= deadlineMs && !query.isDelayed;
 
     // Sender verification latency: completedAtMs - managerDoneAtMs
     let senderVerificationHours: number | null = null;

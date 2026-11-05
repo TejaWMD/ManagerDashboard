@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { parseDateToMs } from './dateUtils';
+import { parseDateToMs, formatDateTime } from './dateUtils';
 import {
   Query,
   QueryStatus,
@@ -13,6 +13,7 @@ import {
   MeetingType,
   UserRole,
   QueryAttachment,
+  QueryRemark,
 } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 
@@ -61,6 +62,13 @@ interface LocalCompletionMeta {
   lastUrgentReminderAtMs?: number | null;
   attachments?: QueryAttachment[];
   managerAttachments?: QueryAttachment[];
+  remarks?: QueryRemark[];
+  adminCompletedBy?: string | null;
+  adminCompletedAt?: string | null;
+  adminCompletedAtMs?: number | null;
+  autoCompletedAt?: string | null;
+  autoCompletedAtMs?: number | null;
+  completionNote?: string | null;
 }
 
 function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
@@ -131,6 +139,13 @@ export interface QueryRow {
   last_urgent_reminder_at_ms?: number | null;
   attachments?: string | null;
   manager_attachments?: string | null;
+  remarks_log?: string | null;
+  admin_completed_by?: string | null;
+  admin_completed_at?: string | null;
+  admin_completed_at_ms?: number | null;
+  auto_completed_at?: string | null;
+  auto_completed_at_ms?: number | null;
+  completion_note?: string | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -377,6 +392,61 @@ export function mapRowToQuery(row: QueryRow): Query {
     resolvedManagerAttachments = localMeta.managerAttachments;
   }
 
+  let resolvedRemarks: QueryRemark[] = [];
+  if (row.remarks_log) {
+    try {
+      const parsed = JSON.parse(row.remarks_log);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        resolvedRemarks = parsed;
+      }
+    } catch {}
+  }
+  if (resolvedRemarks.length === 0 && localMeta?.remarks && localMeta.remarks.length > 0) {
+    resolvedRemarks = localMeta.remarks;
+  }
+  // Synthesize remarks if remarks_log is empty (backward compatibility with existing Supabase rows)
+  if (resolvedRemarks.length === 0) {
+    if (unpackedMgrRemark.description || unpackedMgrRemark.title) {
+      resolvedRemarks.push({
+        id: `rmk-init-mgr-${row.query_id}`,
+        authorId: row.manager_id,
+        authorName: row.manager_name,
+        authorRole: 'manager',
+        type: 'manager',
+        title: unpackedMgrRemark.title || undefined,
+        text: unpackedMgrRemark.description,
+        createdAt: formatDateTime(managerDoneAt || row.created_at, false),
+        createdAtMs: managerDoneAtMs || createdAtMs,
+      });
+    }
+    if (unpackedAmRemark.description || unpackedAmRemark.title) {
+      resolvedRemarks.push({
+        id: `rmk-init-am-${row.query_id}`,
+        authorId: row.account_manager_id,
+        authorName: row.account_manager_name,
+        authorRole: 'account_manager',
+        type: 'sender',
+        title: unpackedAmRemark.title || undefined,
+        text: unpackedAmRemark.description,
+        createdAt: formatDateTime(completedAt || row.created_at, false),
+        createdAtMs: completedAtMs || createdAtMs,
+      });
+    }
+  }
+
+  const adminCompletedBy = row.admin_completed_by || localMeta?.adminCompletedBy || null;
+  const adminCompletedAt = row.admin_completed_at || localMeta?.adminCompletedAt || null;
+  const adminCompletedAtMs =
+    row.admin_completed_at_ms !== null && row.admin_completed_at_ms !== undefined
+      ? Number(row.admin_completed_at_ms)
+      : localMeta?.adminCompletedAtMs ?? null;
+  const autoCompletedAt = row.auto_completed_at || localMeta?.autoCompletedAt || null;
+  const autoCompletedAtMs =
+    row.auto_completed_at_ms !== null && row.auto_completed_at_ms !== undefined
+      ? Number(row.auto_completed_at_ms)
+      : localMeta?.autoCompletedAtMs ?? null;
+  const completionNote = row.completion_note || localMeta?.completionNote || null;
+
   return {
     id: row.query_id,
     queryId: row.query_id,
@@ -404,6 +474,13 @@ export function mapRowToQuery(row: QueryRow): Query {
     status,
     delayNotified: Boolean(row.delay_notified),
     rating: typeof row.rating === 'number' ? row.rating : null,
+    remarks: resolvedRemarks,
+    adminCompletedBy,
+    adminCompletedAt,
+    adminCompletedAtMs,
+    autoCompletedAt,
+    autoCompletedAtMs,
+    completionNote,
     targetDueAt,
     targetDueAtMs,
     extensionStatus,
@@ -598,7 +675,14 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('is_urgent') ||
     message.includes('last_urgent_reminder_at_ms') ||
     message.includes('attachments') ||
-    message.includes('manager_attachments')
+    message.includes('manager_attachments') ||
+    message.includes('remarks_log') ||
+    message.includes('admin_completed_by') ||
+    message.includes('admin_completed_at') ||
+    message.includes('admin_completed_at_ms') ||
+    message.includes('auto_completed_at') ||
+    message.includes('auto_completed_at_ms') ||
+    message.includes('completion_note')
   );
 }
 
@@ -755,6 +839,13 @@ export async function updateQueryInDb(
     lastUrgentReminderAtMs?: number | null;
     attachments?: QueryAttachment[] | null;
     managerAttachments?: QueryAttachment[] | null;
+    remarks?: QueryRemark[] | null;
+    adminCompletedBy?: string | null;
+    adminCompletedAt?: string | null;
+    adminCompletedAtMs?: number | null;
+    autoCompletedAt?: string | null;
+    autoCompletedAtMs?: number | null;
+    completionNote?: string | null;
   }
 ): Promise<{
   data: Query | null;
@@ -870,6 +961,30 @@ export async function updateQueryInDb(
         ? JSON.stringify(updates.managerAttachments)
         : null;
   }
+  if (updates.remarks !== undefined) {
+    extendedUpdates.remarks_log =
+      updates.remarks && updates.remarks.length > 0
+        ? JSON.stringify(updates.remarks)
+        : null;
+  }
+  if (updates.adminCompletedBy !== undefined) {
+    extendedUpdates.admin_completed_by = updates.adminCompletedBy;
+  }
+  if (updates.adminCompletedAt !== undefined) {
+    extendedUpdates.admin_completed_at = updates.adminCompletedAt;
+  }
+  if (updates.adminCompletedAtMs !== undefined) {
+    extendedUpdates.admin_completed_at_ms = updates.adminCompletedAtMs;
+  }
+  if (updates.autoCompletedAt !== undefined) {
+    extendedUpdates.auto_completed_at = updates.autoCompletedAt;
+  }
+  if (updates.autoCompletedAtMs !== undefined) {
+    extendedUpdates.auto_completed_at_ms = updates.autoCompletedAtMs;
+  }
+  if (updates.completionNote !== undefined) {
+    extendedUpdates.completion_note = updates.completionNote;
+  }
 
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
@@ -906,7 +1021,14 @@ export async function updateQueryInDb(
     updates.isUrgent !== undefined ||
     updates.lastUrgentReminderAtMs !== undefined ||
     updates.attachments !== undefined ||
-    updates.managerAttachments !== undefined
+    updates.managerAttachments !== undefined ||
+    updates.remarks !== undefined ||
+    updates.adminCompletedBy !== undefined ||
+    updates.adminCompletedAt !== undefined ||
+    updates.adminCompletedAtMs !== undefined ||
+    updates.autoCompletedAt !== undefined ||
+    updates.autoCompletedAtMs !== undefined ||
+    updates.completionNote !== undefined
   ) {
     saveLocalCompletionMeta(queryId, {
       ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
@@ -936,6 +1058,15 @@ export async function updateQueryInDb(
       ...(updates.managerAttachments !== undefined
         ? { managerAttachments: updates.managerAttachments || [] }
         : {}),
+      ...(updates.remarks !== undefined
+        ? { remarks: updates.remarks || [] }
+        : {}),
+      ...(updates.adminCompletedBy !== undefined ? { adminCompletedBy: updates.adminCompletedBy } : {}),
+      ...(updates.adminCompletedAt !== undefined ? { adminCompletedAt: updates.adminCompletedAt } : {}),
+      ...(updates.adminCompletedAtMs !== undefined ? { adminCompletedAtMs: updates.adminCompletedAtMs } : {}),
+      ...(updates.autoCompletedAt !== undefined ? { autoCompletedAt: updates.autoCompletedAt } : {}),
+      ...(updates.autoCompletedAtMs !== undefined ? { autoCompletedAtMs: updates.autoCompletedAtMs } : {}),
+      ...(updates.completionNote !== undefined ? { completionNote: updates.completionNote } : {}),
     });
   }
 

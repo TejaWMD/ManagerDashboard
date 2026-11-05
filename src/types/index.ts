@@ -149,12 +149,24 @@ export interface QueryAttachment {
   uploaderRole?: 'sender' | 'manager'; // Sender or Receiving Manager
 }
 
+export interface QueryRemark {
+  id: string; // e.g. 'rmk-1730000000000-xyz'
+  authorId: string;
+  authorName: string;
+  authorRole: UserRole;
+  type: 'manager' | 'sender'; // 'manager' = resolution / progress, 'sender' = verification / feedback
+  title?: string;
+  text: string;
+  createdAt: string; // Formatted 'DD-MM-YYYY HH:mm'
+  createdAtMs: number;
+}
+
 export interface Query {
   id: string; // matches queryId for React keys
   queryId: string; // e.g., QRY-001 (Primary Key in Supabase)
   createdAt: string; // Immutable creation timestamp string (YYYY-MM-DD HH:mm:ss)
   createdAtMs: number; // Immutable creation epoch milliseconds for calculations
-  completedAt?: string | null; // Completion timestamp string when both Manager & AM checked
+  completedAt?: string | null; // Completion timestamp string when both Manager & AM checked (or admin/auto completed)
   completedAtMs?: number | null; // Completion epoch milliseconds for completion tracking
   isDelayed?: boolean; // Persisted flag if query exceeded target completion deadline before or at completion
   accountManagerId: string; // Foreign Key -> UserAccount.id (e.g., 'am-1')
@@ -176,6 +188,15 @@ export interface Query {
   status: QueryStatus;
   delayNotified?: boolean;
   rating?: number | null; // Mandatory 1-5 star rating provided by sender upon completion
+  // Timestamped remarks log for Manager and Sender
+  remarks?: QueryRemark[];
+  // Admin Force Completion & Auto-completion tracking
+  adminCompletedBy?: string | null;
+  adminCompletedAt?: string | null;
+  adminCompletedAtMs?: number | null;
+  autoCompletedAt?: string | null;
+  autoCompletedAtMs?: number | null;
+  completionNote?: string | null; // Audit note, e.g. "Completed by Admin Mani on 05-11-2026 10:15 (Sender Inactive)"
   // Target Completion & Extension Management
   targetDueAt?: string | null; // Effective target completion timestamp string (YYYY-MM-DD HH:mm:ss)
   targetDueAtMs?: number | null; // Effective target completion epoch ms
@@ -251,9 +272,50 @@ export interface Appointment {
 }
 
 export const DELAY_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours (86,400,000 ms)
+export const SENDER_GRACE_PERIOD_MS = 12 * 60 * 60 * 1000; // 12 hours (43,200,000 ms) auto-completion grace period after manager marks Done
 
 export function isQueryDone(query: Query): boolean {
   return Boolean(query.managerDone && query.accountManagerDone);
+}
+
+/**
+ * Calculates remaining grace period milliseconds for sender review after manager marks Done.
+ * Returns null if not in active grace period (e.g. manager not done, or sender already done).
+ */
+export function getSenderGracePeriodRemainingMs(query: Query, nowMs: number = Date.now()): number | null {
+  if (!query.managerDone || query.accountManagerDone || !query.managerDoneAtMs) {
+    return null;
+  }
+  const graceEnd = query.managerDoneAtMs + SENDER_GRACE_PERIOD_MS;
+  return Math.max(0, graceEnd - nowMs);
+}
+
+/**
+ * Returns true if the 12h sender grace period after manager resolution has expired.
+ */
+export function isSenderGracePeriodExpired(query: Query, nowMs: number = Date.now()): boolean {
+  if (!query.managerDone || query.accountManagerDone || !query.managerDoneAtMs) {
+    return false;
+  }
+  return nowMs >= query.managerDoneAtMs + SENDER_GRACE_PERIOD_MS;
+}
+
+/**
+ * Returns true if a query is delayed specifically because the sender has not confirmed
+ * even though the manager solved it on or before the due date.
+ */
+export function isSenderDelayed(query: Query, nowMs: number = Date.now()): boolean {
+  if (query.isUrgent) return false;
+  const deadlineMs = getQueryDeadlineMs(query);
+  if (deadlineMs <= 0) return false;
+  return Boolean(
+    query.managerDone &&
+    !query.accountManagerDone &&
+    query.managerDoneAtMs !== null &&
+    query.managerDoneAtMs !== undefined &&
+    query.managerDoneAtMs <= deadlineMs &&
+    nowMs > deadlineMs
+  );
 }
 
 export function getQueryStageRank(query: Query): number {
@@ -358,6 +420,10 @@ export function isQueryDelayed(
 
   // If completed (both Manager Done & AM Done are checked), check if completion exceeded deadline
   if (isQueryDone(query)) {
+    // If the manager resolved their work on or before deadline, the manager was on time!
+    if (query.managerDoneAtMs && query.managerDoneAtMs <= deadlineMs) {
+      return false;
+    }
     if (
       typeof query.completedAtMs === 'number' &&
       !Number.isNaN(query.completedAtMs) &&
@@ -372,6 +438,11 @@ export function isQueryDelayed(
       }
     }
     return query.isDelayed === true;
+  }
+
+  // If manager marked Done on time, query is not delayed on the manager's side (handled by isSenderDelayed)
+  if (query.managerDone && query.managerDoneAtMs && query.managerDoneAtMs <= deadlineMs) {
+    return false;
   }
 
   if (query.isDelayed === true) {

@@ -198,9 +198,10 @@ export const App: React.FC = () => {
     }
   }, [activePage, currentUser]);
 
-  // Monitor for SLA delay breaches and urgent 24h reminders and dispatch push notifications
+  // Monitor for SLA delay breaches and urgent 24h reminders
   useEffect(() => {
     if (queries.length === 0) return;
+
     checkAndNotifyDelayedQueries(queries);
     checkAndNotifyUrgentReminders(queries);
 
@@ -1014,6 +1015,13 @@ export const App: React.FC = () => {
         | 'linkedAppointmentId'
         | 'attachments'
         | 'managerAttachments'
+        | 'remarks'
+        | 'adminCompletedBy'
+        | 'adminCompletedAt'
+        | 'adminCompletedAtMs'
+        | 'autoCompletedAt'
+        | 'autoCompletedAtMs'
+        | 'completionNote'
       >
     >
   ) => {
@@ -1079,8 +1087,15 @@ export const App: React.FC = () => {
     const isUrgentQuery =
       updates.isUrgent !== undefined ? Boolean(updates.isUrgent) : Boolean(existing.isUrgent);
 
+    const managerFinishedOnTime = Boolean(
+      nextManagerDoneAtMs && effectiveDeadlineMs > 0 && nextManagerDoneAtMs <= effectiveDeadlineMs
+    );
+
     // Urgent queries or active approved extensions have no delay threshold and are never classified as delayed
+    // If manager finished on or before effective deadline, the query was resolved on time by the manager
     const nextIsDelayed = isUrgentQuery || isApprovedExtActive
+      ? false
+      : managerFinishedOnTime
       ? false
       : nextIsCompleted
       ? Boolean(
@@ -1108,6 +1123,30 @@ export const App: React.FC = () => {
       completedAt: nextCompletedAt,
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
+      adminCompletedBy:
+        updates.adminCompletedBy !== undefined
+          ? updates.adminCompletedBy
+          : existing.adminCompletedBy,
+      adminCompletedAt:
+        updates.adminCompletedAt !== undefined
+          ? updates.adminCompletedAt
+          : existing.adminCompletedAt,
+      adminCompletedAtMs:
+        updates.adminCompletedAtMs !== undefined
+          ? updates.adminCompletedAtMs
+          : existing.adminCompletedAtMs,
+      autoCompletedAt:
+        updates.autoCompletedAt !== undefined
+          ? updates.autoCompletedAt
+          : existing.autoCompletedAt,
+      autoCompletedAtMs:
+        updates.autoCompletedAtMs !== undefined
+          ? updates.autoCompletedAtMs
+          : existing.autoCompletedAtMs,
+      completionNote:
+        updates.completionNote !== undefined
+          ? updates.completionNote
+          : existing.completionNote,
     };
 
     setSavingQueryId(queryId);
@@ -1136,6 +1175,13 @@ export const App: React.FC = () => {
       completedAt: nextCompletedAt,
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
+      remarks: updates.remarks !== undefined ? updates.remarks : existing.remarks,
+      adminCompletedBy: updates.adminCompletedBy !== undefined ? updates.adminCompletedBy : existing.adminCompletedBy,
+      adminCompletedAt: updates.adminCompletedAt !== undefined ? updates.adminCompletedAt : existing.adminCompletedAt,
+      adminCompletedAtMs: updates.adminCompletedAtMs !== undefined ? updates.adminCompletedAtMs : existing.adminCompletedAtMs,
+      autoCompletedAt: updates.autoCompletedAt !== undefined ? updates.autoCompletedAt : existing.autoCompletedAt,
+      autoCompletedAtMs: updates.autoCompletedAtMs !== undefined ? updates.autoCompletedAtMs : existing.autoCompletedAtMs,
+      completionNote: updates.completionNote !== undefined ? updates.completionNote : existing.completionNote,
     });
 
     setSavingQueryId(null);
