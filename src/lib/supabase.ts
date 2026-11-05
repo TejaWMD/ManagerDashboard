@@ -523,14 +523,11 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
     manager_id: query.managerId,
     manager_name: query.managerName,
     manager_email: query.managerEmail,
-    query_text:
-      packTitleAndDescription(query.queryTitle, query.queryText) +
-      packAttachments(query.attachments),
-    manager_remark:
-      packTitleAndDescription(
-        query.managerRemarkTitle,
-        query.managerRemark
-      ) + packAttachments(query.managerAttachments),
+    query_text: packTitleAndDescription(query.queryTitle, query.queryText),
+    manager_remark: packTitleAndDescription(
+      query.managerRemarkTitle,
+      query.managerRemark
+    ),
     manager_done: managerDone,
     account_manager_remark: packTitleAndDescription(
       query.accountManagerRemarkTitle,
@@ -859,24 +856,22 @@ export async function updateQueryInDb(
   }
 
   if (
-    updates.queryTitle !== undefined ||
-    updates.queryText !== undefined ||
-    updates.attachments !== undefined
+    (updates.queryTitle !== undefined || updates.queryText !== undefined) &&
+    ((updates.queryTitle || '').trim() !== '' || (updates.queryText || '').trim() !== '')
   ) {
-    baseUpdates.query_text =
-      packTitleAndDescription(updates.queryTitle, updates.queryText) +
-      packAttachments(updates.attachments);
+    baseUpdates.query_text = packTitleAndDescription(
+      updates.queryTitle,
+      updates.queryText
+    );
   }
   if (
     updates.managerRemarkTitle !== undefined ||
-    updates.managerRemark !== undefined ||
-    updates.managerAttachments !== undefined
+    updates.managerRemark !== undefined
   ) {
-    baseUpdates.manager_remark =
-      packTitleAndDescription(
-        updates.managerRemarkTitle,
-        updates.managerRemark
-      ) + packAttachments(updates.managerAttachments);
+    baseUpdates.manager_remark = packTitleAndDescription(
+      updates.managerRemarkTitle,
+      updates.managerRemark
+    );
   }
   if (updates.managerDone !== undefined) {
     baseUpdates.manager_done = updates.managerDone;
@@ -992,7 +987,7 @@ export async function updateQueryInDb(
     titleColumnsSupported !== false
       ? {
           ...extendedUpdates,
-          ...(updates.queryTitle !== undefined
+          ...(updates.queryTitle !== undefined && updates.queryTitle.trim() !== ''
             ? { query_title: updates.queryTitle.trim() }
             : {}),
           ...(updates.managerRemarkTitle !== undefined

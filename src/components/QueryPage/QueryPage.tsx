@@ -19,7 +19,10 @@ import {
 import {
   formatFileSize,
   getFileIcon,
-  readFileAsAttachment,
+  validateAndReadAttachments,
+  MAX_FILE_SIZE_LABEL,
+  MAX_FILES_PER_UPLOAD,
+  MAX_TOTAL_ATTACHMENTS_LABEL,
   downloadAttachment,
   openAttachment,
 } from '../../lib/attachments';
@@ -175,25 +178,15 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     if (!files || files.length === 0) return;
     setIsReadingFiles(true);
     try {
-      const fileArray = Array.from(files);
-      const newAttachments: QueryAttachment[] = [];
-      const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15MB limit per file
-
-      for (const file of fileArray) {
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-          alert(`File "${file.name}" exceeds the 15MB limit. Please choose a smaller document.`);
-          continue;
-        }
-        try {
-          const att = await readFileAsAttachment(file);
-          newAttachments.push(att);
-        } catch (err) {
-          console.error(`Error reading file ${file.name}:`, err);
-        }
+      const { added, errors } = await validateAndReadAttachments(files, attachedFiles, {
+        uploadedBy: currentUser.name,
+        uploaderRole: 'sender',
+      });
+      if (errors.length > 0) {
+        alert(errors.join('\n\n'));
       }
-
-      if (newAttachments.length > 0) {
-        setAttachedFiles((prev) => [...prev, ...newAttachments]);
+      if (added.length > 0) {
+        setAttachedFiles((prev) => [...prev, ...added]);
       }
     } finally {
       setIsReadingFiles(false);
@@ -231,31 +224,22 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [hasUnsavedDetailChanges, setHasUnsavedDetailChanges] = useState<boolean>(false);
   const [detailSaveSuccess, setDetailSaveSuccess] = useState<boolean>(false);
   const detailFileInputRef = useRef<HTMLInputElement | null>(null);
+  const openInEditModeRef = useRef<boolean>(false);
 
   const handleDetailFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setIsReadingDetailFiles(true);
     try {
-      const fileArray = Array.from(files);
-      const newAttachments: QueryAttachment[] = [];
-      const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15MB limit
-
-      for (const file of fileArray) {
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-          alert(`File "${file.name}" exceeds the 15MB limit. Please choose a smaller document.`);
-          continue;
-        }
-        try {
-          const att = await readFileAsAttachment(file);
-          newAttachments.push(att);
-        } catch (err) {
-          console.error(`Error reading file ${file.name}:`, err);
-        }
+      const { added, errors } = await validateAndReadAttachments(files, detailAttachmentsDraft, {
+        uploadedBy: currentUser.name,
+        uploaderRole: 'sender',
+      });
+      if (errors.length > 0) {
+        alert(errors.join('\n\n'));
       }
-
-      if (newAttachments.length > 0) {
-        setDetailAttachmentsDraft((prev) => [...prev, ...newAttachments]);
+      if (added.length > 0) {
+        setDetailAttachmentsDraft((prev) => [...prev, ...added]);
         setHasUnsavedDetailChanges(true);
       }
     } finally {
@@ -273,8 +257,15 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
   const handleSaveDetailChanges = async () => {
     if (!activeViewingQuery) return;
-    const finalTitle = detailTitleDraft.trim() || detailDescDraft.trim();
-    const finalDesc = detailDescDraft.trim();
+    const fallbackTitle = (activeViewingQuery.queryTitle || activeViewingQuery.queryText || '').trim();
+    const fallbackDesc = (activeViewingQuery.queryText || fallbackTitle).trim();
+    const finalTitle = isEditingDescription
+      ? detailTitleDraft.trim() || detailDescDraft.trim()
+      : detailTitleDraft.trim() || fallbackTitle;
+    const finalDesc = isEditingDescription
+      ? detailDescDraft.trim() || finalTitle
+      : detailDescDraft.trim() || fallbackDesc;
+
     if (!finalTitle && !finalDesc) {
       alert('Please provide a query title or description.');
       return;
@@ -334,27 +325,29 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
     setIsReadingMgrFiles(true);
     try {
-      const newAttachments: QueryAttachment[] = [];
-      for (const file of files) {
-        if (file.size > 15 * 1024 * 1024) {
-          alert(`File "${file.name}" exceeds the 15MB limit. Please choose a smaller file.`);
-          continue;
-        }
-        try {
-          const att = await readFileAsAttachment(file);
-          newAttachments.push({
-            ...att,
-            uploadedBy: currentUser.name,
-            uploaderRole: 'manager',
-          });
-        } catch (err) {
-          console.error(`Error reading file ${file.name}:`, err);
-        }
+      const { added, errors } = await validateAndReadAttachments(files, modalMgrAttachmentsDraft, {
+        uploadedBy: currentUser.name,
+        uploaderRole: 'manager',
+      });
+      if (errors.length > 0) {
+        alert(errors.join('\n\n'));
       }
 
-      if (newAttachments.length > 0) {
-        setModalMgrAttachmentsDraft((prev) => [...prev, ...newAttachments]);
-        setIsEditingModalMgrRemark(true);
+      if (added.length > 0) {
+        const nextMgrAttachments = [...modalMgrAttachmentsDraft, ...added];
+        setModalMgrAttachmentsDraft(nextMgrAttachments);
+        if (activeViewingQuery) {
+          await onUpdateQuery(activeViewingQuery.queryId, {
+            managerAttachments: nextMgrAttachments,
+          });
+          setViewingQuery((prev) =>
+            prev && prev.queryId === activeViewingQuery.queryId
+              ? { ...prev, managerAttachments: nextMgrAttachments }
+              : prev
+          );
+          setModalMgrRemarkSaveSuccess(true);
+          setTimeout(() => setModalMgrRemarkSaveSuccess(false), 3000);
+        }
       }
     } finally {
       setIsReadingMgrFiles(false);
@@ -364,8 +357,19 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     }
   };
 
-  const handleRemoveMgrAttachment = (id: string) => {
-    setModalMgrAttachmentsDraft((prev) => prev.filter((a) => a.id !== id));
+  const handleRemoveMgrAttachment = async (id: string) => {
+    const nextMgrAttachments = modalMgrAttachmentsDraft.filter((a) => a.id !== id);
+    setModalMgrAttachmentsDraft(nextMgrAttachments);
+    if (activeViewingQuery) {
+      await onUpdateQuery(activeViewingQuery.queryId, {
+        managerAttachments: nextMgrAttachments,
+      });
+      setViewingQuery((prev) =>
+        prev && prev.queryId === activeViewingQuery.queryId
+          ? { ...prev, managerAttachments: nextMgrAttachments }
+          : prev
+      );
+    }
   };
 
   const handleSaveModalMgrRemark = async () => {
@@ -836,16 +840,30 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     );
   }, [activeViewingQuery, appointments, currentUser]);
 
+  const lastSyncedQueryIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    setIsLinkingExistingApt(false);
-    setChosenExistingAptId('');
-    setLinkExistingError(null);
-    if (activeViewingQuery) {
-      setIsEditingDescription(false);
+    if (!activeViewingQuery) {
+      lastSyncedQueryIdRef.current = null;
+      return;
+    }
+
+    const isDifferentQuery = lastSyncedQueryIdRef.current !== activeViewingQuery.queryId;
+    lastSyncedQueryIdRef.current = activeViewingQuery.queryId;
+
+    if (isDifferentQuery) {
+      setIsLinkingExistingApt(false);
+      setChosenExistingAptId('');
+      setLinkExistingError(null);
+
+      const startInEdit = openInEditModeRef.current;
+      openInEditModeRef.current = false;
+
+      setIsEditingDescription(startInEdit);
       setDetailTitleDraft(activeViewingQuery.queryTitle || activeViewingQuery.queryText || '');
       setDetailDescDraft(activeViewingQuery.queryText || '');
       setDetailAttachmentsDraft(activeViewingQuery.attachments ? [...activeViewingQuery.attachments] : []);
-      setHasUnsavedDetailChanges(false);
+      setHasUnsavedDetailChanges(startInEdit);
       setDetailSaveSuccess(false);
 
       setIsEditingModalMgrRemark(false);
@@ -860,6 +878,25 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
       setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
       setModalSenderRemarkSaveSuccess(false);
+      return;
+    }
+
+    // Same query updated via background polling/realtime: only sync fields the user is not currently editing
+    if (!isEditingDescription && !hasUnsavedDetailChanges) {
+      setDetailTitleDraft(activeViewingQuery.queryTitle || activeViewingQuery.queryText || '');
+      setDetailDescDraft(activeViewingQuery.queryText || '');
+      setDetailAttachmentsDraft(activeViewingQuery.attachments ? [...activeViewingQuery.attachments] : []);
+    }
+    if (!isEditingModalMgrRemark) {
+      setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
+      setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
+      setModalMgrAttachmentsDraft(
+        activeViewingQuery.managerAttachments ? [...activeViewingQuery.managerAttachments] : []
+      );
+    }
+    if (!isEditingModalSenderRemark) {
+      setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
+      setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
     }
   }, [
     activeViewingQuery?.queryId,
@@ -871,6 +908,10 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     activeViewingQuery?.accountManagerRemark,
     activeViewingQuery?.attachments?.length,
     activeViewingQuery?.managerAttachments?.length,
+    isEditingDescription,
+    hasUnsavedDetailChanges,
+    isEditingModalMgrRemark,
+    isEditingModalSenderRemark,
   ]);
 
   // 1. Role-scoped queries
@@ -1063,6 +1104,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   };
 
   const startEditQueryText = (item: Query) => {
+    openInEditModeRef.current = true;
     setViewingQuery(item);
     setIsEditingDescription(true);
     setDetailTitleDraft(item.queryTitle || item.queryText || '');
@@ -2069,11 +2111,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 <div className="attachment-header-row">
                   <label htmlFor="query-attachments-input" className="attachment-label">
                     <span>📎 Attach Documents</span>
-                    <span className="attachment-subtext">(Optional, Max 15MB)</span>
+                    <span className="attachment-subtext">
+                      (Optional &bull; Max {MAX_FILE_SIZE_LABEL}/file, up to {MAX_FILES_PER_UPLOAD} files, {MAX_TOTAL_ATTACHMENTS_LABEL} total)
+                    </span>
                   </label>
                   {attachedFiles.length > 0 && (
                     <span className="attachment-count-badge">
-                      {attachedFiles.length} {attachedFiles.length === 1 ? 'file' : 'files'} attached
+                      {attachedFiles.length}/{MAX_FILES_PER_UPLOAD} {attachedFiles.length === 1 ? 'file' : 'files'} attached
                     </span>
                   )}
                 </div>
@@ -2112,7 +2156,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     <span className="attachment-dropzone-icon">📎</span>
                     <div className="attachment-dropzone-prompts">
                       <span className="attachment-dropzone-cta">
-                        {isReadingFiles ? 'Reading document(s)...' : 'Choose files or drag & drop here'}
+                        {isReadingFiles
+                          ? 'Reading & optimizing document(s)...'
+                          : attachedFiles.length >= MAX_FILES_PER_UPLOAD
+                          ? `Maximum ${MAX_FILES_PER_UPLOAD} files reached (remove a file to add another)`
+                          : `Choose files or drag & drop here (Max ${MAX_FILE_SIZE_LABEL} per file)`}
                       </span>
                     </div>
                   </div>
@@ -2282,7 +2330,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               <div className="cp-form-group">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                   <label htmlFor="mandatory-remark-file-btn" style={{ margin: 0 }}>
-                    Resolution Document(s) (Optional)
+                    Resolution Document(s) (Optional &bull; Max {MAX_FILE_SIZE_LABEL}/file, up to {MAX_FILES_PER_UPLOAD} files)
                   </label>
                   <input
                     ref={mandatoryFileInputRef}
@@ -2295,25 +2343,19 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       if (files.length === 0) return;
                       setIsReadingMandatoryFiles(true);
                       try {
-                        const newAtts: QueryAttachment[] = [];
-                        for (const file of files) {
-                          if (file.size > 15 * 1024 * 1024) {
-                            alert(`File "${file.name}" exceeds 15MB limit.`);
-                            continue;
+                        const { added, errors } = await validateAndReadAttachments(
+                          files,
+                          mandatoryRemarkAttachmentsDraft,
+                          {
+                            uploadedBy: currentUser.name,
+                            uploaderRole: 'manager',
                           }
-                          try {
-                            const att = await readFileAsAttachment(file);
-                            newAtts.push({
-                              ...att,
-                              uploadedBy: currentUser.name,
-                              uploaderRole: 'manager',
-                            });
-                          } catch (err) {
-                            console.error(`Error reading file ${file.name}:`, err);
-                          }
+                        );
+                        if (errors.length > 0) {
+                          alert(errors.join('\n\n'));
                         }
-                        if (newAtts.length > 0) {
-                          setMandatoryRemarkAttachmentsDraft((prev) => [...prev, ...newAtts]);
+                        if (added.length > 0) {
+                          setMandatoryRemarkAttachmentsDraft((prev) => [...prev, ...added]);
                         }
                       } finally {
                         setIsReadingMandatoryFiles(false);
@@ -2325,9 +2367,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     type="button"
                     className="btn-inline-edit"
                     onClick={() => mandatoryFileInputRef.current?.click()}
-                    disabled={isReadingMandatoryFiles}
+                    disabled={isReadingMandatoryFiles || mandatoryRemarkAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD}
                   >
-                    {isReadingMandatoryFiles ? 'Reading...' : '📎 Attach Document'}
+                    {isReadingMandatoryFiles
+                      ? 'Reading...'
+                      : mandatoryRemarkAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD
+                      ? `Max ${MAX_FILES_PER_UPLOAD} Files`
+                      : '📎 Attach Document'}
                   </button>
                 </div>
 
@@ -2643,7 +2689,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     <div className="query-view-section">
                       <div className="query-view-section-header">
                         <span className="query-view-section-label">
-                          Attachments ({detailAttachmentsDraft.length})
+                          Attachments ({detailAttachmentsDraft.length}/{MAX_FILES_PER_UPLOAD} &bull; Max {MAX_FILE_SIZE_LABEL}/file)
                         </span>
                         {isSenderOrAdmin && (
                           <>
@@ -2659,10 +2705,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               type="button"
                               className="btn-query-edit-action"
                               onClick={() => detailFileInputRef.current?.click()}
-                              title="Select documents from device to attach"
-                              disabled={isReadingDetailFiles}
+                              title={`Select documents from device to attach (Max ${MAX_FILE_SIZE_LABEL} per file, up to ${MAX_FILES_PER_UPLOAD} files)`}
+                              disabled={isReadingDetailFiles || detailAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD}
                             >
-                              {isReadingDetailFiles ? 'Reading files...' : '📎 Add Attachment'}
+                              {isReadingDetailFiles
+                                ? 'Reading files...'
+                                : detailAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD
+                                ? `Max ${MAX_FILES_PER_UPLOAD} Files`
+                                : '📎 Add Attachment'}
                             </button>
                           </>
                         )}
@@ -3061,10 +3111,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                 type="button"
                                 className="btn-query-edit-action"
                                 onClick={() => mgrFileInputRef.current?.click()}
-                                title="Attach resolution documents from device"
-                                disabled={isReadingMgrFiles}
+                                title={`Attach resolution documents from device (Max ${MAX_FILE_SIZE_LABEL} per file, up to ${MAX_FILES_PER_UPLOAD} files)`}
+                                disabled={isReadingMgrFiles || modalMgrAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD}
                               >
-                                {isReadingMgrFiles ? 'Reading...' : '📎 Attach File'}
+                                {isReadingMgrFiles
+                                  ? 'Reading...'
+                                  : modalMgrAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD
+                                  ? `Max ${MAX_FILES_PER_UPLOAD} Files`
+                                  : `📎 Attach File (Max ${MAX_FILE_SIZE_LABEL})`}
                               </button>
                             </>
                           )}
@@ -3115,13 +3169,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       </div>
 
                       {/* Display Manager Attachments */}
-                      {activeViewingQuery.managerAttachments && activeViewingQuery.managerAttachments.length > 0 && (
+                      {modalMgrAttachmentsDraft.length > 0 && (
                         <div className="remark-attachments-wrap">
                           <span className="query-view-sub-label">
-                            📎 Resolution Attachments ({activeViewingQuery.managerAttachments.length})
+                            📎 Resolution Attachments ({modalMgrAttachmentsDraft.length}/{MAX_FILES_PER_UPLOAD} &bull; Max {MAX_FILE_SIZE_LABEL}/file)
                           </span>
                           <div className="query-view-attachments-grid" style={{ marginTop: '0.35rem' }}>
-                            {activeViewingQuery.managerAttachments.map((att) => (
+                            {modalMgrAttachmentsDraft.map((att) => (
                               <div key={att.id} className="query-attachment-card">
                                 <div className="query-attachment-card-main">
                                   <span className="query-attachment-card-icon">
@@ -3153,6 +3207,17 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                   >
                                     ⬇️ Download
                                   </button>
+                                  {isAssignedManagerOrAdmin && (
+                                    <button
+                                      type="button"
+                                      className="btn-attachment-action btn-attachment-action--remove"
+                                      onClick={() => handleRemoveMgrAttachment(att.id)}
+                                      title="Remove this attachment"
+                                      aria-label={`Remove ${att.name}`}
+                                    >
+                                      ✕ Remove
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             ))}

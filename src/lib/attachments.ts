@@ -1,6 +1,23 @@
 import { QueryAttachment } from '../types';
 
 /**
+ * Document Upload Limits (Configured for Supabase Free Tier - 500 MB DB & PostgREST payload safety)
+ * When upgrading to the Supabase Pro Plan in the future, simply increase these constants here:
+ * e.g. MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024, MAX_FILES_PER_UPLOAD = 10, MAX_TOTAL_ATTACHMENTS_BYTES = 25 * 1024 * 1024
+ */
+export const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB per file
+export const MAX_FILE_SIZE_LABEL = '2MB';
+export const MAX_FILES_PER_UPLOAD = 3; // Maximum 3 files per query / resolution section
+export const MAX_TOTAL_ATTACHMENTS_BYTES = 4 * 1024 * 1024; // Maximum 4 MB combined per section
+export const MAX_TOTAL_ATTACHMENTS_LABEL = '4MB';
+
+// Allow raw images up to 10 MB before client-side compression shrinks them under 2 MB
+const MAX_RAW_IMAGE_BYTES = 10 * 1024 * 1024;
+const IMAGE_COMPRESS_THRESHOLD_BYTES = 350 * 1024; // Auto-compress images larger than 350 KB
+const MAX_IMAGE_DIMENSION = 1600;
+const IMAGE_COMPRESSION_QUALITY = 0.78;
+
+/**
  * Format bytes into readable format (e.g., 250 KB, 1.4 MB)
  */
 export function formatFileSize(bytes: number): string {
@@ -29,15 +46,82 @@ export function getFileIcon(fileName: string, mimeType?: string): string {
   return '📎';
 }
 
+function isCompressibleImage(file: File): boolean {
+  const type = (file.type || '').toLowerCase();
+  return type === 'image/jpeg' || type === 'image/jpg' || type === 'image/png' || type === 'image/webp';
+}
+
+/**
+ * Compress large raster images client-side on an HTML5 canvas to save Supabase Free Tier storage
+ */
+function compressImageFile(file: File): Promise<{ dataUrl: string; byteSize: number; mimeType: string } | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+            const ratio = Math.min(MAX_IMAGE_DIMENSION / width, MAX_IMAGE_DIMENSION / height);
+            width = Math.max(1, Math.round(width * ratio));
+            height = Math.max(1, Math.round(height * ratio));
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(null);
+            return;
+          }
+          // Fill white background for transparent PNGs converted to JPEG
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const outMime = 'image/jpeg';
+          const dataUrl = canvas.toDataURL(outMime, IMAGE_COMPRESSION_QUALITY);
+          const base64Part = dataUrl.split(',')[1] || '';
+          const approxBytes = Math.round((base64Part.length * 3) / 4);
+          resolve({ dataUrl, byteSize: approxBytes, mimeType: outMime });
+        } catch {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
 /**
  * Convert a browser File object to a QueryAttachment with Base64 data URL
+ * Automatically compresses large images to keep Supabase Free Tier usage low.
  */
-export function readFileAsAttachment(file: File): Promise<QueryAttachment> {
+export async function readFileAsAttachment(file: File): Promise<QueryAttachment> {
+  const uniqueId = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  if (isCompressibleImage(file) && file.size > IMAGE_COMPRESS_THRESHOLD_BYTES) {
+    const compressed = await compressImageFile(file);
+    if (compressed && compressed.byteSize < file.size) {
+      return {
+        id: uniqueId,
+        name: file.name,
+        size: compressed.byteSize,
+        type: compressed.mimeType,
+        url: compressed.dataUrl,
+        uploadedAt: new Date().toISOString(),
+      };
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      const uniqueId = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       resolve({
         id: uniqueId,
         name: file.name,
@@ -50,6 +134,74 @@ export function readFileAsAttachment(file: File): Promise<QueryAttachment> {
     reader.onerror = (err) => reject(err);
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Validate and read an array of files against the Supabase Free Tier limits:
+ * - Up to MAX_FILES_PER_UPLOAD files per section
+ * - Up to MAX_FILE_SIZE_BYTES (2 MB) per file (after automatic image compression)
+ * - Up to MAX_TOTAL_ATTACHMENTS_BYTES (4 MB) combined per section
+ */
+export async function validateAndReadAttachments(
+  files: FileList | File[],
+  existingAttachments: QueryAttachment[] = [],
+  extraMetadata?: Partial<Pick<QueryAttachment, 'uploadedBy' | 'uploaderRole'>>
+): Promise<{ added: QueryAttachment[]; errors: string[] }> {
+  const fileArray = Array.from(files || []);
+  const added: QueryAttachment[] = [];
+  const errors: string[] = [];
+
+  let currentCount = existingAttachments.length;
+  let currentTotalBytes = existingAttachments.reduce((sum, a) => sum + (a.size || 0), 0);
+
+  for (const file of fileArray) {
+    if (currentCount >= MAX_FILES_PER_UPLOAD) {
+      errors.push(
+        `Maximum of ${MAX_FILES_PER_UPLOAD} files allowed per upload section on the current Free Plan (skipped "${file.name}").`
+      );
+      continue;
+    }
+
+    const isImg = isCompressibleImage(file);
+    const maxRawLimit = isImg ? MAX_RAW_IMAGE_BYTES : MAX_FILE_SIZE_BYTES;
+
+    if (file.size > maxRawLimit) {
+      errors.push(
+        `File "${file.name}" (${formatFileSize(file.size)}) exceeds the ${MAX_FILE_SIZE_LABEL} per-file limit (Free Plan). Please compress or choose a smaller document.`
+      );
+      continue;
+    }
+
+    try {
+      const att = await readFileAsAttachment(file);
+
+      if (att.size > MAX_FILE_SIZE_BYTES) {
+        errors.push(
+          `File "${file.name}" (${formatFileSize(att.size)}) exceeds the ${MAX_FILE_SIZE_LABEL} per-file limit (Free Plan). Please choose a smaller file.`
+        );
+        continue;
+      }
+
+      if (currentTotalBytes + att.size > MAX_TOTAL_ATTACHMENTS_BYTES) {
+        errors.push(
+          `Adding "${file.name}" (${formatFileSize(att.size)}) would exceed the ${MAX_TOTAL_ATTACHMENTS_LABEL} total attachment limit per query (Free Plan).`
+        );
+        continue;
+      }
+
+      added.push({
+        ...att,
+        ...(extraMetadata || {}),
+      });
+      currentCount += 1;
+      currentTotalBytes += att.size;
+    } catch (err) {
+      console.error(`Error reading file ${file.name}:`, err);
+      errors.push(`Failed to read file "${file.name}".`);
+    }
+  }
+
+  return { added, errors };
 }
 
 /**
