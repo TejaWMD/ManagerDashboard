@@ -1161,12 +1161,6 @@ export const App: React.FC = () => {
 
     const { data, error } = await updateQueryInDb(queryId, {
       ...updates,
-      queryTitle: updates.queryTitle !== undefined ? updates.queryTitle : existing.queryTitle,
-      queryText: updates.queryText !== undefined ? updates.queryText : existing.queryText,
-      attachments: updates.attachments !== undefined ? updates.attachments : existing.attachments,
-      managerRemarkTitle: updates.managerRemarkTitle !== undefined ? updates.managerRemarkTitle : existing.managerRemarkTitle,
-      managerRemark: updates.managerRemark !== undefined ? updates.managerRemark : existing.managerRemark,
-      managerAttachments: updates.managerAttachments !== undefined ? updates.managerAttachments : existing.managerAttachments,
       managerDone: nextManagerDone,
       managerDoneAt: nextManagerDoneAt,
       managerDoneAtMs: nextManagerDoneAtMs,
@@ -1175,13 +1169,6 @@ export const App: React.FC = () => {
       completedAt: nextCompletedAt,
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
-      remarks: updates.remarks !== undefined ? updates.remarks : existing.remarks,
-      adminCompletedBy: updates.adminCompletedBy !== undefined ? updates.adminCompletedBy : existing.adminCompletedBy,
-      adminCompletedAt: updates.adminCompletedAt !== undefined ? updates.adminCompletedAt : existing.adminCompletedAt,
-      adminCompletedAtMs: updates.adminCompletedAtMs !== undefined ? updates.adminCompletedAtMs : existing.adminCompletedAtMs,
-      autoCompletedAt: updates.autoCompletedAt !== undefined ? updates.autoCompletedAt : existing.autoCompletedAt,
-      autoCompletedAtMs: updates.autoCompletedAtMs !== undefined ? updates.autoCompletedAtMs : existing.autoCompletedAtMs,
-      completionNote: updates.completionNote !== undefined ? updates.completionNote : existing.completionNote,
     });
 
     setSavingQueryId(null);
