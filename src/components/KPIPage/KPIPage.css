@@ -1418,6 +1418,12 @@
     order: 1 !important;
     flex: 1 1 auto !important;
   }
+  .kpi-refresh-btn {
+    order: 2 !important;
+    font-size: 0.72rem !important;
+    padding: 0.28rem 0.6rem !important;
+    margin-right: 0.4rem !important;
+  }
   .kpi-brand-logo-badge {
     order: 2 !important;
     width: 38px !important;
