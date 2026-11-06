@@ -1181,9 +1181,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   };
 
   const saveSenderRemark = async (queryId: string) => {
+    const title = senderRemarkTitleDraft.trim();
+    const desc = senderRemarkDraft.trim();
+    const finalDesc = desc || title;
+    const finalTitle = title || finalDesc;
     await onUpdateQuery(queryId, {
-      accountManagerRemarkTitle: senderRemarkTitleDraft.trim(),
-      accountManagerRemark: senderRemarkDraft.trim(),
+      accountManagerRemarkTitle: finalTitle,
+      accountManagerRemark: finalDesc,
     });
     setEditingSenderRemarkId(null);
     setSenderRemarkTitleDraft('');
@@ -1220,9 +1224,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   };
 
   const saveMgrRemark = async (queryId: string) => {
+    const title = mgrRemarkTitleDraft.trim();
+    const desc = mgrRemarkDraft.trim();
+    const finalDesc = desc || title;
+    const finalTitle = title || finalDesc;
     await onUpdateQuery(queryId, {
-      managerRemarkTitle: mgrRemarkTitleDraft.trim(),
-      managerRemark: mgrRemarkDraft.trim(),
+      managerRemarkTitle: finalTitle,
+      managerRemark: finalDesc,
     });
     setEditingMgrRemarkId(null);
     setMgrRemarkTitleDraft('');
@@ -3470,6 +3478,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         {mgrRemarks.length > 0 ? (
                           mgrRemarks.map((rmk, idx) => {
                             const isLatest = idx === mgrRemarks.length - 1;
+                            const displayText = (rmk.text || rmk.title || '—').trim();
+                            const displayTitle =
+                              rmk.title && rmk.title.trim() !== displayText
+                                ? rmk.title.trim()
+                                : null;
                             return (
                               <div
                                 key={rmk.id || idx}
@@ -3487,11 +3500,31 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                     {isLatest && <span className="remark-badge-latest">LATEST</span>}
                                   </div>
                                 </div>
-                                {rmk.title && <div className="remark-title">{rmk.title}</div>}
-                                <div className="remark-text">{rmk.text}</div>
+                                {displayTitle && <div className="remark-title">{displayTitle}</div>}
+                                <div className="remark-text">{displayText}</div>
                               </div>
                             );
                           })
+                        ) : activeViewingQuery.managerRemarkTitle || activeViewingQuery.managerRemark ? (
+                          <div className="remark-timeline-item remark-timeline-item--latest">
+                            <div className="remark-timeline-header">
+                              <div className="remark-author-info">
+                                <span className="remark-author-name">{activeViewingQuery.managerName}</span>
+                                <span className="person-role-tag person-role-tag--manager">Manager</span>
+                              </div>
+                              <div className="remark-meta-right">
+                                <span className="remark-timestamp">🕒 {activeViewingQuery.managerDoneAt || activeViewingQuery.createdAt}</span>
+                                <span className="remark-badge-latest">LATEST</span>
+                              </div>
+                            </div>
+                            {activeViewingQuery.managerRemarkTitle &&
+                              activeViewingQuery.managerRemarkTitle.trim() !== (activeViewingQuery.managerRemark || '').trim() && (
+                                <div className="remark-title">{activeViewingQuery.managerRemarkTitle}</div>
+                              )}
+                            <div className="remark-text">
+                              {activeViewingQuery.managerRemark || activeViewingQuery.managerRemarkTitle || '—'}
+                            </div>
+                          </div>
                         ) : (
                           <div className="remark-timeline-empty">
                             No manager remarks posted yet.
@@ -3624,6 +3657,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         {senderRemarks.length > 0 ? (
                           senderRemarks.map((rmk, idx) => {
                             const isLatest = idx === senderRemarks.length - 1;
+                            const displayText = (rmk.text || rmk.title || '—').trim();
+                            const displayTitle =
+                              rmk.title && rmk.title.trim() !== displayText
+                                ? rmk.title.trim()
+                                : null;
                             return (
                               <div
                                 key={rmk.id || idx}
@@ -3641,11 +3679,31 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                     {isLatest && <span className="remark-badge-latest">LATEST</span>}
                                   </div>
                                 </div>
-                                {rmk.title && <div className="remark-title">{rmk.title}</div>}
-                                <div className="remark-text">{rmk.text}</div>
+                                {displayTitle && <div className="remark-title">{displayTitle}</div>}
+                                <div className="remark-text">{displayText}</div>
                               </div>
                             );
                           })
+                        ) : activeViewingQuery.accountManagerRemarkTitle || activeViewingQuery.accountManagerRemark ? (
+                          <div className="remark-timeline-item remark-timeline-item--latest">
+                            <div className="remark-timeline-header">
+                              <div className="remark-author-info">
+                                <span className="remark-author-name">{activeViewingQuery.accountManagerName}</span>
+                                <span className="person-role-tag person-role-tag--sender">Sender</span>
+                              </div>
+                              <div className="remark-meta-right">
+                                <span className="remark-timestamp">🕒 {activeViewingQuery.completedAt || activeViewingQuery.createdAt}</span>
+                                <span className="remark-badge-latest">LATEST</span>
+                              </div>
+                            </div>
+                            {activeViewingQuery.accountManagerRemarkTitle &&
+                              activeViewingQuery.accountManagerRemarkTitle.trim() !== (activeViewingQuery.accountManagerRemark || '').trim() && (
+                                <div className="remark-title">{activeViewingQuery.accountManagerRemarkTitle}</div>
+                              )}
+                            <div className="remark-text">
+                              {activeViewingQuery.accountManagerRemark || activeViewingQuery.accountManagerRemarkTitle || '—'}
+                            </div>
+                          </div>
                         ) : (
                           <div className="remark-timeline-empty">
                             No sender remarks posted yet.

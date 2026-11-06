@@ -1018,17 +1018,19 @@ export const HomePage: React.FC<HomePageProps> = ({
                     {activeViewingQuery.managerRemarkTitle ||
                       activeViewingQuery.managerRemark ? (
                       <>
-                        <div className="query-view-field-block">
-                          <span className="query-view-sub-label">Title</span>
-                          <div className="query-view-item-title">
-                            {activeViewingQuery.managerRemarkTitle ||
-                              activeViewingQuery.managerRemark}
-                          </div>
-                        </div>
+                        {activeViewingQuery.managerRemarkTitle &&
+                          activeViewingQuery.managerRemarkTitle.trim() !== (activeViewingQuery.managerRemark || '').trim() && (
+                            <div className="query-view-field-block">
+                              <span className="query-view-sub-label">Title</span>
+                              <div className="query-view-item-title">
+                                {activeViewingQuery.managerRemarkTitle}
+                              </div>
+                            </div>
+                          )}
                         <div className="query-view-field-block query-view-field-block--desc">
-                          <span className="query-view-sub-label">Description</span>
+                          <span className="query-view-sub-label">Remark</span>
                           <div className="query-view-item-desc">
-                            {activeViewingQuery.managerRemark || '—'}
+                            {activeViewingQuery.managerRemark || activeViewingQuery.managerRemarkTitle || '—'}
                           </div>
                         </div>
                       </>
@@ -1062,17 +1064,19 @@ export const HomePage: React.FC<HomePageProps> = ({
                     {activeViewingQuery.accountManagerRemarkTitle ||
                       activeViewingQuery.accountManagerRemark ? (
                       <>
-                        <div className="query-view-field-block">
-                          <span className="query-view-sub-label">Title</span>
-                          <div className="query-view-item-title">
-                            {activeViewingQuery.accountManagerRemarkTitle ||
-                              activeViewingQuery.accountManagerRemark}
-                          </div>
-                        </div>
+                        {activeViewingQuery.accountManagerRemarkTitle &&
+                          activeViewingQuery.accountManagerRemarkTitle.trim() !== (activeViewingQuery.accountManagerRemark || '').trim() && (
+                            <div className="query-view-field-block">
+                              <span className="query-view-sub-label">Title</span>
+                              <div className="query-view-item-title">
+                                {activeViewingQuery.accountManagerRemarkTitle}
+                              </div>
+                            </div>
+                          )}
                         <div className="query-view-field-block query-view-field-block--desc">
-                          <span className="query-view-sub-label">Description</span>
+                          <span className="query-view-sub-label">Remark</span>
                           <div className="query-view-item-desc">
-                            {activeViewingQuery.accountManagerRemark || '—'}
+                            {activeViewingQuery.accountManagerRemark || activeViewingQuery.accountManagerRemarkTitle || '—'}
                           </div>
                         </div>
                       </>

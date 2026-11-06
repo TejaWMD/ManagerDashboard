@@ -1113,9 +1113,100 @@ export const App: React.FC = () => {
       clearUrgentReminderLocally(queryId);
     }
 
+    const nextManagerRemarkTitle =
+      updates.managerRemarkTitle !== undefined
+        ? updates.managerRemarkTitle
+        : existing.managerRemarkTitle;
+    const nextManagerRemark =
+      updates.managerRemark !== undefined
+        ? updates.managerRemark
+        : existing.managerRemark;
+
+    const nextAccountManagerRemarkTitle =
+      updates.accountManagerRemarkTitle !== undefined
+        ? updates.accountManagerRemarkTitle
+        : existing.accountManagerRemarkTitle;
+    const nextAccountManagerRemark =
+      updates.accountManagerRemark !== undefined
+        ? updates.accountManagerRemark
+        : existing.accountManagerRemark;
+
+    // Synchronize remarks array so the details modal timeline and Supabase remarks_log are always in sync
+    let nextRemarks = updates.remarks !== undefined ? updates.remarks : existing.remarks ? [...existing.remarks] : [];
+    if (updates.remarks === undefined) {
+      if (updates.accountManagerRemarkTitle !== undefined || updates.accountManagerRemark !== undefined) {
+        const text = (nextAccountManagerRemark || nextAccountManagerRemarkTitle || '').trim();
+        const title = (nextAccountManagerRemarkTitle || '').trim();
+        if (text) {
+          const finalTitle = title && title !== text ? title : undefined;
+          const lastSenderIdx = [...nextRemarks].reverse().findIndex((r) => r.type === 'sender');
+          const nowFormatted = formatDateTime(now, false);
+          if (lastSenderIdx !== -1) {
+            const actualIdx = nextRemarks.length - 1 - lastSenderIdx;
+            nextRemarks[actualIdx] = {
+              ...nextRemarks[actualIdx],
+              title: finalTitle,
+              text,
+              createdAt: nowFormatted,
+              createdAtMs: nowMs,
+            };
+          } else {
+            nextRemarks.push({
+              id: `rmk-sender-${nowMs}-${Math.random().toString(36).substring(2, 6)}`,
+              authorId: currentUser.id,
+              authorName: currentUser.name,
+              authorRole: currentUser.role,
+              type: 'sender',
+              title: finalTitle,
+              text,
+              createdAt: nowFormatted,
+              createdAtMs: nowMs,
+            });
+          }
+        }
+      }
+
+      if (updates.managerRemarkTitle !== undefined || updates.managerRemark !== undefined) {
+        const text = (nextManagerRemark || nextManagerRemarkTitle || '').trim();
+        const title = (nextManagerRemarkTitle || '').trim();
+        if (text) {
+          const finalTitle = title && title !== text ? title : undefined;
+          const lastMgrIdx = [...nextRemarks].reverse().findIndex((r) => r.type === 'manager');
+          const nowFormatted = formatDateTime(now, false);
+          if (lastMgrIdx !== -1) {
+            const actualIdx = nextRemarks.length - 1 - lastMgrIdx;
+            nextRemarks[actualIdx] = {
+              ...nextRemarks[actualIdx],
+              title: finalTitle,
+              text,
+              createdAt: nowFormatted,
+              createdAtMs: nowMs,
+            };
+          } else {
+            nextRemarks.push({
+              id: `rmk-mgr-${nowMs}-${Math.random().toString(36).substring(2, 6)}`,
+              authorId: currentUser.id,
+              authorName: currentUser.name,
+              authorRole: currentUser.role,
+              type: 'manager',
+              title: finalTitle,
+              text,
+              createdAt: nowFormatted,
+              createdAtMs: nowMs,
+            });
+          }
+        }
+      }
+    }
+
     const optimisticItem: Query = {
       ...existing,
       ...updates,
+      remarks: nextRemarks,
+      managerRemarkTitle: nextManagerRemarkTitle,
+      managerRemark: nextManagerRemark,
+      accountManagerRemarkTitle: nextAccountManagerRemarkTitle,
+      accountManagerRemark: nextAccountManagerRemark,
       managerDone: nextManagerDone,
       managerDoneAt: nextManagerDoneAt,
       managerDoneAtMs: nextManagerDoneAtMs,
@@ -1165,6 +1256,11 @@ export const App: React.FC = () => {
 
     const { data, error } = await updateQueryInDb(queryId, {
       ...updates,
+      remarks: nextRemarks,
+      managerRemarkTitle: nextManagerRemarkTitle,
+      managerRemark: nextManagerRemark,
+      accountManagerRemarkTitle: nextAccountManagerRemarkTitle,
+      accountManagerRemark: nextAccountManagerRemark,
       managerDone: nextManagerDone,
       managerDoneAt: nextManagerDoneAt,
       managerDoneAtMs: nextManagerDoneAtMs,

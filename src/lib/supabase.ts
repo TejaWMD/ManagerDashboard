@@ -204,17 +204,26 @@ export function unpackTitleAndDescription(
   if (raw.includes(TITLE_DESC_SEPARATOR)) {
     const [packedTitle, ...rest] = raw.split(TITLE_DESC_SEPARATOR);
     const unpackedDesc = rest.join(TITLE_DESC_SEPARATOR);
+    const resolvedTitle = hasExplicitTitle ? explicitTitle!.trim() : packedTitle.trim();
+    let resolvedDesc = unpackedDesc.trim();
+    // If description is empty but title exists, fallback description to title so remark content is never blank
+    if (!resolvedDesc && resolvedTitle) {
+      resolvedDesc = resolvedTitle;
+    }
     return {
-      title: hasExplicitTitle ? explicitTitle!.trim() : packedTitle.trim(),
-      description: unpackedDesc.trim(),
+      title: resolvedTitle,
+      description: resolvedDesc,
     };
   }
 
   const trimmedRaw = raw.trim();
   if (hasExplicitTitle) {
+    const title = explicitTitle!.trim();
+    // If raw text is empty, the remark description is the title itself so content is not lost
+    const description = trimmedRaw || title;
     return {
-      title: explicitTitle!.trim(),
-      description: trimmedRaw,
+      title,
+      description,
     };
   }
 
@@ -409,32 +418,85 @@ export function mapRowToQuery(row: QueryRow): Query {
   if (resolvedRemarks.length === 0 && localMeta?.remarks && localMeta.remarks.length > 0) {
     resolvedRemarks = localMeta.remarks;
   }
-  // Synthesize remarks if remarks_log is empty (backward compatibility with existing Supabase rows)
-  if (resolvedRemarks.length === 0) {
-    if (unpackedMgrRemark.description || unpackedMgrRemark.title) {
+  // Ensure Manager & Sender remarks are independently preserved and synthesized
+  // (Prevents one party's remark from hiding or dropping the other party's remark)
+  const hasManagerRemarkInLog = resolvedRemarks.some((r) => r.type === 'manager');
+  const hasSenderRemarkInLog = resolvedRemarks.some((r) => r.type === 'sender');
+
+  const mgrRemarkText = (unpackedMgrRemark.description || unpackedMgrRemark.title || '').trim();
+  const mgrRemarkTitle =
+    unpackedMgrRemark.title &&
+    unpackedMgrRemark.title.trim() !== mgrRemarkText
+      ? unpackedMgrRemark.title.trim()
+      : undefined;
+
+  if (!hasManagerRemarkInLog && mgrRemarkText) {
+    resolvedRemarks.unshift({
+      id: `rmk-init-mgr-${row.query_id}`,
+      authorId: row.manager_id,
+      authorName: row.manager_name,
+      authorRole: 'manager',
+      type: 'manager',
+      title: mgrRemarkTitle,
+      text: mgrRemarkText,
+      createdAt: formatDateTime(managerDoneAt || row.created_at, false),
+      createdAtMs: managerDoneAtMs || createdAtMs,
+    });
+  } else if (hasManagerRemarkInLog && mgrRemarkText) {
+    // If remarks_log exists but column has newer or distinct content not in the log, merge it
+    const matchesAny = resolvedRemarks.some(
+      (r) => r.type === 'manager' && (r.text === mgrRemarkText || (mgrRemarkTitle && r.title === mgrRemarkTitle))
+    );
+    if (!matchesAny) {
       resolvedRemarks.push({
-        id: `rmk-init-mgr-${row.query_id}`,
+        id: `rmk-sync-mgr-${row.query_id}-${Date.now()}`,
         authorId: row.manager_id,
         authorName: row.manager_name,
         authorRole: 'manager',
         type: 'manager',
-        title: unpackedMgrRemark.title || undefined,
-        text: unpackedMgrRemark.description,
+        title: mgrRemarkTitle,
+        text: mgrRemarkText,
         createdAt: formatDateTime(managerDoneAt || row.created_at, false),
-        createdAtMs: managerDoneAtMs || createdAtMs,
+        createdAtMs: managerDoneAtMs || Date.now(),
       });
     }
-    if (unpackedAmRemark.description || unpackedAmRemark.title) {
+  }
+
+  const amRemarkText = (unpackedAmRemark.description || unpackedAmRemark.title || '').trim();
+  const amRemarkTitle =
+    unpackedAmRemark.title &&
+    unpackedAmRemark.title.trim() !== amRemarkText
+      ? unpackedAmRemark.title.trim()
+      : undefined;
+
+  if (!hasSenderRemarkInLog && amRemarkText) {
+    resolvedRemarks.push({
+      id: `rmk-init-am-${row.query_id}`,
+      authorId: row.account_manager_id,
+      authorName: row.account_manager_name,
+      authorRole: 'account_manager',
+      type: 'sender',
+      title: amRemarkTitle,
+      text: amRemarkText,
+      createdAt: formatDateTime(completedAt || row.created_at, false),
+      createdAtMs: completedAtMs || createdAtMs,
+    });
+  } else if (hasSenderRemarkInLog && amRemarkText) {
+    // If remarks_log exists but column has newer or distinct content not in the log, merge it
+    const matchesAny = resolvedRemarks.some(
+      (r) => r.type === 'sender' && (r.text === amRemarkText || (amRemarkTitle && r.title === amRemarkTitle))
+    );
+    if (!matchesAny) {
       resolvedRemarks.push({
-        id: `rmk-init-am-${row.query_id}`,
+        id: `rmk-sync-am-${row.query_id}-${Date.now()}`,
         authorId: row.account_manager_id,
         authorName: row.account_manager_name,
         authorRole: 'account_manager',
         type: 'sender',
-        title: unpackedAmRemark.title || undefined,
-        text: unpackedAmRemark.description,
+        title: amRemarkTitle,
+        text: amRemarkText,
         createdAt: formatDateTime(completedAt || row.created_at, false),
-        createdAtMs: completedAtMs || createdAtMs,
+        createdAtMs: completedAtMs || Date.now(),
       });
     }
   }
@@ -893,10 +955,15 @@ export async function updateQueryInDb(
     updates.managerRemarkTitle !== undefined ||
     updates.managerRemark !== undefined
   ) {
-    baseUpdates.manager_remark = packTitleAndDescription(
-      updates.managerRemarkTitle,
-      updates.managerRemark
-    );
+    const mTitle =
+      updates.managerRemarkTitle !== undefined
+        ? updates.managerRemarkTitle
+        : updates.managerRemark;
+    const mDesc =
+      updates.managerRemark !== undefined
+        ? updates.managerRemark
+        : updates.managerRemarkTitle;
+    baseUpdates.manager_remark = packTitleAndDescription(mTitle, mDesc);
   }
   if (updates.managerDone !== undefined) {
     baseUpdates.manager_done = updates.managerDone;
@@ -905,10 +972,15 @@ export async function updateQueryInDb(
     updates.accountManagerRemarkTitle !== undefined ||
     updates.accountManagerRemark !== undefined
   ) {
-    baseUpdates.account_manager_remark = packTitleAndDescription(
-      updates.accountManagerRemarkTitle,
-      updates.accountManagerRemark
-    );
+    const amTitle =
+      updates.accountManagerRemarkTitle !== undefined
+        ? updates.accountManagerRemarkTitle
+        : updates.accountManagerRemark;
+    const amDesc =
+      updates.accountManagerRemark !== undefined
+        ? updates.accountManagerRemark
+        : updates.accountManagerRemarkTitle;
+    baseUpdates.account_manager_remark = packTitleAndDescription(amTitle, amDesc);
   }
   if (updates.accountManagerDone !== undefined) {
     baseUpdates.account_manager_done = updates.accountManagerDone;
