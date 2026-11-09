@@ -202,7 +202,7 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                       <span className="score-number">{stat.overallKpi}%</span>
                       <span className="mgr-score-tag">Overall KPI</span>
                     </div>
-                    <span className="score-caption">Combined KPI Score</span>
+                    <span className="score-caption">Overall KPI Score</span>
                   </div>
 
                   <div className="mgr-completion-secondary">
@@ -220,29 +220,22 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   </div>
                 </div>
 
-                {/* Sub-Metric Component Badges: Completion Rate + Avg Rating */}
+                {/* Sub-Metric Component Badge: Turnaround SLA Score (Average Rating hidden from display) */}
                 <div className="mgr-pillars-row">
-                  <div className="mgr-pillar-box" title="Turnaround SLA Score: On-time (+1.0 pt), Late (+0.5 pt), Overdue (0.0 pt) against target deadline">
-                    <span className="mgr-pillar-title">Turnaround Score</span>
+                  <div
+                    className="mgr-pillar-box mgr-pillar-box--full"
+                    title="Turnaround SLA Score: On-time (+1.0 pt), Late (+0.5 pt), Overdue (0.0 pt) against target deadline"
+                  >
+                    <div className="mgr-pillar-info">
+                      <span className="mgr-pillar-title">Turnaround Score</span>
+                      <span className="mgr-pillar-sub">
+                        {stat.totalEvaluated === 0
+                          ? '0 / 0'
+                          : `${stat.earnedPoints}/${stat.totalEvaluated}`}{' '}
+                        pts
+                      </span>
+                    </div>
                     <span className="mgr-pillar-value">{stat.turnaroundKpi}%</span>
-                    <span className="mgr-pillar-sub">
-                      {stat.totalEvaluated === 0
-                        ? '0 / 0'
-                        : `${stat.earnedPoints}/${stat.totalEvaluated}`}{' '}
-                      pts
-                    </span>
-                  </div>
-                  <div className="mgr-pillar-box" title="Average anonymous sender rating">
-                    <span className="mgr-pillar-title">Average Rating</span>
-                    <span className="mgr-pillar-value">
-                      {stat.avgRating !== null ? `⭐ ${stat.avgRating}` : '—'}
-                      {stat.avgRating !== null && <span className="mgr-pillar-slash">/ 5.0</span>}
-                    </span>
-                    <span className="mgr-pillar-sub">
-                      {stat.totalRated > 0
-                        ? `${stat.totalRated} review${stat.totalRated === 1 ? '' : 's'}`
-                        : 'No ratings yet'}
-                    </span>
                   </div>
                 </div>
 

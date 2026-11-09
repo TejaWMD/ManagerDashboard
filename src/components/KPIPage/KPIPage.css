@@ -227,12 +227,14 @@
   overflow: hidden;
 }
 
-/* 7 Managers layout: Top row has 4 cards (span 3), bottom row has 3 cards (span 4) */
-.kpi-managers-row > :nth-child(-n+4) {
+/* Managers layout: 8 managers form a balanced 4x2 grid (each spans 3 of 12 columns) */
+.kpi-managers-row > * {
   grid-column: span 3;
 }
 
-.kpi-managers-row > :nth-child(n+5) {
+/* Fallback for 7 managers: 4 on top (span 3), 3 on bottom (span 4) */
+.kpi-managers-row > :first-child:nth-last-child(7) ~ :nth-child(n+5),
+.kpi-managers-row > :first-child:nth-last-child(7):nth-child(n+5) {
   grid-column: span 4;
 }
 
@@ -543,25 +545,38 @@
   text-overflow: ellipsis;
 }
 
-/* Sub-Metric Component Badges: Turnaround KPI + Avg Rating */
+/* Sub-Metric Component Badge: Turnaround SLA Score (Single clean full-width pillar) */
 .mgr-pillars-row {
-  flex: 1 1 0;
+  flex: 0.95 1 0;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: clamp(0.2rem, 0.4vh, 0.35rem);
+  display: flex;
   width: 100%;
 }
 
 .mgr-pillar-box {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   background: #ffffff;
   border: 1.5px solid rgba(240, 227, 204, 0.9);
   border-radius: clamp(8px, 1.2vh, 12px);
-  padding: clamp(0.1rem, 0.3vh, 0.25rem) clamp(0.25rem, 0.5vh, 0.45rem);
   box-shadow: 0 2px 6px rgba(132, 73, 24, 0.04);
+  box-sizing: border-box;
+}
+
+.mgr-pillar-box--full {
+  flex: 1;
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(0.15rem, 0.38vh, 0.32rem) clamp(0.45rem, 0.8vw, 0.75rem);
+}
+
+.mgr-pillar-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  text-align: left;
 }
 
 .mgr-pillar-title {
@@ -570,16 +585,16 @@
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  line-height: 1.15;
 }
 
 .mgr-pillar-value {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   font-weight: 900;
   color: var(--c-espresso);
   display: flex;
   align-items: baseline;
-  gap: 0.2rem;
-  margin-top: 0.05rem;
+  line-height: 1;
 }
 
 .mgr-pillar-slash {
@@ -593,6 +608,7 @@
   color: #94a3b8;
   font-weight: 700;
   margin-top: 0.05rem;
+  line-height: 1.15;
 }
 
 /* Progress bar + 4 capsules. Grows to fill. */
@@ -1536,20 +1552,25 @@
   .mgr-pillars-row {
     flex: 0 0 auto !important;
     min-height: auto !important;
-    gap: 0.5rem !important;
+    gap: 0 !important;
   }
   .mgr-pillar-box {
-    padding: 0.45rem 0.65rem !important;
+    padding: 0.45rem 0.75rem !important;
     border-radius: 14px !important;
   }
+  .mgr-pillar-box--full {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
   .mgr-pillar-title {
-    font-size: 0.64rem !important;
+    font-size: 0.68rem !important;
   }
   .mgr-pillar-value {
-    font-size: 0.95rem !important;
+    font-size: 1.05rem !important;
   }
   .mgr-pillar-sub {
-    font-size: 0.64rem !important;
+    font-size: 0.68rem !important;
   }
 
   .mgr-metrics-group {

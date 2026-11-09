@@ -32,6 +32,7 @@ VALUES
   ('mgr-5', 'Aizam', 'wmgaizam@gmail.com', 'manager', 'Manager', 'AZ', NULL),
   ('mgr-6', 'Usha', 'wmdusha@gmail.com', 'manager', 'Manager', 'US', NULL),
   ('mgr-7', 'Muttha', 'wmgmuttha@gmail.com', 'manager', 'Manager', 'MT', NULL),
+  ('mgr-8', 'Jay (HR)', 'wmgjay@gmail.com', 'manager', 'Manager', 'JH', NULL),
   ('adm-1', 'Mani', 'admin1@gmail.com', 'admin', 'Admin', 'MN', '+601157350949'),
   ('adm-2', 'Teja', 'wmgteja@gmail.com', 'admin', 'Admin', 'TJ', NULL)
 ON CONFLICT (id) DO UPDATE SET
