@@ -42,6 +42,7 @@ import { AUTHORIZED_USERS } from '../../data/users';
 import {
   calculateReceiverOverallRating,
   calculateSenderOverallRating,
+  RECEIVER_RATING_FEATURE_START_MS,
 } from '../../lib/ratingUtils';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './QueryPage.css';
@@ -114,6 +115,10 @@ interface QueryPageProps {
         | 'adminSenderRemark'
         | 'adminSenderRatedAt'
         | 'adminSenderRatedAtMs'
+        | 'receiverSenderRating'
+        | 'receiverSenderRemark'
+        | 'receiverSenderRatedAt'
+        | 'receiverSenderRatedAtMs'
       >
     >
   ) => Promise<void>;
@@ -713,6 +718,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [ratingRemarkInput, setRatingRemarkInput] = useState<string>('');
   const [ratingRemarkError, setRatingRemarkError] = useState<string>('');
   const [ratingModalCompleteOnSubmit, setRatingModalCompleteOnSubmit] = useState<boolean>(false);
+
+  // Receiver Rating modal states (Receiver rating for sender)
+  const [receiverRatingModalQuery, setReceiverRatingModalQuery] = useState<Query | null>(null);
+  const [receiverRatingInput, setReceiverRatingInput] = useState<number>(10);
+  const [receiverRatingHover, setReceiverRatingHover] = useState<number>(0);
+  const [receiverRatingRemarkInput, setReceiverRatingRemarkInput] = useState<string>('');
+  const [receiverRatingRemarkError, setReceiverRatingRemarkError] = useState<string>('');
 
   // Admin Rating modal states (for Mr. Mani on Query Page)
   const [adminRatingQuery, setAdminRatingQuery] = useState<Query | null>(null);
@@ -1971,7 +1983,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                 setAdminRemarkInput(item.adminSenderRemark || 'Prompt responses to queries and requests');
                                 setAdminRemarkError('');
                               }}
-                              title={`Sender Rating: ${sndBreakdown.overallRating}/10 stars\nAdmin (70%): ${sndBreakdown.adminRating}★\nSystem (30%): ${sndBreakdown.systemRating}★ (${sndBreakdown.systemReason})\nClick to edit Admin Rating & Remark`}
+                              title={`Sender Rating: ${sndBreakdown.overallRating}/10 stars\nAdmin (50%): ${sndBreakdown.adminRating}★\nSystem (30%): ${sndBreakdown.systemRating}★ (${sndBreakdown.systemReason})\nReceiver (20%): ${sndBreakdown.receiverRating ?? 10}★\nClick to edit Admin Rating & Remark`}
                             >
                               <span style={{ color: '#92400e', fontWeight: 800 }}>Snd:</span>
                               <span>⭐ {sndBreakdown.overallRating}/10</span>
@@ -2022,8 +2034,83 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             ★ Rate Manager
                           </button>
                         )
-                      ) : (
-                        /* Receiving Manager or other users CANNOT see individual ratings (Strict Anonymity) */
+                      ) : isAssignedManager ? (() => {
+                        const recBreakdown = calculateReceiverOverallRating(item);
+                        const isPostCutoff = Boolean(
+                          (item.createdAtMs && item.createdAtMs > RECEIVER_RATING_FEATURE_START_MS) ||
+                          (item.receiverSenderRating !== undefined && item.receiverSenderRating !== null)
+                        );
+                        return (
+                          <div className="rating-cell-receiver-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+                            {/* Receiver can see their own overall score */}
+                            <span
+                              className="rating-badge rating-badge--receiver-score"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '6px',
+                                background: '#f0f9ff',
+                                border: '1px solid #bae6fd',
+                                fontSize: '0.78rem',
+                                color: '#0369a1',
+                                fontWeight: 700,
+                              }}
+                              title={`Your Rating as Receiver: ${recBreakdown.overallRating}/10 stars\nAdmin (50%): ${recBreakdown.adminRating}★\nSystem (30%): ${recBreakdown.systemRating}★ (${recBreakdown.systemReason})\nSender (20%): ${recBreakdown.senderRating ?? 10}★`}
+                            >
+                              <span>⭐ {recBreakdown.overallRating}/10</span>
+                            </span>
+
+                            {/* If query made after this cutoff, receiver rating for sender is shown */}
+                            {isPostCutoff && (
+                              item.receiverSenderRating ? (
+                                <button
+                                  type="button"
+                                  className="rating-badge rating-badge--receiver"
+                                  style={{
+                                    fontSize: '0.74rem',
+                                    padding: '0.15rem 0.45rem',
+                                    background: '#fef3c7',
+                                    color: '#92400e',
+                                    border: '1px solid #fde68a',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600,
+                                  }}
+                                  onClick={() => {
+                                    setReceiverRatingModalQuery(item);
+                                    setReceiverRatingInput(item.receiverSenderRating || 10);
+                                    setReceiverRatingHover(0);
+                                    setReceiverRatingRemarkInput(item.receiverSenderRemark || '');
+                                    setReceiverRatingRemarkError('');
+                                  }}
+                                  title={`Click to view/update rating for Sender (${item.accountManagerName}): ${item.receiverSenderRating}/10\nRemark: ${item.receiverSenderRemark || 'None'}`}
+                                >
+                                  ⭐ {item.receiverSenderRating}/10 (to Sender)
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn-rate-prompt"
+                                  style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem' }}
+                                  onClick={() => {
+                                    setReceiverRatingModalQuery(item);
+                                    setReceiverRatingInput(10);
+                                    setReceiverRatingHover(0);
+                                    setReceiverRatingRemarkInput('');
+                                    setReceiverRatingRemarkError('');
+                                  }}
+                                  title="Click to rate the sender (10-star scale with mandatory remark)"
+                                >
+                                  ★ Rate Sender
+                                </button>
+                              )
+                            )}
+                          </div>
+                        );
+                      })() : (
+                        /* Senders or other users cannot see receiver ratings for senders */
                         <span className="rating-placeholder">—</span>
                       )}
                     </td>
@@ -3916,6 +4003,81 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 </div>
               )}
 
+              {/* Receiver Rating Section: visible to Receiver to rate the Sender */}
+              {(currentUser.role === 'admin' || currentUser.id === activeViewingQuery.managerId) && (
+                (() => {
+                  const isPostCutoff = Boolean(
+                    (activeViewingQuery.createdAtMs && activeViewingQuery.createdAtMs > RECEIVER_RATING_FEATURE_START_MS) ||
+                    (activeViewingQuery.receiverSenderRating !== undefined && activeViewingQuery.receiverSenderRating !== null)
+                  );
+                  if (!isPostCutoff && currentUser.role !== 'admin') return null;
+
+                  return (
+                    <div className="query-view-section query-view-section--rating">
+                      <div className="query-view-section-header">
+                        <span className="query-view-section-label">
+                          {currentUser.role === 'admin'
+                            ? `Receiver Rating (for Sender: ${activeViewingQuery.accountManagerName})`
+                            : `Your Rating (for Sender: ${activeViewingQuery.accountManagerName})`}
+                        </span>
+                      </div>
+                      <div className="query-view-rating-card">
+                        {activeViewingQuery.receiverSenderRating ? (
+                          <div className="query-view-rating-display">
+                            <span className="rating-stars-gold">
+                              ⭐ {activeViewingQuery.receiverSenderRating} / 10 Stars
+                            </span>
+                            {activeViewingQuery.receiverSenderRemark && (
+                              <div style={{ fontSize: '0.82rem', color: '#634a36', marginTop: '0.3rem', fontStyle: 'italic' }}>
+                                &ldquo;{activeViewingQuery.receiverSenderRemark}&rdquo;
+                              </div>
+                            )}
+                            {(currentUser.id === activeViewingQuery.managerId || currentUser.role === 'admin') && (
+                              <div className="query-view-rating-actions" style={{ marginTop: '0.5rem' }}>
+                                <button
+                                  type="button"
+                                  className="btn-inline-edit"
+                                  onClick={() => {
+                                    setReceiverRatingModalQuery(activeViewingQuery);
+                                    setReceiverRatingInput(activeViewingQuery.receiverSenderRating || 10);
+                                    setReceiverRatingHover(0);
+                                    setReceiverRatingRemarkInput(activeViewingQuery.receiverSenderRemark || '');
+                                    setReceiverRatingRemarkError('');
+                                  }}
+                                >
+                                  Update Rating
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : currentUser.id === activeViewingQuery.managerId ? (
+                          <div className="query-view-rating-prompt">
+                            <span className="rating-pending-text">
+                              You haven&apos;t rated the sender yet:
+                            </span>
+                            <button
+                              type="button"
+                              className="btn-rate-prompt"
+                              onClick={() => {
+                                setReceiverRatingModalQuery(activeViewingQuery);
+                                setReceiverRatingInput(10);
+                                setReceiverRatingHover(0);
+                                setReceiverRatingRemarkInput('');
+                                setReceiverRatingRemarkError('');
+                              }}
+                            >
+                              ★ Rate Sender (1-10 Stars)
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="rating-placeholder">Not rated by receiver yet (Default 10★).</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+
               {/* Requirement 1: Link Existing Appointment in Query List (Query Details Modal) */}
               {!activeViewingLinkedAppointment &&
                 !activeViewingQuery.linkedAppointmentId &&
@@ -4280,6 +4442,155 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
       )}
 
+      {/* Receiver Rating Modal (Receiving Manager rating the Sender) */}
+      {receiverRatingModalQuery && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setReceiverRatingModalQuery(null)}
+        >
+          <div
+            className="modal-dialog rating-prompt-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="receiver-rating-modal-title"
+          >
+            <div className="modal-header">
+              <div className="modal-header-text">
+                <h3 id="receiver-rating-modal-title">
+                  Rate Sender: {receiverRatingModalQuery.accountManagerName}
+                </h3>
+                <span className="modal-subtitle">
+                  Query {receiverRatingModalQuery.queryId} &bull;{' '}
+                  {receiverRatingModalQuery.queryTitle ||
+                    receiverRatingModalQuery.queryText.slice(0, 35)}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setReceiverRatingModalQuery(null)}
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="rating-modal-body">
+              <p className="rating-modal-desc">
+                Rate how well and promptly <strong>{receiverRatingModalQuery.accountManagerName}</strong> provided requirements and communication on this query. Receiver rating contributes <strong>20%</strong> to sender&apos;s overall performance score.
+              </p>
+
+              <div className="star-rating-picker-10" role="radiogroup" aria-label="Rating from 1 to 10 stars">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    className={`star-pick-btn-10 ${
+                      (receiverRatingHover || receiverRatingInput) >= star
+                        ? 'star-pick-btn-10--active'
+                        : ''
+                    }`}
+                    onMouseEnter={() => setReceiverRatingHover(star)}
+                    onMouseLeave={() => setReceiverRatingHover(0)}
+                    onClick={() => setReceiverRatingInput(star)}
+                    title={`${star} Star${star > 1 ? 's' : ''}`}
+                    aria-label={`${star} Star${star > 1 ? 's' : ''}`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+
+              <div className="rating-score-label">
+                {receiverRatingInput > 0 ? (
+                  <span className="rating-score-active">
+                    ⭐ {receiverRatingInput} of 10 Stars Selected
+                  </span>
+                ) : (
+                  <span className="rating-score-hint">
+                    Select 1 to 10 stars to proceed
+                  </span>
+                )}
+              </div>
+
+              <div style={{ marginTop: '1rem', textAlign: 'left' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: '#715b49',
+                    marginBottom: '0.4rem',
+                  }}
+                >
+                  Feedback Remark <span style={{ color: '#dc2626' }}>* (Mandatory)</span>
+                </label>
+                <textarea
+                  style={{
+                    width: '100%',
+                    minHeight: '75px',
+                    padding: '0.65rem',
+                    fontSize: '0.85rem',
+                    border: '1.5px solid rgba(193, 128, 54, 0.4)',
+                    borderRadius: '8px',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                  }}
+                  placeholder="Explain your rating for the sender's clarity, responsiveness or requirements..."
+                  value={receiverRatingRemarkInput}
+                  onChange={(e) => {
+                    setReceiverRatingRemarkInput(e.target.value);
+                    if (receiverRatingRemarkError) setReceiverRatingRemarkError('');
+                  }}
+                />
+                {receiverRatingRemarkError && (
+                  <span style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.25rem', display: 'block' }}>
+                    {receiverRatingRemarkError}
+                  </span>
+                )}
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setReceiverRatingModalQuery(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={receiverRatingInput < 1 || savingQueryId === receiverRatingModalQuery.queryId}
+                  onClick={async () => {
+                    if (receiverRatingInput < 1) return;
+                    if (!receiverRatingRemarkInput.trim()) {
+                      setReceiverRatingRemarkError('Remark is mandatory when rating');
+                      return;
+                    }
+
+                    const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                    const nowMs = Date.now();
+
+                    await onUpdateQuery(receiverRatingModalQuery.queryId, {
+                      receiverSenderRating: receiverRatingInput,
+                      receiverSenderRemark: receiverRatingRemarkInput.trim(),
+                      receiverSenderRatedAt: nowIso,
+                      receiverSenderRatedAtMs: nowMs,
+                    });
+                    setReceiverRatingModalQuery(null);
+                  }}
+                >
+                  {savingQueryId === receiverRatingModalQuery.queryId ? 'Saving...' : 'Save Rating'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Admin Rating Editor Modal (Mr. Mani) */}
       {adminRatingQuery && (
         <div className="modal-backdrop" onClick={() => setAdminRatingQuery(null)}>
@@ -4396,8 +4707,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     marginBottom: '0.4rem',
                   }}
                 >
-                  Admin Score (1 to 10 Stars) &bull;{' '}
-                  {adminRatingTargetRole === 'receiver' ? '50% Weight' : '70% Weight'}
+                  Admin Score (1 to 10 Stars) &bull; 50% Weight
                 </label>
                 <div className="star-rating-picker-10">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (

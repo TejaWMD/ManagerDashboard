@@ -10,6 +10,9 @@ export interface RatingBreakdown {
   senderRating?: number | null;
   senderRemark?: string | null;
   senderRatedAt?: string | null;
+  receiverRating?: number | null;
+  receiverRemark?: string | null;
+  receiverRatedAt?: string | null;
   overallRating: number; // Out of 10.0
 }
 
@@ -270,9 +273,13 @@ export function calculateReceiverOverallRating(
   };
 }
 
+// Cutoff timestamp: Queries created up till this timestamp default receiver rating for sender to 10 stars.
+// For queries created after this timestamp, receiver rating for sender will be prompted and calculated.
+export const RECEIVER_RATING_FEATURE_START_MS = 1794298058000; // 2026-11-10T16:07:38+08:00
+
 /**
  * Calculates the composite Sender Rating (out of 10.0 stars)
- * Formula: Admin (70%) + System (30%)
+ * Formula: Admin (50%) + System (30%) + Receiver (20%)
  */
 export function calculateSenderOverallRating(
   query: Query,
@@ -285,7 +292,24 @@ export function calculateSenderOverallRating(
 
   const system = calculateSenderSystemRating(query, nowMs);
 
-  const rawScore = adminRating * 0.7 + system.rating * 0.3;
+  let receiverRating: number | null = null;
+  let receiverRemark: string | null = null;
+  let receiverRatedAt: string | null = null;
+
+  if (typeof query.receiverSenderRating === 'number' && query.receiverSenderRating >= 1) {
+    receiverRating = query.receiverSenderRating;
+    receiverRemark = query.receiverSenderRemark || null;
+    receiverRatedAt = query.receiverSenderRatedAt || null;
+  } else if (!query.createdAtMs || query.createdAtMs <= RECEIVER_RATING_FEATURE_START_MS) {
+    // For queries up till now, just make it all the senders to be 10 stars
+    receiverRating = 10;
+    receiverRemark = 'Default 10★ rating (Legacy query)';
+  }
+
+  // If receiver has not rated yet on new query, default to 10 stars for composite score calculation
+  const effectiveReceiverRating = receiverRating !== null ? receiverRating : 10;
+
+  const rawScore = adminRating * 0.5 + system.rating * 0.3 + effectiveReceiverRating * 0.2;
   const overallRating = Math.round(rawScore * 10) / 10;
 
   return {
@@ -294,6 +318,9 @@ export function calculateSenderOverallRating(
     adminRatedAt: query.adminSenderRatedAt || null,
     systemRating: system.rating,
     systemReason: system.reason,
+    receiverRating,
+    receiverRemark,
+    receiverRatedAt,
     overallRating,
   };
 }

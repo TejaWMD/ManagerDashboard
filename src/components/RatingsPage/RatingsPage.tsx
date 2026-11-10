@@ -514,24 +514,26 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                           {/* Admin Rating */}
                           <div className="ratings-col-item">
                             <span className="ratings-col-label">
-                              Admin Rating ({isReceiver ? '50%' : '70%'})
+                              Admin Rating (50%)
                             </span>
                             <div className="ratings-col-val" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                               <strong>⭐ {activeBreakdown.adminRating} / 10</strong>
-                              <button
-                                type="button"
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  color: '#844918',
-                                  cursor: 'pointer',
-                                  fontSize: '0.78rem',
-                                  textDecoration: 'underline',
-                                }}
-                                onClick={() => handleOpenEditRating(query, isReceiver ? 'receiver' : 'sender')}
-                              >
-                                Edit
-                              </button>
+                              {currentUser.role === 'admin' && (
+                                <button
+                                  type="button"
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#844918',
+                                    cursor: 'pointer',
+                                    fontSize: '0.78rem',
+                                    textDecoration: 'underline',
+                                  }}
+                                  onClick={() => handleOpenEditRating(query, isReceiver ? 'receiver' : 'sender')}
+                                >
+                                  Edit
+                                </button>
+                              )}
                             </div>
                             <div className="ratings-col-remark">
                               {activeBreakdown.adminRemark || 'Default 10★ rating'}
@@ -547,8 +549,8 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                             <div className="ratings-col-remark">{activeBreakdown.systemReason}</div>
                           </div>
 
-                          {/* Sender Rating (Only for Receiving Manager) */}
-                          {isReceiver && (
+                          {/* Peer Rating (Sender Rating for Receiver, Receiver Rating for Sender) */}
+                          {isReceiver ? (
                             <div className="ratings-col-item">
                               <span className="ratings-col-label">Sender Rating (20%)</span>
                               <div className="ratings-col-val">
@@ -560,6 +562,20 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                               </div>
                               <div className="ratings-col-remark">
                                 {activeBreakdown.senderRemark || 'Pending sender completion review'}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="ratings-col-item">
+                              <span className="ratings-col-label">Receiver Rating (20%)</span>
+                              <div className="ratings-col-val">
+                                <strong>
+                                  {activeBreakdown.receiverRating !== null
+                                    ? `⭐ ${activeBreakdown.receiverRating} / 10`
+                                    : '⭐ 10 / 10 (Default)'}
+                                </strong>
+                              </div>
+                              <div className="ratings-col-remark">
+                                {activeBreakdown.receiverRemark || 'Default 10★ rating'}
                               </div>
                             </div>
                           )}
@@ -620,8 +636,7 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                     ? editingQuery.query.managerName
                     : editingQuery.query.accountManagerName}
                 </strong>{' '}
-                responded on this query. Admin rating carries{' '}
-                <strong>{editingQuery.targetRole === 'receiver' ? '50%' : '70%'}</strong> weight.
+                responded on this query. Admin rating carries <strong>50%</strong> weight.
               </p>
 
               {/* 10 Star picker */}

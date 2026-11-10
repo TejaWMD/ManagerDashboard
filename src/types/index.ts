@@ -211,11 +211,15 @@ export interface Query {
   senderReceiverRemark?: string | null; // Mandatory remark from Sender
   senderReceiverRatedAt?: string | null;
   senderReceiverRatedAtMs?: number | null;
-  // 10-Star Ratings System: Sender Ratings (Admin 70% + System 30%)
+  // 10-Star Ratings System: Sender Ratings (Admin 50% + System 30% + Receiver 20%)
   adminSenderRating?: number | null; // Admin rating for Sender (1-10 stars, default 10)
   adminSenderRemark?: string | null; // Mandatory remark if Admin rates Sender
   adminSenderRatedAt?: string | null;
   adminSenderRatedAtMs?: number | null;
+  receiverSenderRating?: number | null; // Receiver rating for Sender (1-10 stars)
+  receiverSenderRemark?: string | null; // Mandatory remark from Receiver
+  receiverSenderRatedAt?: string | null;
+  receiverSenderRatedAtMs?: number | null;
   // Timestamped remarks log for Manager and Sender
   remarks?: QueryRemark[];
   // Admin Force Completion & Auto-completion tracking

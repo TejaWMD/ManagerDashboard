@@ -1086,6 +1086,10 @@ export const App: React.FC = () => {
         | 'adminSenderRemark'
         | 'adminSenderRatedAt'
         | 'adminSenderRatedAtMs'
+        | 'receiverSenderRating'
+        | 'receiverSenderRemark'
+        | 'receiverSenderRatedAt'
+        | 'receiverSenderRatedAtMs'
       >
     >
   ) => {
@@ -1599,6 +1603,18 @@ export const App: React.FC = () => {
           actionType: 'QUERY_RATED',
           actionTitle: `${currentUser.name} (Admin) rated Sender on ${queryId} (${updates.adminSenderRating}/10 stars)`,
           actionDetails: updates.adminSenderRemark || 'Admin performance rating',
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (updates.receiverSenderRating && updates.receiverSenderRating !== existing.receiverSenderRating) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_RATED',
+          actionTitle: `${currentUser.name} (Receiver) rated Sender on ${queryId} (${updates.receiverSenderRating}/10 stars)`,
+          actionDetails: updates.receiverSenderRemark || 'Receiver performance review',
           targetId: queryId,
           targetType: 'query',
         });

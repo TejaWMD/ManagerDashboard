@@ -139,7 +139,19 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS admin_sender_rating INTEGER DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS admin_sender_remark TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS admin_sender_rated_at TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS admin_sender_rated_at_ms BIGINT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS admin_sender_rated_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS receiver_sender_rating INTEGER DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS receiver_sender_remark TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS receiver_sender_rated_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS receiver_sender_rated_at_ms BIGINT DEFAULT NULL;
+
+-- Backfill receiver rating for senders to 10 stars for queries up till now (cutoff 1794298058000)
+UPDATE public.queries
+SET
+  receiver_sender_rating = 10,
+  receiver_sender_remark = 'Default 10★ rating (Legacy query)'
+WHERE receiver_sender_rating IS NULL
+  AND (created_at_ms IS NULL OR created_at_ms <= 1794298058000);
 
 -- Backfill existing manager_done rows that do not have manager_done_at_ms yet
 UPDATE public.queries
