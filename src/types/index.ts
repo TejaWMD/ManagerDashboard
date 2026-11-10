@@ -217,6 +217,7 @@ export interface Query {
   linkedAppointmentId?: string | null; // e.g. 'APT-001' if query was raised following an appointment
   isUrgent?: boolean; // Flag indicating query is urgent (immediate response required, no 24h delay threshold)
   lastUrgentReminderAtMs?: number | null; // Epoch ms of the latest 24h reminder notification sent to receiver
+  firstManagerRemarkAtMs?: number | null; // Epoch ms of the first manager remark (used to evaluate 1h SLA for urgent queries)
   attachments?: QueryAttachment[]; // Attached documents from user's device (sender)
   managerAttachments?: QueryAttachment[]; // Attached documents from receiving manager / solution
   ccUsers?: QueryCCUser[]; // Team members CC'd on this query (View-only awareness access)
@@ -407,10 +408,71 @@ export function sortQueriesByStatusAndTimestamp(
   });
 }
 
+export const URGENT_REMINDER_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes (600,000 ms)
+export const URGENT_MANAGER_REMARK_WINDOW_MS = 60 * 60 * 1000; // 1 hour (3,600,000 ms)
+
+export function hasManagerRemark(query: Query): boolean {
+  if (!query) return false;
+  if ((query.managerRemark || '').trim() || (query.managerRemarkTitle || '').trim()) {
+    return true;
+  }
+  if (query.managerDone) {
+    return true;
+  }
+  if (
+    Array.isArray(query.remarks) &&
+    query.remarks.some((r) => r.type === 'manager' || r.authorRole === 'manager')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function isUrgentManagerRemarkOverdue(query: Query, nowMs: number = Date.now()): boolean {
+  if (!query || !query.isUrgent || isQueryDone(query)) {
+    return false;
+  }
+  if (hasManagerRemark(query)) {
+    return false;
+  }
+  const createdMs = getQueryTimestampMs(query);
+  if (createdMs <= 0) return false;
+  return nowMs - createdMs >= URGENT_MANAGER_REMARK_WINDOW_MS;
+}
+
+export function getFirstManagerRemarkTimestampMs(query: Query): number | null {
+  if (!query) return null;
+  if (typeof query.firstManagerRemarkAtMs === 'number' && query.firstManagerRemarkAtMs > 0) {
+    return query.firstManagerRemarkAtMs;
+  }
+  // Check remarks log for the earliest remark of type 'manager'
+  if (Array.isArray(query.remarks) && query.remarks.length > 0) {
+    const mgrRemarks = query.remarks.filter(
+      (r) => r.type === 'manager' || r.authorRole === 'manager'
+    );
+    if (mgrRemarks.length > 0) {
+      const timestamps = mgrRemarks
+        .map((r) => r.createdAtMs || parseDateToMs(r.createdAt) || 0)
+        .filter((t) => t > 0);
+      if (timestamps.length > 0) {
+        return Math.min(...timestamps);
+      }
+    }
+  }
+  // If manager marked done, managerDoneAtMs is a manager resolution action
+  if (query.managerDone && query.managerDoneAtMs) {
+    return query.managerDoneAtMs;
+  }
+  // If managerRemark exists as legacy string but not in remarks array
+  if ((query.managerRemark || '').trim() || (query.managerRemarkTitle || '').trim()) {
+    return query.managerDoneAtMs || query.createdAtMs || null;
+  }
+  return null;
+}
+
 export function isQueryExemptFromDelay(
   query: Pick<Query, 'queryId' | 'isUrgent'>
 ): boolean {
-  if (query.isUrgent) return true;
   if (query.queryId && query.queryId.trim().toUpperCase() === 'QRY-009') {
     return true;
   }
@@ -421,7 +483,22 @@ export function isQueryDelayed(
   query: Query,
   nowMs: number = Date.now()
 ): boolean {
-  // Urgent queries (and exempted QRY-009) do not have a 24h delay threshold and are never classified as delayed
+  if (!query) return false;
+
+  // Urgent query delay rule:
+  // Situation 1: Manager put remark within 1 hour -> NOT delayed (completed on time)
+  // Situation 2: Manager never put remark within 1 hour -> DELAYED (even when completed later)
+  if (query.isUrgent) {
+    const createdMs = getQueryTimestampMs(query);
+    if (createdMs <= 0) return false;
+    const firstMgrRemarkMs = getFirstManagerRemarkTimestampMs(query);
+    if (firstMgrRemarkMs !== null) {
+      return firstMgrRemarkMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
+    }
+    return nowMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
+  }
+
+  // Exempted QRY-009 legacy
   if (isQueryExemptFromDelay(query)) {
     return false;
   }
@@ -822,4 +899,6 @@ export interface ManagerKpiStats {
   avgManagerTurnaroundHours: number | null;
   avgSenderVerificationHours: number | null;
   evaluatedQueries: EvaluatedQueryDetail[];
+  hasActiveUrgentPenalty?: boolean; // 50% KPI penalty applied while urgent queries remain uncompleted
+  activeUrgentCount?: number;
 }

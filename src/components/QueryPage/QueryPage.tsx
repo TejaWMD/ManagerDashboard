@@ -15,6 +15,9 @@ import {
   isQueryPending,
   isSenderDelayed,
   sortQueriesByStatusAndTimestamp,
+  hasManagerRemark,
+  isUrgentManagerRemarkOverdue,
+  getQueryTimestampMs,
   UserAccount,
   Appointment,
 } from '../../types';
@@ -2043,25 +2046,79 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               </span>
                             )}
                             {item.isUrgent && (
-                              <span className="table-status-pill table-status-pill--urgent-tag" title="Urgent Query (Resolved)">
+                              <span
+                                className="table-status-pill table-status-pill--urgent-tag"
+                                title={delayed ? 'Urgent query completed late (No remark within 1 hour)' : 'Urgent query completed on-time'}
+                              >
                                 Urgent
                               </span>
                             )}
                             {delayed && (
-                              <span className="table-status-pill table-status-pill--delayed">
+                              <span
+                                className="table-status-pill table-status-pill--delayed"
+                                title={item.isUrgent ? 'Urgent query: Receiving manager did not put a remark within 1 hour - counted as Delayed' : undefined}
+                              >
                                 Delayed
                               </span>
                             )}
                           </>
                         ) : item.isUrgent ? (
                           managerOnlyChecked ? (
-                            <span className="table-status-pill table-status-pill--urgent-mgr" title="Urgent query checked by manager; awaiting sender verification">
-                              🚨 Urgent - Mgr Checked
-                            </span>
+                            <>
+                              <span className="table-status-pill table-status-pill--urgent-mgr" title="Urgent query checked by manager; awaiting sender verification">
+                                🚨 Urgent - Mgr Checked
+                              </span>
+                              {delayed && (
+                                <span className="table-status-pill table-status-pill--delayed" title="Receiving manager did not provide remark within 1 hour">
+                                  Delayed
+                                </span>
+                              )}
+                            </>
                           ) : (
-                            <span className="table-status-pill table-status-pill--urgent" title="Urgent query: Immediate response required, no delay threshold">
-                              🚨 URGENT (Due Now)
-                            </span>
+                            <>
+                              <span className="table-status-pill table-status-pill--urgent" title="Urgent query: Immediate priority, notifying every 10m until done">
+                                🚨 URGENT (Due Now)
+                              </span>
+                              {(() => {
+                                const isOverdue = isUrgentManagerRemarkOverdue(item, nowMs);
+                                const hasRemark = hasManagerRemark(item);
+                                if (isOverdue || delayed) {
+                                  return (
+                                    <>
+                                      <span
+                                        className="table-status-pill table-status-pill--remark-overdue"
+                                        title="Receiving manager has not provided a remark within 1 hour!"
+                                      >
+                                        ⚠️ Remark Overdue (&gt;1h)
+                                      </span>
+                                      <span className="table-status-pill table-status-pill--delayed" title="Overdue on 1-hour remark SLA">
+                                        Delayed
+                                      </span>
+                                    </>
+                                  );
+                                }
+                                if (hasRemark) {
+                                  return (
+                                    <span
+                                      className="table-status-pill table-status-pill--remark-done"
+                                      title="Receiving manager provided remark within 1 hour (On-time track)"
+                                    >
+                                      ✅ Remark Added
+                                    </span>
+                                  );
+                                }
+                                const createdMs = getQueryTimestampMs(item);
+                                const minsLeft = Math.max(1, Math.ceil((60 * 60 * 1000 - (nowMs - createdMs)) / 60000));
+                                return (
+                                  <span
+                                    className="table-status-pill table-status-pill--remark-due"
+                                    title={`Receiving manager must put in a remark within 1 hour (${minsLeft}m left)`}
+                                  >
+                                    ⏱️ Remark Due ({minsLeft}m)
+                                  </span>
+                                );
+                              })()}
+                            </>
                           )
                         ) : managerOnlyChecked ? (
                           <>
@@ -2405,7 +2462,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 <div className="urgent-mode-notice">
                   <span className="urgent-mode-notice-icon">🚨</span>
                   <span>
-                    <strong>URGENT Query Mode Active:</strong> This query will be immediately due with no 24h delay threshold, highlighted in red at the top of the table, and notify the receiver every 24h until completed.
+                    <strong>URGENT Query Mode Active:</strong> Immediate priority! Manager must provide a remark within 1 hour. Sender, receiver, and admins will be notified every 10 minutes until finalized. The receiving manager&apos;s KPI drops 50% until completed.
                   </span>
                 </div>
               )}
@@ -2672,9 +2729,20 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           🚨 Urgent - Mgr Checked
                         </span>
                       ) : (
-                        <span className="table-status-pill table-status-pill--urgent">
-                          🚨 URGENT (Due Now)
-                        </span>
+                        <>
+                          <span className="table-status-pill table-status-pill--urgent">
+                            🚨 URGENT (Due Now)
+                          </span>
+                          {isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs) ? (
+                            <span className="table-status-pill table-status-pill--remark-overdue" title="Receiving manager has not provided a remark within 1 hour!">
+                              ⚠️ Remark Overdue (&gt;1h)
+                            </span>
+                          ) : !hasManagerRemark(activeViewingQuery) ? (
+                            <span className="table-status-pill table-status-pill--remark-due" title="Receiving manager must put in a remark within 1 hour">
+                              ⏱️ Remark Due (&lt;1h)
+                            </span>
+                          ) : null}
+                        </>
                       )
                     ) : activeViewingQuery.managerDone &&
                       !activeViewingQuery.accountManagerDone ? (
@@ -3338,7 +3406,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   <span className="query-view-due-text">
                     {activeViewingQuery.isUrgent ? (
                       <span className="pill-urgent-badge-strong">
-                        🚨 Immediately Due (No 24h delay threshold)
+                        🚨 Immediately Due (10m Alerts &bull; 1h Remark Required)
                       </span>
                     ) : activeViewingQuery.targetDueAt ? (
                       <>
@@ -3350,6 +3418,38 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     )}
                   </span>
                 </div>
+
+                {activeViewingQuery.isUrgent && !isQueryDone(activeViewingQuery) && (
+                  <div
+                    className={`urgent-view-notice ${
+                      isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs)
+                        ? 'urgent-view-notice--overdue'
+                        : ''
+                    }`}
+                  >
+                    <span className="urgent-view-notice-icon">
+                      {isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs) ? '⚠️' : '🚨'}
+                    </span>
+                    <div className="urgent-view-notice-text">
+                      <div>
+                        <strong>URGENT SLA Rules Active:</strong> Sender, Receiver, and Admins are alerted every 10 minutes until finalized. Manager ({activeViewingQuery.managerName}) KPI is reduced by 50% until completed.
+                      </div>
+                      {isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs) ? (
+                        <div className="urgent-notice-highlight urgent-notice-highlight--alert">
+                          ⚠️ <strong>Action Required:</strong> The 1-hour initial remark window has expired without any manager remark!
+                        </div>
+                      ) : hasManagerRemark(activeViewingQuery) ? (
+                        <div className="urgent-notice-highlight urgent-notice-highlight--ok">
+                          ✅ Manager remark provided. Awaiting completion &amp; sender verification.
+                        </div>
+                      ) : (
+                        <div className="urgent-notice-highlight">
+                          ⏱️ Receiving manager must post a remark regarding this query within 1 hour.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {activeViewingQuery.extensionStatus === 'PENDING' ? (
                   <div className="query-view-ext-banner query-view-ext-banner--pending">

@@ -16,7 +16,7 @@ const SYSTEM_ACTOR: UserAccount = {
 
 const DELAY_NOTIFIED_CACHE_KEY = 'wm_delay_notified_cache_v1';
 const URGENT_REMINDER_CACHE_KEY = 'wm_urgent_reminder_cache_v1';
-export const URGENT_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours (86,400,000 ms)
+export const URGENT_REMINDER_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes (600,000 ms)
 
 function getLocalDelayNotifiedSet(): Set<string> {
   try {
@@ -136,8 +136,8 @@ export async function checkAndNotifyDelayedQueries(
 }
 
 /**
- * Checks all open urgent queries and dispatches a reminder notification to the receiver
- * every 24 hours until the query is fully completed.
+ * Checks all open urgent queries and dispatches a reminder notification to sender, receiver, and admin
+ * every 10 minutes until the query is fully finalized by the sender.
  */
 export async function checkAndNotifyUrgentReminders(
   queries: Query[]
@@ -162,13 +162,13 @@ export async function checkAndNotifyUrgentReminders(
       createdMs
     );
 
-    // Check if 24 hours have elapsed since creation or the last 24h reminder
+    // Check if 10 minutes have elapsed since creation or the last 10m reminder
     if (nowMs - lastNotifiedAt >= URGENT_REMINDER_INTERVAL_MS) {
-      console.log(`[SLAChecker] 24h reminder due for urgent query ${query.queryId}. Triggering alert...`);
+      console.log(`[SLAChecker] 10m reminder due for urgent query ${query.queryId}. Triggering alert...`);
       recordUrgentReminderLocally(query.queryId, nowMs);
       remindedIds.push(query.queryId);
 
-      // 1. Dispatch push notification to receiver and admin
+      // 1. Dispatch push notification to sender, receiver, CCs, and admin
       await dispatchQueryPushNotification({
         event: 'URGENT_REMINDER',
         query,

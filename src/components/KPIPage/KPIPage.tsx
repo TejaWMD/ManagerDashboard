@@ -138,7 +138,9 @@ export const KPIPage: React.FC<KPIPageProps> = ({
             const isSelected = selectedManagerId === stat.manager.id;
 
             const scoreColorClass =
-              stat.totalEvaluated === 0 && stat.totalRated === 0
+              stat.hasActiveUrgentPenalty
+                ? 'kpi-card--red'
+                : stat.totalEvaluated === 0 && stat.totalRated === 0
                 ? 'kpi-card--neutral'
                 : stat.overallKpi >= 85
                 ? 'kpi-card--green'
@@ -184,6 +186,14 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                       <div className="mgr-name-line">
                         <span className="mgr-name">{stat.manager.name}</span>
                         {isMe && <span className="mgr-you-tag">You</span>}
+                        {stat.hasActiveUrgentPenalty && (
+                          <span
+                            className="mgr-urgent-penalty-pill"
+                            title="Active urgent query pending: 50% KPI penalty applied until completed"
+                          >
+                            🚨 -50% Urgent
+                          </span>
+                        )}
                       </div>
                       <span className="mgr-role-text">Manager</span>
                     </div>
@@ -200,9 +210,17 @@ export const KPIPage: React.FC<KPIPageProps> = ({
                   <div className="mgr-score-primary">
                     <div className="mgr-score-topline">
                       <span className="score-number">{stat.overallKpi}%</span>
-                      <span className="mgr-score-tag">Overall KPI</span>
+                      {stat.hasActiveUrgentPenalty ? (
+                        <span className="mgr-score-tag mgr-score-tag--penalty" title="Overall KPI reduced by 50% due to active urgent query">
+                          🚨 50% Penalty
+                        </span>
+                      ) : (
+                        <span className="mgr-score-tag">Overall KPI</span>
+                      )}
                     </div>
-                    <span className="score-caption">Overall KPI Score</span>
+                    <span className="score-caption">
+                      {stat.hasActiveUrgentPenalty ? 'Reduced by 50% (Urgent)' : 'Overall KPI Score'}
+                    </span>
                   </div>
 
                   <div className="mgr-completion-secondary">

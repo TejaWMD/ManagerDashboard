@@ -7,6 +7,8 @@ import {
   getQueryTimestampMs,
   isQueryDelayed,
   isQueryDone,
+  getFirstManagerRemarkTimestampMs,
+  URGENT_MANAGER_REMARK_WINDOW_MS,
   PageView,
   UserAccount,
   Appointment,
@@ -1093,21 +1095,42 @@ export const App: React.FC = () => {
 
     const isUrgentQuery =
       updates.isUrgent !== undefined ? Boolean(updates.isUrgent) : Boolean(existing.isUrgent);
-    const isExemptFromDelay =
-      isUrgentQuery ||
-      Boolean(existing.queryId && existing.queryId.trim().toUpperCase() === 'QRY-009');
 
-    // Urgent queries, exempted QRY-009, or active approved extensions have no delay threshold and are never classified as delayed
-    const nextIsDelayed = isExemptFromDelay || isApprovedExtActive
-      ? false
-      : nextIsCompleted
-      ? Boolean(
-          wasAlreadyDelayed ||
-            (effectiveDeadlineMs > 0 &&
-              nextCompletedAtMs !== null &&
-              nextCompletedAtMs > effectiveDeadlineMs)
-        )
-      : Boolean(effectiveDeadlineMs > 0 && nowMs > effectiveDeadlineMs);
+    // Track first manager remark timestamp for urgent queries SLA evaluation
+    let nextFirstManagerRemarkAtMs = existing.firstManagerRemarkAtMs ?? null;
+    const isAddingManagerRemarkNow =
+      (updates.managerRemarkTitle !== undefined || updates.managerRemark !== undefined) &&
+      Boolean((updates.managerRemarkTitle || '').trim() || (updates.managerRemark || '').trim());
+    if (nextFirstManagerRemarkAtMs === null) {
+      if (isAddingManagerRemarkNow) {
+        nextFirstManagerRemarkAtMs = nowMs;
+      } else {
+        nextFirstManagerRemarkAtMs = getFirstManagerRemarkTimestampMs(existing);
+      }
+    }
+
+    let nextIsDelayed = false;
+    if (isUrgentQuery) {
+      const createdMs = getQueryTimestampMs(existing);
+      if (nextFirstManagerRemarkAtMs !== null) {
+        nextIsDelayed = nextFirstManagerRemarkAtMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
+      } else {
+        nextIsDelayed = nowMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
+      }
+    } else if (existing.queryId && existing.queryId.trim().toUpperCase() === 'QRY-009') {
+      nextIsDelayed = false;
+    } else if (isApprovedExtActive) {
+      nextIsDelayed = false;
+    } else if (nextIsCompleted) {
+      nextIsDelayed = Boolean(
+        wasAlreadyDelayed ||
+          (effectiveDeadlineMs > 0 &&
+            nextCompletedAtMs !== null &&
+            nextCompletedAtMs > effectiveDeadlineMs)
+      );
+    } else {
+      nextIsDelayed = Boolean(effectiveDeadlineMs > 0 && nowMs > effectiveDeadlineMs);
+    }
 
     if (nextIsCompleted && isUrgentQuery) {
       clearUrgentReminderLocally(queryId);
@@ -1217,6 +1240,7 @@ export const App: React.FC = () => {
       completedAt: nextCompletedAt,
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
+      firstManagerRemarkAtMs: nextFirstManagerRemarkAtMs,
       adminCompletedBy:
         updates.adminCompletedBy !== undefined
           ? updates.adminCompletedBy
@@ -1269,6 +1293,7 @@ export const App: React.FC = () => {
       completedAt: nextCompletedAt,
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
+      firstManagerRemarkAtMs: nextFirstManagerRemarkAtMs,
     });
 
     setSavingQueryId(null);

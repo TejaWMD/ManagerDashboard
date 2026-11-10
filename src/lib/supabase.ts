@@ -149,6 +149,7 @@ export interface QueryRow {
   auto_completed_at_ms?: number | null;
   completion_note?: string | null;
   cc_users?: string | null;
+  first_manager_remark_at_ms?: number | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -582,6 +583,10 @@ export function mapRowToQuery(row: QueryRow): Query {
       row.last_urgent_reminder_at_ms !== null && row.last_urgent_reminder_at_ms !== undefined
         ? Number(row.last_urgent_reminder_at_ms)
         : localMeta?.lastUrgentReminderAtMs ?? null,
+    firstManagerRemarkAtMs:
+      row.first_manager_remark_at_ms !== null && row.first_manager_remark_at_ms !== undefined
+        ? Number(row.first_manager_remark_at_ms)
+        : localMeta?.firstManagerRemarkAtMs ?? null,
     attachments: resolvedAttachments,
     managerAttachments: resolvedManagerAttachments,
     ccUsers: resolvedCcUsers,
@@ -752,6 +757,7 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('linked_appointment_id') ||
     message.includes('is_urgent') ||
     message.includes('last_urgent_reminder_at_ms') ||
+    message.includes('first_manager_remark_at_ms') ||
     message.includes('attachments') ||
     message.includes('manager_attachments') ||
     message.includes('remarks_log') ||
@@ -922,6 +928,7 @@ export async function updateQueryInDb(
     linkedAppointmentId?: string | null;
     isUrgent?: boolean;
     lastUrgentReminderAtMs?: number | null;
+    firstManagerRemarkAtMs?: number | null;
     attachments?: QueryAttachment[] | null;
     managerAttachments?: QueryAttachment[] | null;
     remarks?: QueryRemark[] | null;
@@ -1042,6 +1049,9 @@ export async function updateQueryInDb(
   }
   if (updates.lastUrgentReminderAtMs !== undefined) {
     extendedUpdates.last_urgent_reminder_at_ms = updates.lastUrgentReminderAtMs;
+  }
+  if (updates.firstManagerRemarkAtMs !== undefined) {
+    extendedUpdates.first_manager_remark_at_ms = updates.firstManagerRemarkAtMs;
   }
   if (updates.attachments !== undefined) {
     extendedUpdates.attachments =

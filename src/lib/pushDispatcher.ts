@@ -1,5 +1,5 @@
 // Notification Dispatcher & Role Matrix for WMD Query Portal
-import { Query, UserAccount, Appointment } from '../types';
+import { Query, UserAccount, Appointment, isUrgentManagerRemarkOverdue } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 import { supabase } from './supabase';
 import { showWebNotification } from './notifications';
@@ -75,14 +75,13 @@ export function computeTargetRecipients(
       break;
 
     case 'URGENT_REMINDER':
-      // Notify the receiver responsible for completing the query + Admin
-      if (!query.managerDone) {
-        rawRecipients.push(query.managerId, ...adminIds);
-      } else if (!query.accountManagerDone) {
-        rawRecipients.push(query.accountManagerId, ...adminIds);
-      } else {
-        rawRecipients.push(query.managerId, query.accountManagerId, ...adminIds);
-      }
+      // Option B: Notify sender, receiver, CCs, and all admins every 10 minutes non-stop until finalized
+      rawRecipients.push(
+        query.managerId,
+        query.accountManagerId,
+        ...ccIds,
+        ...adminIds
+      );
       break;
 
     case 'TEST':
@@ -180,12 +179,17 @@ export function formatNotificationContent(
       };
 
     case 'URGENT_REMINDER': {
-      const recipientTarget = !query.managerDone
-        ? `Manager ${query.managerName}`
-        : `Sender ${query.accountManagerName}`;
+      const isRemarkMissing = isUrgentManagerRemarkOverdue(query);
+      const statusLabel = !query.managerDone
+        ? isRemarkMissing
+          ? `⚠️ Overdue: Manager ${query.managerName} has NOT provided any remark within 1 hour!`
+          : `Awaiting Manager ${query.managerName} resolution`
+        : `Manager marked done, awaiting Sender ${query.accountManagerName} verification`;
       return {
-        title: `🚨 24h Reminder: Urgent Query ${query.queryId}`,
-        body: `Immediate response required: ${query.queryId} ("${(query.queryTitle || query.queryText).slice(0, 70)}") is still pending completion. Awaiting response from ${recipientTarget}.`,
+        title: isRemarkMissing
+          ? `🚨 URGENT Warning (No Remark >1h): ${query.queryId}`
+          : `🚨 Urgent Query Alert (10m): ${query.queryId}`,
+        body: `Immediate action required: ${query.queryId} ("${(query.queryTitle || query.queryText).slice(0, 70)}") is pending completion (${statusLabel}).`,
       };
     }
 
@@ -247,7 +251,20 @@ export async function dispatchQueryPushNotification(
     }
 
     // 2. Fallback in-app display if current user tab is open and is a recipient
-    if (recipientUserIds.includes(actor.id)) {
+    let activeUserId = actor.id;
+    if (activeUserId === 'system') {
+      try {
+        const saved = sessionStorage.getItem('wm_portal_active_user_v1');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.id) activeUserId = parsed.id;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (recipientUserIds.includes(activeUserId)) {
       showWebNotification(title, body, payload.tag);
     }
 

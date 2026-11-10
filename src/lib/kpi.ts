@@ -6,6 +6,11 @@ import {
   getQueryDeadlineMs,
   getQueryTimestampMs,
   isQueryExemptFromDelay,
+  isQueryDone,
+  isQueryDelayed,
+  getFirstManagerRemarkTimestampMs,
+  URGENT_MANAGER_REMARK_WINDOW_MS,
+  isUrgentManagerRemarkOverdue,
   ManagerKpiStats,
   UserAccount,
 } from '../types';
@@ -48,11 +53,23 @@ export function evaluateQueryKpi(
     const managerDoneMs = query.managerDoneAtMs || completionMs;
     const turnaroundMs = Math.max(0, managerDoneMs - createdMs);
     const turnaroundHours = Math.round((turnaroundMs / (1000 * 60 * 60)) * 10) / 10;
-    // Urgent queries (and exempted QRY-009) have no delay threshold; once completed they count normally as On-Time (+1.0 pt)
-    const isExempt = isQueryExemptFromDelay(query);
-    const isOnTime = isExempt
-      ? true
-      : completionMs <= deadlineMs && !query.isDelayed;
+    // Urgent queries SLA rule:
+    // Situation 1: Manager put remark within 1 hour -> Completed On-Time (+1.0 pt)
+    // Situation 2: Manager never put remark within 1 hour -> Considered Delayed (status: 'LATE', +0.5 pt)
+    let isOnTime = false;
+    if (query.isUrgent) {
+      const firstMgrRemarkMs = getFirstManagerRemarkTimestampMs(query);
+      const putRemarkWithinOneHour =
+        firstMgrRemarkMs !== null &&
+        createdMs > 0 &&
+        firstMgrRemarkMs <= createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
+      isOnTime = putRemarkWithinOneHour && !query.isDelayed;
+    } else {
+      const isExempt = isQueryExemptFromDelay(query);
+      isOnTime = isExempt
+        ? true
+        : completionMs <= deadlineMs && !query.isDelayed;
+    }
 
     // Sender verification latency: completedAtMs - managerDoneAtMs
     let senderVerificationHours: number | null = null;
@@ -75,15 +92,19 @@ export function evaluateQueryKpi(
     };
   }
 
-  // Sender has NOT completed yet. Urgent queries (and exempted QRY-009) have no delay threshold and are never classified as delayed/overdue.
-  // Queries with an active approved extension are NOT overdue while within extended deadline.
+  // Sender has NOT completed yet.
+  // For urgent queries: if manager never put remark within 1 hour, it is already overdue!
+  const isUrgentOverdue = query.isUrgent && isUrgentManagerRemarkOverdue(query, nowMs);
+
   const isApprovedExtensionActive =
     query.extensionStatus === 'APPROVED' && deadlineMs > 0 && nowMs <= deadlineMs;
 
   const isPastDeadline =
-    !isQueryExemptFromDelay(query) &&
-    !isApprovedExtensionActive &&
-    (nowMs > deadlineMs || query.isDelayed === true);
+    isUrgentOverdue ||
+    (!query.isUrgent &&
+      !isQueryExemptFromDelay(query) &&
+      !isApprovedExtensionActive &&
+      (nowMs > deadlineMs || query.isDelayed === true));
 
   if (isPastDeadline) {
     return {
@@ -130,7 +151,12 @@ export function filterQueriesByWindow(
     // Anti-cheat: If sender has NOT finalized and it is overdue, keep it in the window!
     const isUnresolvedOverdue =
       !c.accountManagerDone && nowMs - createdMs > DELAY_THRESHOLD_MS;
-    return isUnresolvedOverdue;
+    if (isUnresolvedOverdue) return true;
+
+    // Anti-cheat: Active urgent queries must ALWAYS stay in window until completed!
+    if (c.isUrgent && !isQueryDone(c)) return true;
+
+    return false;
   });
 }
 
@@ -199,11 +225,11 @@ export function calculateManagerKpi(
 
   // Weighted Turnaround KPI Score Formula: (Earned Points ÷ Total Evaluated Queries) × 100
   // If no queries have been evaluated yet (0 completed & 0 overdue), KPI is 0%
-  const kpiScore =
+  let kpiScore =
     totalEvaluated > 0
       ? Math.round((earnedPoints / totalEvaluated) * 100)
       : 0;
-  const turnaroundKpi = kpiScore;
+  let turnaroundKpi = kpiScore;
 
   // Ratings calculation (sender ratings 1-5 stars)
   const ratings: number[] = [];
@@ -224,6 +250,17 @@ export function calculateManagerKpi(
   if (avgRating !== null) {
     const ratingPercentage = (avgRating / 5.0) * 100;
     overallKpi = Math.round((turnaroundKpi + ratingPercentage) / 2);
+  }
+
+  // Active urgent queries assigned to this manager (uncompleted)
+  const activeUrgentQueries = assigned.filter((q) => q.isUrgent && !isQueryDone(q));
+  const hasActiveUrgentPenalty = activeUrgentQueries.length > 0;
+
+  // Option A (Strict): The 50% KPI drop takes effect immediately when the urgent query is created and stays until it is completed.
+  if (hasActiveUrgentPenalty) {
+    turnaroundKpi = Math.round(turnaroundKpi * 0.5);
+    overallKpi = Math.round(overallKpi * 0.5);
+    kpiScore = turnaroundKpi;
   }
 
   const avgManagerTurnaroundHours =
@@ -260,6 +297,8 @@ export function calculateManagerKpi(
     avgManagerTurnaroundHours,
     avgSenderVerificationHours,
     evaluatedQueries: evaluatedList,
+    hasActiveUrgentPenalty,
+    activeUrgentCount: activeUrgentQueries.length,
   };
 }
 

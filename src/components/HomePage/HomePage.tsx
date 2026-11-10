@@ -7,6 +7,8 @@ import {
   isQueryDelayed,
   isQueryDone,
   isQueryPending,
+  hasManagerRemark,
+  isUrgentManagerRemarkOverdue,
   PageView,
   sortQueriesByStatusAndTimestamp,
   UserAccount,
@@ -728,12 +730,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                           Completed
                         </span>
                         {activeViewingQuery.isUrgent && (
-                          <span className="table-status-pill table-status-pill--urgent-tag">
+                          <span
+                            className="table-status-pill table-status-pill--urgent-tag"
+                            title={isQueryDelayed(activeViewingQuery, nowMs) ? 'Urgent query completed late (No remark within 1 hour)' : 'Urgent query completed on-time'}
+                          >
                             Urgent
                           </span>
                         )}
                         {isQueryDelayed(activeViewingQuery, nowMs) && (
-                          <span className="table-status-pill table-status-pill--delayed">
+                          <span
+                            className="table-status-pill table-status-pill--delayed"
+                            title={activeViewingQuery.isUrgent ? 'Urgent query: Receiving manager did not put a remark within 1 hour - counted as Delayed' : undefined}
+                          >
                             Delayed
                           </span>
                         )}
@@ -744,9 +752,20 @@ export const HomePage: React.FC<HomePageProps> = ({
                           🚨 Urgent - Mgr Checked
                         </span>
                       ) : (
-                        <span className="table-status-pill table-status-pill--urgent">
-                          🚨 URGENT (Due Now)
-                        </span>
+                        <>
+                          <span className="table-status-pill table-status-pill--urgent">
+                            🚨 URGENT (Due Now)
+                          </span>
+                          {isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs) ? (
+                            <span className="table-status-pill table-status-pill--remark-overdue" title="Receiving manager has not provided a remark within 1 hour!">
+                              ⚠️ Remark Overdue (&gt;1h)
+                            </span>
+                          ) : !hasManagerRemark(activeViewingQuery) ? (
+                            <span className="table-status-pill table-status-pill--remark-due" title="Receiving manager must put in a remark within 1 hour">
+                              ⏱️ Remark Due (&lt;1h)
+                            </span>
+                          ) : null}
+                        </>
                       )
                     ) : activeViewingQuery.managerDone &&
                       !activeViewingQuery.accountManagerDone ? (
