@@ -24,7 +24,6 @@ import {
   openAttachment,
 } from '../../lib/attachments';
 import {
-  calculateManagerKpi,
   filterQueriesByWindow,
   KpiTimeWindow,
 } from '../../lib/kpi';
@@ -136,17 +135,6 @@ export const HomePage: React.FC<HomePageProps> = ({
   const scopedReportQueriesCount = useMemo(() => {
     return filterQueriesByWindow(queries, reportTimeWindow, nowMs).length;
   }, [queries, reportTimeWindow, nowMs]);
-
-  // Rolling 7-day weighted KPI (Director Policy - Manager role)
-  const manager7dKpi = useMemo(() => {
-    if (currentUser.role === 'manager') {
-      return calculateManagerKpi(queries, currentUser, {
-        window: '7d',
-        nowMs,
-      });
-    }
-    return null;
-  }, [queries, currentUser, nowMs]);
 
   const handleDownloadPdfReport = (selectedWindow: KpiTimeWindow = reportTimeWindow) => {
     try {
@@ -531,34 +519,6 @@ export const HomePage: React.FC<HomePageProps> = ({
             />
           </div>
         </div>
-
-        {/* Card 5: Manager 7-Day Rolling Average KPI (Director Policy) */}
-        {currentUser.role === 'manager' && manager7dKpi && 'kpiScore' in manager7dKpi && (
-          <div
-            className="kpi-card kpi-card--weighted-score"
-            onClick={() => onNavigate && onNavigate('kpi')}
-            title="Click to view detailed Manager KPI Leaderboard & peer stats"
-          >
-            <div className="kpi-card-top">
-              <div className="kpi-icon-box kpi-icon-box--weighted">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
-              </div>
-              <span className="kpi-badge kpi-badge--weighted">Rolling 7d</span>
-            </div>
-            <div className="kpi-card-mid">
-              <div className="kpi-value">{manager7dKpi.kpiScore}%</div>
-              <span className="kpi-label">Average KPI</span>
-            </div>
-            <div className="kpi-weighted-footer">
-              <span className="kpi-pts-text">
-                {manager7dKpi.earnedPoints} / {manager7dKpi.totalEvaluated} pts
-              </span>
-              <span className="kpi-detail-link">KPI Page &rarr;</span>
-            </div>
-          </div>
-        )}
       </section>
 
       {/* BOTTOM SECTION: Balanced 2x2 Dashboard Analytics Grid */}

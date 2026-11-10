@@ -3076,25 +3076,6 @@
   line-height: 1.4;
 }
 
-.btn-admin-force-complete {
-  padding: 0.55rem 1rem;
-  background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-pill);
-  font-size: 0.82rem;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
-  transition: all 0.18s ease;
-  white-space: nowrap;
-}
-
-.btn-admin-force-complete:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.45);
-}
-
 /* Completion Note Card */
 .query-view-completion-note-card {
   display: flex;
@@ -3292,25 +3273,6 @@
   flex-direction: column;
   align-items: center;
   gap: 0.3rem;
-}
-
-.btn-table-admin-complete {
-  padding: 0.16rem 0.45rem;
-  font-size: 0.65rem;
-  font-weight: 800;
-  background: #4f46e5;
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.3);
-  transition: all 0.15s ease;
-}
-
-.btn-table-admin-complete:hover {
-  background: #4338ca;
-  transform: scale(1.05);
 }
 
 /* Status Pills */

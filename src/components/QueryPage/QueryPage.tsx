@@ -626,59 +626,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     }
   };
 
-  // Admin Force Completion Handler
-  const handleAdminForceComplete = async (targetQuery: Query) => {
-    if (currentUser.role !== 'admin') return;
-    const confirmPrompt = `Admin Force Complete:\nAre you sure you want to mark Query ${targetQuery.queryId} as completed immediately?\n\nThis will stamp that it was completed by Admin due to sender inactivity, stopping delay calculations and protecting the manager's on-time KPI score.`;
-    if (!window.confirm(confirmPrompt)) return;
-
-    const now = new Date();
-    const stamp = `Completed by Admin ${currentUser.name} on ${formatDateTime(now, false)} (Sender Inactive)`;
-    const adminRmk: QueryRemark = {
-      id: `rmk-admin-${Date.now()}`,
-      authorId: currentUser.id,
-      authorName: currentUser.name,
-      authorRole: 'admin',
-      type: 'sender',
-      title: 'Force Completed by Admin',
-      text: stamp,
-      createdAt: formatDateTime(now, false),
-      createdAtMs: now.getTime(),
-    };
-
-    const nextRemarks = [...(targetQuery.remarks || []), adminRmk];
-    await onUpdateQuery(targetQuery.queryId, {
-      accountManagerDone: true,
-      completedAt: formatTimestampUtil(now),
-      completedAtMs: now.getTime(),
-      adminCompletedBy: currentUser.name,
-      adminCompletedAt: formatDateTime(now, false),
-      adminCompletedAtMs: now.getTime(),
-      completionNote: stamp,
-      remarks: nextRemarks,
-      isDelayed: false,
-    });
-
-    if (viewingQuery && viewingQuery.queryId === targetQuery.queryId) {
-      setViewingQuery((prev) =>
-        prev
-          ? {
-              ...prev,
-              accountManagerDone: true,
-              completedAt: formatTimestampUtil(now),
-              completedAtMs: now.getTime(),
-              adminCompletedBy: currentUser.name,
-              adminCompletedAt: formatDateTime(now, false),
-              adminCompletedAtMs: now.getTime(),
-              completionNote: stamp,
-              remarks: nextRemarks,
-              isDelayed: false,
-            }
-          : null
-      );
-    }
-  };
-
   // If redirected from an appointment follow-up action, prefill the create query modal
   useEffect(() => {
     if (initialFollowupAppointment) {
@@ -1949,19 +1896,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           />
                           <span>Done</span>
                         </label>
-                        {isAdmin && item.managerDone && !item.accountManagerDone && (
-                          <button
-                            type="button"
-                            className="btn-table-admin-complete"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAdminForceComplete(item);
-                            }}
-                            title="Admin: Force complete this query on behalf of inactive sender"
-                          >
-                            ⚡ Admin Complete
-                          </button>
-                        )}
                       </div>
                     </td>
 
@@ -2846,7 +2780,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 );
               })()}
 
-              {/* Awaiting Sender Verification Banner (Manual Admin Force-Complete Available) */}
+              {/* Awaiting Sender Verification Banner */}
               {activeViewingQuery.managerDone && !activeViewingQuery.accountManagerDone && activeViewingQuery.managerDoneAtMs && (
                 <div className="query-view-grace-banner">
                   <div className="grace-banner-left">
@@ -2865,20 +2799,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             </span>
                           </>
                         ) : null}
-                        {' '}Only an Admin can manually Force Complete this query if the Sender takes too long or is inactive.
                       </div>
                     </div>
                   </div>
-                  {currentUser.role === 'admin' && (
-                    <button
-                      type="button"
-                      className="btn-admin-force-complete"
-                      onClick={() => handleAdminForceComplete(activeViewingQuery)}
-                      title="Force complete this query manually (Admin only)"
-                    >
-                      ⚡ Force Complete (Admin)
-                    </button>
-                  )}
                 </div>
               )}
 
@@ -4134,18 +4057,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     </>
                   );
                 })()}
-                {currentUser.role === 'admin' &&
-                  activeViewingQuery.managerDone &&
-                  !activeViewingQuery.accountManagerDone && (
-                    <button
-                      type="button"
-                      className="btn-admin-force-complete"
-                      onClick={() => handleAdminForceComplete(activeViewingQuery)}
-                      title="Force complete this query on behalf of inactive sender"
-                    >
-                      ⚡ Force Complete (Admin)
-                    </button>
-                  )}
                 <button
                   type="button"
                   className="btn-primary"

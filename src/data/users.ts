@@ -118,7 +118,7 @@ export const AUTHORIZED_USERS: UserAccount[] = [
   // Admins
   {
     id: 'adm-1',
-    name: 'Mr. Mani',
+    name: 'Mr Mani',
     email: 'admin1@gmail.com',
     password: '981834',
     role: 'admin',
@@ -168,13 +168,18 @@ export const CUSTOM_USERS_STORAGE_KEY = 'wm_portal_custom_users_v1';
 export function getStoredCustomUsers(): UserAccount[] {
   try {
     const raw = localStorage.getItem(CUSTOM_USERS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed: UserAccount[] = raw ? JSON.parse(raw) : [];
+    // Strictly only 2 Admins allowed in system (Mr Mani & Teja) - disallow custom admin accounts
+    return parsed.filter((u) => u.role !== 'admin');
   } catch {
     return [];
   }
 }
 
 export function saveStoredCustomUser(user: UserAccount): void {
+  // Never allow custom accounts with admin role
+  if (user.role === 'admin') return;
+
   try {
     const existing = getStoredCustomUsers();
     const filtered = existing.filter((u) => u.email.toLowerCase() !== user.email.toLowerCase());
@@ -218,6 +223,14 @@ export function authenticateUser(
     };
   }
 
+  // Strictly enforce that only the 2 authorized admins (Mr Mani & Teja) can sign in as Admin
+  if (selectedRole === 'admin') {
+    return {
+      success: false,
+      error: 'Access denied: Only authorized administrators (Mr Mani & Teja) may sign in.',
+    };
+  }
+
   // 2. Check previously saved custom users
   const customUsers = getStoredCustomUsers();
   const matchedCustom = customUsers.find(
@@ -243,7 +256,7 @@ export function authenticateUser(
     };
   }
 
-  // 3. Allow signing in with a new / different email on the fly
+  // 3. Allow signing in with a new / different email on the fly (Account Managers and Managers only)
   const roleMeta = ROLE_META[selectedRole];
   const nameFromEmail = normalizedEmail.split('@')[0];
   const capitalizedName =
