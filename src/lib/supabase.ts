@@ -360,7 +360,12 @@ export function mapRowToQuery(row: QueryRow): Query {
 
   const isUrgent = Boolean(row.is_urgent);
   const isExemptFromDelay =
-    isUrgent || Boolean(row.query_id && row.query_id.trim().toUpperCase() === 'QRY-009');
+    isUrgent ||
+    Boolean(
+      row.query_id &&
+        (row.query_id.trim().toUpperCase() === 'QRY-009' ||
+          row.query_id.trim().toUpperCase() === 'QRY-005')
+    );
 
   const computedDelayed = isExemptFromDelay
     ? false
@@ -1230,6 +1235,8 @@ export async function updateQueryInDb(
         }
       : extendedUpdates;
 
+  const normalizedQueryId = (queryId || '').trim().toUpperCase();
+
   // Persist locally as well so delayed-on-completion, manager-done, and extension tracking work even before SQL migration is run
   if (
     updates.completedAt !== undefined ||
@@ -1262,7 +1269,7 @@ export async function updateQueryInDb(
     updates.adminSenderRating !== undefined ||
     updates.adminSenderRemark !== undefined
   ) {
-    saveLocalCompletionMeta(queryId, {
+    saveLocalCompletionMeta(normalizedQueryId, {
       ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
       ...(updates.completedAtMs !== undefined ? { completedAtMs: updates.completedAtMs } : {}),
       ...(updates.managerDoneAt !== undefined ? { managerDoneAt: updates.managerDoneAt } : {}),
@@ -1320,18 +1327,18 @@ export async function updateQueryInDb(
   let { data, error } = await supabase
     .from('queries')
     .update(updatesWithTitles)
-    .eq('query_id', queryId)
+    .eq('query_id', normalizedQueryId)
     .select('*')
-    .single();
+    .maybeSingle();
 
   if (error && isMissingTitleColumnError(error.message)) {
     titleColumnsSupported = false;
     const retryWithoutTitles = await supabase
       .from('queries')
       .update(extendedUpdates)
-      .eq('query_id', queryId)
+      .eq('query_id', normalizedQueryId)
       .select('*')
-      .single();
+      .maybeSingle();
     data = retryWithoutTitles.data;
     error = retryWithoutTitles.error;
   }
@@ -1342,14 +1349,14 @@ export async function updateQueryInDb(
         ? await supabase
             .from('queries')
             .update(baseUpdates)
-            .eq('query_id', queryId)
+            .eq('query_id', normalizedQueryId)
             .select('*')
-            .single()
+            .maybeSingle()
         : await supabase
             .from('queries')
             .select('*')
-            .eq('query_id', queryId)
-            .single();
+            .eq('query_id', normalizedQueryId)
+            .maybeSingle();
     data = retryBase.data;
     error = retryBase.error;
   }
@@ -1358,8 +1365,18 @@ export async function updateQueryInDb(
     return { data: null, error: error.message };
   }
 
+  if (!data) {
+    // If update returned no row (e.g. RLS or temporary mismatch), try fetching the row directly
+    const fetchRes = await supabase
+      .from('queries')
+      .select('*')
+      .eq('query_id', normalizedQueryId)
+      .maybeSingle();
+    data = fetchRes.data;
+  }
+
   return {
-    data: mapRowToQuery(data as QueryRow),
+    data: data ? mapRowToQuery(data as QueryRow) : null,
     error: null,
   };
 }

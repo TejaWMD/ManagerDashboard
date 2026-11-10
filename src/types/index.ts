@@ -494,8 +494,11 @@ export function getFirstManagerRemarkTimestampMs(query: Query): number | null {
 export function isQueryExemptFromDelay(
   query: Pick<Query, 'queryId' | 'isUrgent'>
 ): boolean {
-  if (query.queryId && query.queryId.trim().toUpperCase() === 'QRY-009') {
-    return true;
+  if (query.queryId) {
+    const id = query.queryId.trim().toUpperCase();
+    if (id === 'QRY-009' || id === 'QRY-005') {
+      return true;
+    }
   }
   return false;
 }

@@ -227,8 +227,8 @@ BEGIN
       NEW.completed_at_ms := now_ms;
     END IF;
 
-    -- Urgent queries and exempted queries (QRY-009) are never marked delayed
-    IF NEW.is_urgent = TRUE OR UPPER(NEW.query_id) = 'QRY-009' THEN
+    -- Urgent queries and exempted queries (QRY-009, QRY-005) are never marked delayed
+    IF NEW.is_urgent = TRUE OR UPPER(NEW.query_id) IN ('QRY-009', 'QRY-005') THEN
       NEW.is_delayed := FALSE;
     ELSIF (NEW.completed_at_ms > effective_deadline_ms)
        OR (TG_OP = 'UPDATE' AND OLD.is_delayed = TRUE)
@@ -242,8 +242,8 @@ BEGIN
     NEW.completed_at := NULL;
     NEW.completed_at_ms := NULL;
 
-    -- Open queries: urgent, exempted (QRY-009), or active approved extensions within deadline are NOT delayed
-    IF NEW.is_urgent = TRUE OR UPPER(NEW.query_id) = 'QRY-009' THEN
+    -- Open queries: urgent, exempted (QRY-009, QRY-005), or active approved extensions within deadline are NOT delayed
+    IF NEW.is_urgent = TRUE OR UPPER(NEW.query_id) IN ('QRY-009', 'QRY-005') THEN
       NEW.is_delayed := FALSE;
     ELSIF NEW.extension_status = 'APPROVED' AND effective_deadline_ms > 0 AND now_ms <= effective_deadline_ms THEN
       NEW.is_delayed := FALSE;

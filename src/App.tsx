@@ -404,10 +404,12 @@ export const App: React.FC = () => {
           if (payload.eventType === 'INSERT' && payload.new) {
             const incoming = mapRowToQuery(payload.new as QueryRow);
             setQueries((prev) => {
-              const exists = prev.some((c) => c.queryId === incoming.queryId);
+              const exists = prev.some(
+                (c) => c.queryId.toUpperCase() === incoming.queryId.toUpperCase()
+              );
               const next = exists
                 ? prev.map((c) =>
-                    c.queryId === incoming.queryId ? incoming : c
+                    c.queryId.toUpperCase() === incoming.queryId.toUpperCase() ? incoming : c
                   )
                 : [incoming, ...prev];
               persistQueriesCache(next);
@@ -451,7 +453,7 @@ export const App: React.FC = () => {
 
             setQueries((prev) => {
               const next = prev.map((c) =>
-                c.queryId === updated.queryId ? updated : c
+                c.queryId.toUpperCase() === updated.queryId.toUpperCase() ? updated : c
               );
               persistQueriesCache(next);
               return next;
@@ -776,6 +778,21 @@ export const App: React.FC = () => {
             },
           };
         });
+      } else if (data?.type === 'QUERY_UPDATED' && data.query) {
+        setQueries((prev) => {
+          const exists = prev.some(
+            (c) => c.queryId.toUpperCase() === data.query.queryId.toUpperCase()
+          );
+          const next = exists
+            ? prev.map((c) =>
+                c.queryId.toUpperCase() === data.query.queryId.toUpperCase()
+                  ? data.query
+                  : c
+              )
+            : [data.query, ...prev];
+          persistQueriesCache(next);
+          return next;
+        });
       }
     };
 
@@ -793,7 +810,32 @@ export const App: React.FC = () => {
     };
     window.addEventListener('storage', handleStorageChange);
 
+    // Automatic background polling interval (every 15s) to guarantee portal state
+    // stays in sync even if WebSocket is throttled, asleep, or dropped on mobile/laptop
+    const backgroundSyncTimer = setInterval(() => {
+      loadQueries();
+      loadAppointments();
+      loadPresences();
+    }, 15000);
+
+    // Window focus & tab visibility sync: instantly refresh whenever user returns to the portal
+    const handleFocusSync = () => {
+      loadQueries();
+      loadAppointments();
+      loadPresences();
+    };
+    window.addEventListener('focus', handleFocusSync);
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocusSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+
     return () => {
+      clearInterval(backgroundSyncTimer);
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
       supabase.removeChannel(queryChannel);
       supabase.removeChannel(aptChannel);
       supabase.removeChannel(activityChannel);
@@ -1130,7 +1172,11 @@ export const App: React.FC = () => {
       } else {
         nextIsDelayed = nowMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
       }
-    } else if (existing.queryId && existing.queryId.trim().toUpperCase() === 'QRY-009') {
+    } else if (
+      existing.queryId &&
+      (existing.queryId.trim().toUpperCase() === 'QRY-009' ||
+        existing.queryId.trim().toUpperCase() === 'QRY-005')
+    ) {
       nextIsDelayed = false;
     } else if (isApprovedExtActive) {
       nextIsDelayed = false;
@@ -1285,19 +1331,25 @@ export const App: React.FC = () => {
 
     setQueries((prev) => {
       const next = prev.map((item) =>
-        item.queryId === queryId ? optimisticItem : item
+        item.queryId.toUpperCase() === queryId.toUpperCase() ? optimisticItem : item
       );
       persistQueriesCache(next);
       return next;
     });
 
-    const { data, error } = await updateQueryInDb(queryId, {
+    // Broadcast optimistic query update across browser tabs in 0ms
+    const bus = getCrossTabBus();
+    if (bus) {
+      try {
+        bus.postMessage({
+          type: 'QUERY_UPDATED',
+          query: optimisticItem,
+        });
+      } catch {}
+    }
+
+    const dbPayload: Parameters<typeof updateQueryInDb>[1] = {
       ...updates,
-      remarks: nextRemarks,
-      managerRemarkTitle: nextManagerRemarkTitle,
-      managerRemark: nextManagerRemark,
-      accountManagerRemarkTitle: nextAccountManagerRemarkTitle,
-      accountManagerRemark: nextAccountManagerRemark,
       managerDone: nextManagerDone,
       managerDoneAt: nextManagerDoneAt,
       managerDoneAtMs: nextManagerDoneAtMs,
@@ -1307,7 +1359,23 @@ export const App: React.FC = () => {
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
       firstManagerRemarkAtMs: nextFirstManagerRemarkAtMs,
-    });
+    };
+
+    if (
+      updates.remarks !== undefined ||
+      updates.managerRemark !== undefined ||
+      updates.managerRemarkTitle !== undefined ||
+      updates.accountManagerRemark !== undefined ||
+      updates.accountManagerRemarkTitle !== undefined
+    ) {
+      dbPayload.remarks = nextRemarks;
+      dbPayload.managerRemark = nextManagerRemark;
+      dbPayload.managerRemarkTitle = nextManagerRemarkTitle;
+      dbPayload.accountManagerRemark = nextAccountManagerRemark;
+      dbPayload.accountManagerRemarkTitle = nextAccountManagerRemarkTitle;
+    }
+
+    const { data, error } = await updateQueryInDb(queryId, dbPayload);
 
     setSavingQueryId(null);
 
@@ -1316,7 +1384,7 @@ export const App: React.FC = () => {
       // Roll back optimistic update on error
       setQueries((prev) => {
         const rolledBack = prev.map((item) =>
-          item.queryId === queryId ? existing : item
+          item.queryId.toUpperCase() === queryId.toUpperCase() ? existing : item
         );
         persistQueriesCache(rolledBack);
         return rolledBack;
@@ -1325,11 +1393,20 @@ export const App: React.FC = () => {
       setDbError(null);
       setQueries((prev) => {
         const next = prev.map((item) =>
-          item.queryId === queryId ? data : item
+          item.queryId.toUpperCase() === queryId.toUpperCase() ? data : item
         );
         persistQueriesCache(next);
         return next;
       });
+
+      if (bus) {
+        try {
+          bus.postMessage({
+            type: 'QUERY_UPDATED',
+            query: data,
+          });
+        } catch {}
+      }
 
       // Synchronize appointment's queryId if linkedAppointmentId changed
       if (updates.linkedAppointmentId !== undefined) {

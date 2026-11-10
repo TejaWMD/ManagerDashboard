@@ -35,6 +35,7 @@ import {
   formatDate,
   formatDateTime,
   formatTimestamp as formatTimestampUtil,
+  parseDateToMs,
 } from '../../lib/dateUtils';
 import { dispatchQueryPushNotification } from '../../lib/pushDispatcher';
 import { AUTHORIZED_USERS } from '../../data/users';
@@ -801,18 +802,44 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   };
 
   const handleApproveExtension = async (query: Query) => {
-    if (!query.extensionProposedDueAtMs || !query.extensionProposedDueAt) return;
+    const proposedDueAt = query.extensionProposedDueAt;
+    const proposedDueAtMs =
+      query.extensionProposedDueAtMs && query.extensionProposedDueAtMs > 0
+        ? query.extensionProposedDueAtMs
+        : proposedDueAt
+        ? parseDateToMs(proposedDueAt)
+        : null;
+
+    if (!proposedDueAt || !proposedDueAtMs) {
+      alert('Cannot approve extension: No proposed extension date specified.');
+      return;
+    }
+
     setIsReviewingExtension(true);
     try {
       const nowTimestamp = formatTimestamp(new Date());
       await onUpdateQuery(query.queryId, {
         extensionStatus: 'APPROVED',
-        targetDueAt: query.extensionProposedDueAt,
-        targetDueAtMs: query.extensionProposedDueAtMs,
+        targetDueAt: proposedDueAt,
+        targetDueAtMs: proposedDueAtMs,
         extensionReviewedAt: nowTimestamp,
         isDelayed: false,
       });
       setExtensionReviewModalQuery(null);
+      if (viewingQuery && viewingQuery.queryId.toUpperCase() === query.queryId.toUpperCase()) {
+        setViewingQuery((prev) =>
+          prev
+            ? {
+                ...prev,
+                extensionStatus: 'APPROVED',
+                targetDueAt: proposedDueAt,
+                targetDueAtMs: proposedDueAtMs,
+                extensionReviewedAt: nowTimestamp,
+                isDelayed: false,
+              }
+            : null
+        );
+      }
     } finally {
       setIsReviewingExtension(false);
     }
@@ -822,13 +849,26 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     setIsReviewingExtension(true);
     try {
       const nowTimestamp = formatTimestamp(new Date());
+      const reviewNote = extensionReviewNoteInput.trim() || 'Declined by sender';
       await onUpdateQuery(query.queryId, {
         extensionStatus: 'DECLINED',
-        extensionReviewNote: extensionReviewNoteInput.trim() || 'Declined by sender',
+        extensionReviewNote: reviewNote,
         extensionReviewedAt: nowTimestamp,
       });
       setExtensionReviewModalQuery(null);
       setExtensionReviewNoteInput('');
+      if (viewingQuery && viewingQuery.queryId.toUpperCase() === query.queryId.toUpperCase()) {
+        setViewingQuery((prev) =>
+          prev
+            ? {
+                ...prev,
+                extensionStatus: 'DECLINED',
+                extensionReviewNote: reviewNote,
+                extensionReviewedAt: nowTimestamp,
+              }
+            : null
+        );
+      }
     } finally {
       setIsReviewingExtension(false);
     }
@@ -2129,7 +2169,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       </div>
 
                       {/* Quick contextual extension actions */}
-                      {item.extensionStatus === 'PENDING' && (isSender || isAdmin) ? (
+                      {item.extensionStatus === 'PENDING' && (isSender || isAdmin || currentUser.role === 'account_manager') ? (
                         <button
                           type="button"
                           className="table-action-pill-btn table-action-pill-btn--review"
@@ -3414,7 +3454,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     <p className="ext-banner-reason">
                       <strong>Reason:</strong> {activeViewingQuery.extensionReason || '—'}
                     </p>
-                    {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && (
+                    {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin' || currentUser.role === 'account_manager') && (
                       <div className="ext-banner-actions">
                         <button
                           type="button"
@@ -3822,7 +3862,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <span className="query-view-rating-value">
                           {activeViewingQuery.rating} / 5 Stars
                         </span>
-                        {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && (
+                        {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin' || currentUser.role === 'account_manager') && (
                           <div className="query-view-rating-actions">
                             <button
                               type="button"
