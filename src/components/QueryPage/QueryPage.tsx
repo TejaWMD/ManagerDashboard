@@ -1266,7 +1266,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
   const handleToggleManagerDone = async (item: Query) => {
     // Only assigned manager or admin can toggle Manager Done
-    const isAssigned = item.managerId === currentUser.id;
+    const isAssigned = belongsToManager(item, currentUser);
     if (!isAssigned && currentUser.role !== 'admin') return;
 
     const nextManagerDone = !item.managerDone;
@@ -1331,7 +1331,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
   const handleToggleSenderDone = async (item: Query) => {
     // Only the creator/sender or admin can toggle Sender Done
-    const isSender = item.accountManagerId === currentUser.id;
+    const isSender = belongsToAccountManager(item, currentUser);
     if (!isSender && currentUser.role !== 'admin') return;
 
     // Sender will only check the box once the query is completed by assigned manager
@@ -1562,8 +1562,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 const managerOnlyChecked = item.managerDone && !item.accountManagerDone;
                 const isRowSaving = savingQueryId === item.queryId;
 
-                const isSender = currentUser.id === item.accountManagerId;
-                const isAssignedManager = currentUser.id === item.managerId;
+                const isSender = belongsToAccountManager(item, currentUser);
+                const isAssignedManager = belongsToManager(item, currentUser);
                 const isAdmin = currentUser.role === 'admin';
 
                 const canEditQueryText = isSender;
@@ -3566,7 +3566,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 {/* Allow Assigned Manager or Admin to request extension if not currently pending and not yet done */}
                 {!isQueryDone(activeViewingQuery) &&
                   activeViewingQuery.extensionStatus !== 'PENDING' &&
-                  (currentUser.id === activeViewingQuery.managerId || currentUser.role === 'admin') && (
+                  (belongsToManager(activeViewingQuery, currentUser) || currentUser.role === 'admin') && (
                     <div className="ext-request-btn-row">
                       <button
                         type="button"
