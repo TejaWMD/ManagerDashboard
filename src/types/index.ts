@@ -1,6 +1,13 @@
 export type UserRole = 'account_manager' | 'manager' | 'admin';
 
-export type PageView = 'home' | 'queries' | 'kpi' | 'tracking' | 'my-trello' | 'admin-trello';
+export type PageView =
+  | 'home'
+  | 'queries'
+  | 'kpi'
+  | 'tracking'
+  | 'my-trello'
+  | 'admin-trello'
+  | 'ratings';
 
 export interface UserTrelloIntegration {
   userId: string;
@@ -194,7 +201,21 @@ export interface Query {
   accountManagerDone: boolean;
   status: QueryStatus;
   delayNotified?: boolean;
-  rating?: number | null; // Mandatory 1-5 star rating provided by sender upon completion
+  rating?: number | null; // Legacy / sender rating
+  // 10-Star Ratings System: Receiver Ratings (Admin 50% + System 30% + Sender 20%)
+  adminReceiverRating?: number | null; // Admin rating for Receiver (1-10 stars, default 10)
+  adminReceiverRemark?: string | null; // Mandatory remark if Admin rates Receiver
+  adminReceiverRatedAt?: string | null;
+  adminReceiverRatedAtMs?: number | null;
+  senderReceiverRating?: number | null; // Sender rating for Receiver (1-10 stars)
+  senderReceiverRemark?: string | null; // Mandatory remark from Sender
+  senderReceiverRatedAt?: string | null;
+  senderReceiverRatedAtMs?: number | null;
+  // 10-Star Ratings System: Sender Ratings (Admin 70% + System 30%)
+  adminSenderRating?: number | null; // Admin rating for Sender (1-10 stars, default 10)
+  adminSenderRemark?: string | null; // Mandatory remark if Admin rates Sender
+  adminSenderRatedAt?: string | null;
+  adminSenderRatedAtMs?: number | null;
   // Timestamped remarks log for Manager and Sender
   remarks?: QueryRemark[];
   // Admin Force Completion & Auto-completion tracking

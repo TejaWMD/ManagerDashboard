@@ -14,6 +14,7 @@ import {
   ManagerKpiStats,
   UserAccount,
 } from '../types';
+import { calculateReceiverOverallRating } from './ratingUtils';
 
 export type KpiTimeWindow = '7d' | '14d' | '30d' | 'all';
 
@@ -231,12 +232,11 @@ export function calculateManagerKpi(
       : 0;
   let turnaroundKpi = kpiScore;
 
-  // Ratings calculation (sender ratings 1-5 stars)
+  // Receiver Ratings calculation (Admin 50% + System 30% + Sender 20%, 10-star scale)
   const ratings: number[] = [];
   for (const c of windowQueries) {
-    if (typeof c.rating === 'number' && c.rating >= 1 && c.rating <= 5) {
-      ratings.push(c.rating);
-    }
+    const receiverBreakdown = calculateReceiverOverallRating(c, nowMs);
+    ratings.push(receiverBreakdown.overallRating);
   }
   const totalRated = ratings.length;
   const avgRating =
@@ -244,11 +244,11 @@ export function calculateManagerKpi(
       ? Math.round((ratings.reduce((acc, r) => acc + r, 0) / totalRated) * 10) / 10
       : null;
 
-  // Overall KPI: average of turnaround KPI and sender average rating converted to percentage (5.0 stars = 100%)
+  // Overall KPI: average of turnaround KPI and receiver average rating converted to percentage (10.0 stars = 100%)
   // If no ratings exist yet, overall KPI defaults to turnaround KPI
   let overallKpi = turnaroundKpi;
   if (avgRating !== null) {
-    const ratingPercentage = (avgRating / 5.0) * 100;
+    const ratingPercentage = (avgRating / 10.0) * 100;
     overallKpi = Math.round((turnaroundKpi + ratingPercentage) / 2);
   }
 

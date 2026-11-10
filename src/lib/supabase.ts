@@ -71,6 +71,18 @@ interface LocalCompletionMeta {
   autoCompletedAt?: string | null;
   autoCompletedAtMs?: number | null;
   completionNote?: string | null;
+  adminReceiverRating?: number | null;
+  adminReceiverRemark?: string | null;
+  adminReceiverRatedAt?: string | null;
+  adminReceiverRatedAtMs?: number | null;
+  senderReceiverRating?: number | null;
+  senderReceiverRemark?: string | null;
+  senderReceiverRatedAt?: string | null;
+  senderReceiverRatedAtMs?: number | null;
+  adminSenderRating?: number | null;
+  adminSenderRemark?: string | null;
+  adminSenderRatedAt?: string | null;
+  adminSenderRatedAtMs?: number | null;
 }
 
 function readLocalCompletionMetaMap(): Record<string, LocalCompletionMeta> {
@@ -150,6 +162,18 @@ export interface QueryRow {
   completion_note?: string | null;
   cc_users?: string | null;
   first_manager_remark_at_ms?: number | null;
+  admin_receiver_rating?: number | null;
+  admin_receiver_remark?: string | null;
+  admin_receiver_rated_at?: string | null;
+  admin_receiver_rated_at_ms?: number | null;
+  sender_receiver_rating?: number | null;
+  sender_receiver_remark?: string | null;
+  sender_receiver_rated_at?: string | null;
+  sender_receiver_rated_at_ms?: number | null;
+  admin_sender_rating?: number | null;
+  admin_sender_remark?: string | null;
+  admin_sender_rated_at?: string | null;
+  admin_sender_rated_at_ms?: number | null;
 }
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
@@ -555,6 +579,49 @@ export function mapRowToQuery(row: QueryRow): Query {
     status,
     delayNotified: Boolean(row.delay_notified),
     rating: typeof row.rating === 'number' ? row.rating : null,
+    adminReceiverRating:
+      typeof row.admin_receiver_rating === 'number'
+        ? row.admin_receiver_rating
+        : localMeta?.adminReceiverRating ?? null,
+    adminReceiverRemark:
+      row.admin_receiver_remark !== undefined
+        ? row.admin_receiver_remark || null
+        : localMeta?.adminReceiverRemark || null,
+    adminReceiverRatedAt:
+      row.admin_receiver_rated_at || localMeta?.adminReceiverRatedAt || null,
+    adminReceiverRatedAtMs:
+      row.admin_receiver_rated_at_ms !== null && row.admin_receiver_rated_at_ms !== undefined
+        ? Number(row.admin_receiver_rated_at_ms)
+        : localMeta?.adminReceiverRatedAtMs ?? null,
+    senderReceiverRating:
+      typeof row.sender_receiver_rating === 'number'
+        ? row.sender_receiver_rating
+        : localMeta?.senderReceiverRating ??
+          (typeof row.rating === 'number' ? (row.rating <= 5 ? row.rating * 2 : row.rating) : null),
+    senderReceiverRemark:
+      row.sender_receiver_remark !== undefined
+        ? row.sender_receiver_remark || null
+        : localMeta?.senderReceiverRemark || null,
+    senderReceiverRatedAt:
+      row.sender_receiver_rated_at || localMeta?.senderReceiverRatedAt || null,
+    senderReceiverRatedAtMs:
+      row.sender_receiver_rated_at_ms !== null && row.sender_receiver_rated_at_ms !== undefined
+        ? Number(row.sender_receiver_rated_at_ms)
+        : localMeta?.senderReceiverRatedAtMs ?? null,
+    adminSenderRating:
+      typeof row.admin_sender_rating === 'number'
+        ? row.admin_sender_rating
+        : localMeta?.adminSenderRating ?? null,
+    adminSenderRemark:
+      row.admin_sender_remark !== undefined
+        ? row.admin_sender_remark || null
+        : localMeta?.adminSenderRemark || null,
+    adminSenderRatedAt:
+      row.admin_sender_rated_at || localMeta?.adminSenderRatedAt || null,
+    adminSenderRatedAtMs:
+      row.admin_sender_rated_at_ms !== null && row.admin_sender_rated_at_ms !== undefined
+        ? Number(row.admin_sender_rated_at_ms)
+        : localMeta?.adminSenderRatedAtMs ?? null,
     remarks: resolvedRemarks,
     adminCompletedBy,
     adminCompletedAt,
@@ -939,6 +1006,18 @@ export async function updateQueryInDb(
     autoCompletedAtMs?: number | null;
     completionNote?: string | null;
     ccUsers?: QueryCCUser[] | null;
+    adminReceiverRating?: number | null;
+    adminReceiverRemark?: string | null;
+    adminReceiverRatedAt?: string | null;
+    adminReceiverRatedAtMs?: number | null;
+    senderReceiverRating?: number | null;
+    senderReceiverRemark?: string | null;
+    senderReceiverRatedAt?: string | null;
+    senderReceiverRatedAtMs?: number | null;
+    adminSenderRating?: number | null;
+    adminSenderRemark?: string | null;
+    adminSenderRatedAt?: string | null;
+    adminSenderRatedAtMs?: number | null;
   }
 ): Promise<{
   data: Query | null;
@@ -1095,6 +1174,42 @@ export async function updateQueryInDb(
         ? JSON.stringify(updates.ccUsers)
         : null;
   }
+  if (updates.adminReceiverRating !== undefined) {
+    extendedUpdates.admin_receiver_rating = updates.adminReceiverRating;
+  }
+  if (updates.adminReceiverRemark !== undefined) {
+    extendedUpdates.admin_receiver_remark = updates.adminReceiverRemark;
+  }
+  if (updates.adminReceiverRatedAt !== undefined) {
+    extendedUpdates.admin_receiver_rated_at = updates.adminReceiverRatedAt;
+  }
+  if (updates.adminReceiverRatedAtMs !== undefined) {
+    extendedUpdates.admin_receiver_rated_at_ms = updates.adminReceiverRatedAtMs;
+  }
+  if (updates.senderReceiverRating !== undefined) {
+    extendedUpdates.sender_receiver_rating = updates.senderReceiverRating;
+  }
+  if (updates.senderReceiverRemark !== undefined) {
+    extendedUpdates.sender_receiver_remark = updates.senderReceiverRemark;
+  }
+  if (updates.senderReceiverRatedAt !== undefined) {
+    extendedUpdates.sender_receiver_rated_at = updates.senderReceiverRatedAt;
+  }
+  if (updates.senderReceiverRatedAtMs !== undefined) {
+    extendedUpdates.sender_receiver_rated_at_ms = updates.senderReceiverRatedAtMs;
+  }
+  if (updates.adminSenderRating !== undefined) {
+    extendedUpdates.admin_sender_rating = updates.adminSenderRating;
+  }
+  if (updates.adminSenderRemark !== undefined) {
+    extendedUpdates.admin_sender_remark = updates.adminSenderRemark;
+  }
+  if (updates.adminSenderRatedAt !== undefined) {
+    extendedUpdates.admin_sender_rated_at = updates.adminSenderRatedAt;
+  }
+  if (updates.adminSenderRatedAtMs !== undefined) {
+    extendedUpdates.admin_sender_rated_at_ms = updates.adminSenderRatedAtMs;
+  }
 
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
@@ -1139,7 +1254,13 @@ export async function updateQueryInDb(
     updates.autoCompletedAt !== undefined ||
     updates.autoCompletedAtMs !== undefined ||
     updates.completionNote !== undefined ||
-    updates.ccUsers !== undefined
+    updates.ccUsers !== undefined ||
+    updates.adminReceiverRating !== undefined ||
+    updates.adminReceiverRemark !== undefined ||
+    updates.senderReceiverRating !== undefined ||
+    updates.senderReceiverRemark !== undefined ||
+    updates.adminSenderRating !== undefined ||
+    updates.adminSenderRemark !== undefined
   ) {
     saveLocalCompletionMeta(queryId, {
       ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
@@ -1179,6 +1300,18 @@ export async function updateQueryInDb(
       ...(updates.autoCompletedAtMs !== undefined ? { autoCompletedAtMs: updates.autoCompletedAtMs } : {}),
       ...(updates.completionNote !== undefined ? { completionNote: updates.completionNote } : {}),
       ...(updates.ccUsers !== undefined ? { ccUsers: updates.ccUsers || [] } : {}),
+      ...(updates.adminReceiverRating !== undefined ? { adminReceiverRating: updates.adminReceiverRating } : {}),
+      ...(updates.adminReceiverRemark !== undefined ? { adminReceiverRemark: updates.adminReceiverRemark } : {}),
+      ...(updates.adminReceiverRatedAt !== undefined ? { adminReceiverRatedAt: updates.adminReceiverRatedAt } : {}),
+      ...(updates.adminReceiverRatedAtMs !== undefined ? { adminReceiverRatedAtMs: updates.adminReceiverRatedAtMs } : {}),
+      ...(updates.senderReceiverRating !== undefined ? { senderReceiverRating: updates.senderReceiverRating } : {}),
+      ...(updates.senderReceiverRemark !== undefined ? { senderReceiverRemark: updates.senderReceiverRemark } : {}),
+      ...(updates.senderReceiverRatedAt !== undefined ? { senderReceiverRatedAt: updates.senderReceiverRatedAt } : {}),
+      ...(updates.senderReceiverRatedAtMs !== undefined ? { senderReceiverRatedAtMs: updates.senderReceiverRatedAtMs } : {}),
+      ...(updates.adminSenderRating !== undefined ? { adminSenderRating: updates.adminSenderRating } : {}),
+      ...(updates.adminSenderRemark !== undefined ? { adminSenderRemark: updates.adminSenderRemark } : {}),
+      ...(updates.adminSenderRatedAt !== undefined ? { adminSenderRatedAt: updates.adminSenderRatedAt } : {}),
+      ...(updates.adminSenderRatedAtMs !== undefined ? { adminSenderRatedAtMs: updates.adminSenderRatedAtMs } : {}),
     });
   }
 

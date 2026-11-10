@@ -182,7 +182,7 @@ export function generateWeeklyManagerReportPdf({
     },
     {
       t: 'SENDER SATISFACTION',
-      v: teamAverageRating !== null ? `${teamAverageRating} / 5.0` : 'N/A',
+      v: teamAverageRating !== null ? `${teamAverageRating} / 10.0` : 'N/A',
       c: C.slate[900],
     },
     {
@@ -266,7 +266,7 @@ export function generateWeeklyManagerReportPdf({
 
     // Rating
     text(
-      m.avgRating !== null ? `${m.avgRating} / 5.0` : '—',
+      m.avgRating !== null ? `${m.avgRating} / 10.0` : '—',
       cols[5].x + cols[5].w / 2, y + 4.2,
       { size: 7.2, bold: true, color: m.avgRating !== null ? C.amber : C.slate[400], align: 'center' },
     );
@@ -416,7 +416,7 @@ export function generateWeeklyManagerReportPdf({
     stroke(C.slate[100], 0.2);
     doc.line(x + 3.5, bottomY - 2.5, x + mcW - 3.5, bottomY - 2.5);
     const speed = m.avgManagerTurnaroundHours !== null ? `${m.avgManagerTurnaroundHours}h` : '—';
-    const rating = m.avgRating !== null ? `${m.avgRating} / 5.0` : 'No reviews';
+    const rating = m.avgRating !== null ? `${m.avgRating} / 10.0` : 'No reviews';
     text(`Speed: ${speed}  ·  Rating: ${rating}`, x + 3.5, bottomY, { size: 5.5, color: C.slate[500] });
     text(`${m.completedCount}/${m.totalAssigned} resolved`, x + mcW - 3.5, bottomY, {
       size: 5.5, color: C.slate[500], align: 'right',
@@ -451,7 +451,7 @@ export function generateWeeklyManagerReportPdf({
     stroke(C.slate[200], 0.2);
     doc.line(x + 4, bottomY - 2.5, x + mcW - 4, bottomY - 2.5);
     text(`Avg Speed: ${teamAvgTurnaround ?? '—'}h`, x + 5, bottomY, { size: 5.5, color: C.slate[500] });
-    text(`Rating: ${teamAverageRating ?? 'N/A'} / 5.0`, x + mcW - 5, bottomY, {
+    text(`Rating: ${teamAverageRating ?? 'N/A'} / 10.0`, x + mcW - 5, bottomY, {
       size: 5.5, color: C.slate[500], align: 'right',
     });
   }

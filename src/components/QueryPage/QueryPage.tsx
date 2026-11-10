@@ -38,6 +38,10 @@ import {
 } from '../../lib/dateUtils';
 import { dispatchQueryPushNotification } from '../../lib/pushDispatcher';
 import { AUTHORIZED_USERS } from '../../data/users';
+import {
+  calculateReceiverOverallRating,
+  calculateSenderOverallRating,
+} from '../../lib/ratingUtils';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './QueryPage.css';
 
@@ -97,6 +101,18 @@ interface QueryPageProps {
         | 'autoCompletedAtMs'
         | 'completionNote'
         | 'ccUsers'
+        | 'adminReceiverRating'
+        | 'adminReceiverRemark'
+        | 'adminReceiverRatedAt'
+        | 'adminReceiverRatedAtMs'
+        | 'senderReceiverRating'
+        | 'senderReceiverRemark'
+        | 'senderReceiverRatedAt'
+        | 'senderReceiverRatedAtMs'
+        | 'adminSenderRating'
+        | 'adminSenderRemark'
+        | 'adminSenderRatedAt'
+        | 'adminSenderRatedAtMs'
       >
     >
   ) => Promise<void>;
@@ -742,11 +758,20 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [mgrRemarkTitleDraft, setMgrRemarkTitleDraft] = useState<string>('');
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
-  // Rating modal states
+  // Rating modal states (Sender rating for receiver)
   const [ratingModalQuery, setRatingModalQuery] = useState<Query | null>(null);
   const [ratingInput, setRatingInput] = useState<number>(0);
   const [ratingHover, setRatingHover] = useState<number>(0);
+  const [ratingRemarkInput, setRatingRemarkInput] = useState<string>('');
+  const [ratingRemarkError, setRatingRemarkError] = useState<string>('');
   const [ratingModalCompleteOnSubmit, setRatingModalCompleteOnSubmit] = useState<boolean>(false);
+
+  // Admin Rating modal states (for Mr. Mani on Query Page)
+  const [adminRatingQuery, setAdminRatingQuery] = useState<Query | null>(null);
+  const [adminRatingTargetRole, setAdminRatingTargetRole] = useState<'receiver' | 'sender'>('receiver');
+  const [adminRatingInput, setAdminRatingInput] = useState<number>(10);
+  const [adminRemarkInput, setAdminRemarkInput] = useState<string>('');
+  const [adminRemarkError, setAdminRemarkError] = useState<string>('');
 
   // Mandatory Solution Remark Modal state (Director Policy Requirement)
   const [remarkModalQuery, setRemarkModalQuery] = useState<Query | null>(null);
@@ -1942,68 +1967,68 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
                     {/* Rating Cell */}
                     <td className="td-rating th-center">
-                      {isAdmin ? (
-                        item.rating ? (
-                          <div className="rating-cell-sender-wrap">
-                            <span
-                              className="rating-badge rating-badge--admin"
-                              title={`Rated ${item.rating}/5 stars by sender (${item.accountManagerName})`}
-                            >
-                              <span className="rating-stars-gold">
-                                {'★'.repeat(item.rating)}
-                                <span className="rating-stars-dim">{'★'.repeat(5 - item.rating)}</span>
-                              </span>
-                              <span className="rating-score-num">{item.rating}/5</span>
-                            </span>
+                      {isAdmin ? (() => {
+                        const recBreakdown = calculateReceiverOverallRating(item);
+                        const sndBreakdown = calculateSenderOverallRating(item);
+                        return (
+                          <div className="admin-rating-badge-pair">
                             <button
                               type="button"
-                              className="btn-clear-rating-mini"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (window.confirm('Clear rating for this query?')) {
-                                  await onUpdateQuery(item.queryId, { rating: null });
-                                }
+                              className="rating-badge--composite"
+                              onClick={() => {
+                                setAdminRatingQuery(item);
+                                setAdminRatingTargetRole('receiver');
+                                setAdminRatingInput(item.adminReceiverRating ?? 10);
+                                setAdminRemarkInput(item.adminReceiverRemark || 'Proper turnaround and response');
+                                setAdminRemarkError('');
                               }}
-                              title="Clear rating"
-                              aria-label="Clear rating"
+                              title={`Receiver Rating: ${recBreakdown.overallRating}/10 stars\nAdmin (50%): ${recBreakdown.adminRating}★\nSystem (30%): ${recBreakdown.systemRating}★ (${recBreakdown.systemReason})\nSender (20%): ${recBreakdown.senderRating ?? 10}★\nClick to edit Admin Rating & Remark`}
                             >
-                              ✕
+                              <span style={{ color: '#0369a1', fontWeight: 800 }}>Rec:</span>
+                              <span>⭐ {recBreakdown.overallRating}/10</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="rating-badge--composite"
+                              onClick={() => {
+                                setAdminRatingQuery(item);
+                                setAdminRatingTargetRole('sender');
+                                setAdminRatingInput(item.adminSenderRating ?? 10);
+                                setAdminRemarkInput(item.adminSenderRemark || 'Prompt responses to queries and requests');
+                                setAdminRemarkError('');
+                              }}
+                              title={`Sender Rating: ${sndBreakdown.overallRating}/10 stars\nAdmin (70%): ${sndBreakdown.adminRating}★\nSystem (30%): ${sndBreakdown.systemRating}★ (${sndBreakdown.systemReason})\nClick to edit Admin Rating & Remark`}
+                            >
+                              <span style={{ color: '#92400e', fontWeight: 800 }}>Snd:</span>
+                              <span>⭐ {sndBreakdown.overallRating}/10</span>
                             </button>
                           </div>
-                        ) : (
-                          <span className="rating-placeholder">—</span>
-                        )
-                      ) : isSender ? (
-                        item.rating ? (
+                        );
+                      })() : isSender ? (
+                        item.senderReceiverRating || item.rating ? (
                           <div className="rating-cell-sender-wrap">
                             <button
                               type="button"
                               className="rating-badge rating-badge--sender"
                               onClick={() => {
+                                const currentRating =
+                                  item.senderReceiverRating ||
+                                  (item.rating ? (item.rating <= 5 ? item.rating * 2 : item.rating) : 10);
                                 setRatingModalQuery(item);
-                                setRatingInput(item.rating || 0);
+                                setRatingInput(currentRating);
                                 setRatingHover(0);
+                                setRatingRemarkInput(item.senderReceiverRemark || '');
+                                setRatingRemarkError('');
                                 setRatingModalCompleteOnSubmit(false);
                               }}
-                              title="Click to change your rating (can be updated anytime)"
+                              title="Click to view/update your rating and remark for the receiving manager"
                             >
-                              <span className="rating-stars-gold">
-                                {'★'.repeat(item.rating)}
-                                <span className="rating-stars-dim">{'★'.repeat(5 - item.rating)}</span>
+                              <span className="rating-stars-gold">⭐</span>
+                              <span className="rating-score-num">
+                                {item.senderReceiverRating ||
+                                  (item.rating ? (item.rating <= 5 ? item.rating * 2 : item.rating) : 10)}
+                                /10
                               </span>
-                              <span className="rating-score-num">{item.rating}/5</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-clear-rating-mini"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await onUpdateQuery(item.queryId, { rating: null });
-                              }}
-                              title="Clear rating"
-                              aria-label="Clear rating"
-                            >
-                              ✕
                             </button>
                           </div>
                         ) : (
@@ -2012,13 +2037,15 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             className="btn-rate-prompt"
                             onClick={() => {
                               setRatingModalQuery(item);
-                              setRatingInput(0);
+                              setRatingInput(10);
                               setRatingHover(0);
+                              setRatingRemarkInput('');
+                              setRatingRemarkError('');
                               setRatingModalCompleteOnSubmit(false);
                             }}
-                            title="Click to rate the receiving manager (available anytime, can be updated later)"
+                            title="Click to rate the receiving manager (10-star scale with mandatory remark)"
                           >
-                            ★ Rate
+                            ★ Rate Manager
                           </button>
                         )
                       ) : (
@@ -4183,14 +4210,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 )}
               </p>
 
-              <div className="star-rating-picker" role="radiogroup" aria-label="Rating from 1 to 5 stars">
-                {[1, 2, 3, 4, 5].map((star) => (
+              <div className="star-rating-picker-10" role="radiogroup" aria-label="Rating from 1 to 10 stars">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
                   <button
                     key={star}
                     type="button"
-                    className={`star-pick-btn ${
+                    className={`star-pick-btn-10 ${
                       (ratingHover || ratingInput) >= star
-                        ? 'star-pick-btn--active'
+                        ? 'star-pick-btn-10--active'
                         : ''
                     }`}
                     onMouseEnter={() => setRatingHover(star)}
@@ -4207,28 +4234,54 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               <div className="rating-score-label">
                 {ratingInput > 0 ? (
                   <span className="rating-score-active">
-                    ⭐ {ratingInput} of 5 Stars Selected
+                    ⭐ {ratingInput} of 10 Stars Selected
                   </span>
                 ) : (
                   <span className="rating-score-hint">
-                    Select 1 to 5 stars to proceed
+                    Select 1 to 10 stars to proceed
+                  </span>
+                )}
+              </div>
+
+              <div style={{ marginTop: '1rem', textAlign: 'left' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: '#715b49',
+                    marginBottom: '0.4rem',
+                  }}
+                >
+                  Feedback Remark <span style={{ color: '#dc2626' }}>* (Mandatory)</span>
+                </label>
+                <textarea
+                  style={{
+                    width: '100%',
+                    minHeight: '75px',
+                    padding: '0.65rem',
+                    fontSize: '0.85rem',
+                    border: '1.5px solid rgba(193, 128, 54, 0.4)',
+                    borderRadius: '8px',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                  }}
+                  placeholder="Explain how the manager handled this query..."
+                  value={ratingRemarkInput}
+                  onChange={(e) => {
+                    setRatingRemarkInput(e.target.value);
+                    if (ratingRemarkError) setRatingRemarkError('');
+                  }}
+                />
+                {ratingRemarkError && (
+                  <span style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.25rem', display: 'block' }}>
+                    {ratingRemarkError}
                   </span>
                 )}
               </div>
 
               <div className="modal-actions">
-                {ratingModalQuery.rating ? (
-                  <button
-                    type="button"
-                    className="btn-clear-rating-modal"
-                    onClick={async () => {
-                      await onUpdateQuery(ratingModalQuery.queryId, { rating: null });
-                      setRatingModalQuery(null);
-                    }}
-                  >
-                    Clear Rating
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   className="btn-secondary"
@@ -4242,26 +4295,260 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   disabled={ratingInput < 1 || savingQueryId === ratingModalQuery.queryId}
                   onClick={async () => {
                     if (ratingInput < 1) return;
-                    if (ratingModalCompleteOnSubmit) {
-                      await onUpdateQuery(ratingModalQuery.queryId, {
-                        rating: ratingInput,
-                        accountManagerDone: true,
-                      });
-                    } else {
-                      await onUpdateQuery(ratingModalQuery.queryId, {
-                        rating: ratingInput,
-                      });
+                    if (!ratingRemarkInput.trim()) {
+                      setRatingRemarkError('Remark is mandatory when rating');
+                      return;
                     }
+
+                    const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                    const nowMs = Date.now();
+
+                    const updatesToSave: any = {
+                      senderReceiverRating: ratingInput,
+                      senderReceiverRemark: ratingRemarkInput.trim(),
+                      senderReceiverRatedAt: nowIso,
+                      senderReceiverRatedAtMs: nowMs,
+                      rating: ratingInput, // backwards compatibility
+                    };
+
+                    if (ratingModalCompleteOnSubmit) {
+                      updatesToSave.accountManagerDone = true;
+                    }
+
+                    await onUpdateQuery(ratingModalQuery.queryId, updatesToSave);
                     setRatingModalQuery(null);
                   }}
                 >
                   {ratingModalCompleteOnSubmit
                     ? 'Submit Rating & Complete'
-                    : ratingModalQuery.rating
-                    ? 'Update Rating'
                     : 'Save Rating'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Rating Editor Modal (Mr. Mani) */}
+      {adminRatingQuery && (
+        <div className="modal-backdrop" onClick={() => setAdminRatingQuery(null)}>
+          <div
+            className="modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            style={{ maxWidth: '540px' }}
+          >
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <span className="modal-badge">Admin Performance Rating</span>
+                <h3 className="modal-heading">
+                  Query {adminRatingQuery.queryId} Rating
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="btn-modal-close"
+                onClick={() => setAdminRatingQuery(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Tab Selector between Receiver and Sender */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                <button
+                  type="button"
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    borderRadius: '8px',
+                    border: '1px solid #c18036',
+                    background: adminRatingTargetRole === 'receiver' ? '#844918' : '#faf8f5',
+                    color: adminRatingTargetRole === 'receiver' ? '#fff' : '#844918',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => {
+                    setAdminRatingTargetRole('receiver');
+                    setAdminRatingInput(adminRatingQuery.adminReceiverRating ?? 10);
+                    setAdminRemarkInput(adminRatingQuery.adminReceiverRemark || 'Proper turnaround and response');
+                    setAdminRemarkError('');
+                  }}
+                >
+                  Rate Receiver ({adminRatingQuery.managerName})
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    borderRadius: '8px',
+                    border: '1px solid #c18036',
+                    background: adminRatingTargetRole === 'sender' ? '#844918' : '#faf8f5',
+                    color: adminRatingTargetRole === 'sender' ? '#fff' : '#844918',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => {
+                    setAdminRatingTargetRole('sender');
+                    setAdminRatingInput(adminRatingQuery.adminSenderRating ?? 10);
+                    setAdminRemarkInput(adminRatingQuery.adminSenderRemark || 'Prompt responses to queries and requests');
+                    setAdminRemarkError('');
+                  }}
+                >
+                  Rate Sender ({adminRatingQuery.accountManagerName})
+                </button>
+              </div>
+
+              {/* Live System Rating display */}
+              <div
+                style={{
+                  background: '#fbf9f4',
+                  border: '1px solid rgba(239, 237, 206, 0.9)',
+                  borderRadius: '8px',
+                  padding: '0.75rem',
+                  marginBottom: '1rem',
+                  fontSize: '0.82rem',
+                }}
+              >
+                {adminRatingTargetRole === 'receiver' ? (() => {
+                  const breakdown = calculateReceiverOverallRating(adminRatingQuery);
+                  return (
+                    <div>
+                      <strong>Automated System Score:</strong> ⭐ {breakdown.systemRating} / 10 (30% weight)
+                      <div style={{ color: '#715b49', marginTop: '0.2rem' }}>{breakdown.systemReason}</div>
+                    </div>
+                  );
+                })() : (() => {
+                  const breakdown = calculateSenderOverallRating(adminRatingQuery);
+                  return (
+                    <div>
+                      <strong>Automated System Score:</strong> ⭐ {breakdown.systemRating} / 10 (30% weight)
+                      <div style={{ color: '#715b49', marginTop: '0.2rem' }}>{breakdown.systemReason}</div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* 10 Star picker */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: '#715b49',
+                    marginBottom: '0.4rem',
+                  }}
+                >
+                  Admin Score (1 to 10 Stars) &bull;{' '}
+                  {adminRatingTargetRole === 'receiver' ? '50% Weight' : '70% Weight'}
+                </label>
+                <div className="star-rating-picker-10">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={`star-pick-btn-10 ${
+                        adminRatingInput >= star ? 'star-pick-btn-10--active' : ''
+                      }`}
+                      onClick={() => setAdminRatingInput(star)}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <div style={{ textAlign: 'center', marginTop: '0.4rem', fontWeight: 700, color: '#844918' }}>
+                  ⭐ {adminRatingInput} of 10 Stars Selected
+                </div>
+              </div>
+
+              {/* Mandatory Remark */}
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    color: '#715b49',
+                    marginBottom: '0.4rem',
+                  }}
+                >
+                  Admin Remark <span style={{ color: '#dc2626' }}>* (Mandatory)</span>
+                </label>
+                <textarea
+                  style={{
+                    width: '100%',
+                    minHeight: '75px',
+                    padding: '0.65rem',
+                    fontSize: '0.85rem',
+                    border: '1.5px solid rgba(193, 128, 54, 0.4)',
+                    borderRadius: '8px',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                  }}
+                  placeholder="Provide admin feedback or reason for this rating..."
+                  value={adminRemarkInput}
+                  onChange={(e) => {
+                    setAdminRemarkInput(e.target.value);
+                    if (adminRemarkError) setAdminRemarkError('');
+                  }}
+                />
+                {adminRemarkError && (
+                  <span style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.25rem', display: 'block' }}>
+                    {adminRemarkError}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setAdminRatingQuery(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={savingQueryId === adminRatingQuery.queryId}
+                onClick={async () => {
+                  if (!adminRemarkInput.trim()) {
+                    setAdminRemarkError('Remark is mandatory for Admin ratings');
+                    return;
+                  }
+
+                  const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                  const nowMs = Date.now();
+
+                  if (adminRatingTargetRole === 'receiver') {
+                    await onUpdateQuery(adminRatingQuery.queryId, {
+                      adminReceiverRating: adminRatingInput,
+                      adminReceiverRemark: adminRemarkInput.trim(),
+                      adminReceiverRatedAt: nowIso,
+                      adminReceiverRatedAtMs: nowMs,
+                    });
+                  } else {
+                    await onUpdateQuery(adminRatingQuery.queryId, {
+                      adminSenderRating: adminRatingInput,
+                      adminSenderRemark: adminRemarkInput.trim(),
+                      adminSenderRatedAt: nowIso,
+                      adminSenderRatedAtMs: nowMs,
+                    });
+                  }
+
+                  setAdminRatingQuery(null);
+                }}
+              >
+                {savingQueryId === adminRatingQuery.queryId ? 'Saving...' : 'Save Admin Rating'}
+              </button>
             </div>
           </div>
         </div>

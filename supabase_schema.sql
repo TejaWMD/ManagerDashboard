@@ -127,7 +127,19 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS auto_completed_at TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS auto_completed_at_ms BIGINT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS completion_note TEXT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS cc_users TEXT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS cc_users TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_receiver_rating INTEGER DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_receiver_remark TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_receiver_rated_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_receiver_rated_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS sender_receiver_rating INTEGER DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS sender_receiver_remark TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS sender_receiver_rated_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS sender_receiver_rated_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_sender_rating INTEGER DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_sender_remark TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_sender_rated_at TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS admin_sender_rated_at_ms BIGINT DEFAULT NULL;
 
 -- Backfill existing manager_done rows that do not have manager_done_at_ms yet
 UPDATE public.queries

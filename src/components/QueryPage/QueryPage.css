@@ -1618,6 +1618,67 @@
   font-weight: 500;
 }
 
+/* 10-Star Rating Picker */
+.star-rating-picker-10 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.6rem 0;
+  flex-wrap: wrap;
+}
+
+.star-pick-btn-10 {
+  background: none;
+  border: 1px solid rgba(193, 128, 54, 0.25);
+  border-radius: 8px;
+  font-size: 1.25rem;
+  color: rgba(200, 180, 150, 0.45);
+  cursor: pointer;
+  padding: 0.3rem 0.45rem;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.star-pick-btn-10:hover {
+  transform: scale(1.15);
+  border-color: #c18036;
+}
+
+.star-pick-btn-10--active {
+  color: #f2a71b;
+  background: rgba(242, 167, 27, 0.1);
+  border-color: #f2a71b;
+  text-shadow: 0 1px 4px rgba(242, 167, 27, 0.3);
+}
+
+.admin-rating-badge-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.rating-badge--composite {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(193, 128, 54, 0.35);
+  background: #fdfbf7;
+  color: #2b1d0e;
+  transition: all 0.15s ease;
+}
+
+.rating-badge--composite:hover {
+  background: #f5eedb;
+  border-color: #844918;
+}
+
 /* View Modal Rating Card */
 .query-view-section--rating {
   margin-top: 0.4rem;

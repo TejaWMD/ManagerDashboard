@@ -94,6 +94,7 @@ import { RescheduleAppointmentModal } from './components/Appointments/Reschedule
 import { NotificationModal } from './components/NotificationModal/NotificationModal';
 import { MyTrello } from './components/MyTrello/MyTrello';
 import { AdminTrello } from './components/AdminTrello/AdminTrello';
+import { RatingsPage } from './components/RatingsPage/RatingsPage';
 import sqlSchemaText from '../supabase_schema.sql?raw';
 import './App.css';
 
@@ -1031,6 +1032,18 @@ export const App: React.FC = () => {
         | 'autoCompletedAtMs'
         | 'completionNote'
         | 'ccUsers'
+        | 'adminReceiverRating'
+        | 'adminReceiverRemark'
+        | 'adminReceiverRatedAt'
+        | 'adminReceiverRatedAtMs'
+        | 'senderReceiverRating'
+        | 'senderReceiverRemark'
+        | 'senderReceiverRatedAt'
+        | 'senderReceiverRatedAtMs'
+        | 'adminSenderRating'
+        | 'adminSenderRemark'
+        | 'adminSenderRatedAt'
+        | 'adminSenderRatedAtMs'
       >
     >
   ) => {
@@ -1485,6 +1498,42 @@ export const App: React.FC = () => {
           actionType: 'QUERY_EXTENSION_RESOLVED',
           actionTitle: `${currentUser.name} ${updates.extensionStatus.toLowerCase()} extension for ${queryId}`,
           actionDetails: updates.extensionReviewNote || `Extension ${updates.extensionStatus.toLowerCase()}`,
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (updates.adminReceiverRating && updates.adminReceiverRating !== existing.adminReceiverRating) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_RATED',
+          actionTitle: `${currentUser.name} (Admin) rated Receiver on ${queryId} (${updates.adminReceiverRating}/10 stars)`,
+          actionDetails: updates.adminReceiverRemark || 'Admin performance rating',
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (updates.adminSenderRating && updates.adminSenderRating !== existing.adminSenderRating) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_RATED',
+          actionTitle: `${currentUser.name} (Admin) rated Sender on ${queryId} (${updates.adminSenderRating}/10 stars)`,
+          actionDetails: updates.adminSenderRemark || 'Admin performance rating',
+          targetId: queryId,
+          targetType: 'query',
+        });
+      } else if (updates.senderReceiverRating && updates.senderReceiverRating !== existing.senderReceiverRating) {
+        logUserActivity({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
+          userRole: currentUser.role,
+          actionType: 'QUERY_RATED',
+          actionTitle: `${currentUser.name} rated Manager on ${queryId} (${updates.senderReceiverRating}/10 stars)`,
+          actionDetails: updates.senderReceiverRemark || 'Sender peer review',
           targetId: queryId,
           targetType: 'query',
         });
@@ -2141,6 +2190,14 @@ export const App: React.FC = () => {
                   actionDetails: details,
                 });
               }}
+            />
+          ) : activePage === 'ratings' && currentUser.role === 'admin' ? (
+            <RatingsPage
+              currentUser={currentUser}
+              allUsers={allUsers}
+              queries={queries}
+              onUpdateQuery={handleUpdateQuery}
+              savingQueryId={savingQueryId}
             />
           ) : (
             <QueryPage
