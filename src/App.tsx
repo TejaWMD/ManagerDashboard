@@ -190,13 +190,18 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  // Protect My Trello access: Only Account Managers and Admins allowed
+  // Protect role-restricted pages: My Trello (AM + Admin) and Ratings/Tracking/Admin Trello (Admin only)
   useEffect(() => {
+    if (!currentUser) return;
     if (
       activePage === 'my-trello' &&
-      currentUser &&
       currentUser.role !== 'admin' &&
       currentUser.role !== 'account_manager'
+    ) {
+      setActivePage('home');
+    } else if (
+      (activePage === 'ratings' || activePage === 'tracking' || activePage === 'admin-trello') &&
+      currentUser.role !== 'admin'
     ) {
       setActivePage('home');
     }

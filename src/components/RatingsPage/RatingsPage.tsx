@@ -200,6 +200,10 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
       });
   }, [selectedUserStats, queries, nowMs]);
 
+  if (currentUser.role !== 'admin') {
+    return null;
+  }
+
   return (
     <div className="ratings-page-container">
       {/* Header */}

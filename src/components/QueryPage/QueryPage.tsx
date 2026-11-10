@@ -2035,77 +2035,56 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           </button>
                         )
                       ) : isAssignedManager ? (() => {
-                        const recBreakdown = calculateReceiverOverallRating(item);
                         const isPostCutoff = Boolean(
                           (item.createdAtMs && item.createdAtMs > RECEIVER_RATING_FEATURE_START_MS) ||
                           (item.receiverSenderRating !== undefined && item.receiverSenderRating !== null)
                         );
+                        if (!isPostCutoff) {
+                          return <span className="rating-placeholder">—</span>;
+                        }
                         return (
                           <div className="rating-cell-receiver-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
-                            {/* Receiver can see their own overall score */}
-                            <span
-                              className="rating-badge rating-badge--receiver-score"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.25rem',
-                                padding: '0.2rem 0.5rem',
-                                borderRadius: '6px',
-                                background: '#f0f9ff',
-                                border: '1px solid #bae6fd',
-                                fontSize: '0.78rem',
-                                color: '#0369a1',
-                                fontWeight: 700,
-                              }}
-                              title={`Your Rating as Receiver: ${recBreakdown.overallRating}/10 stars\nAdmin (50%): ${recBreakdown.adminRating}★\nSystem (30%): ${recBreakdown.systemRating}★ (${recBreakdown.systemReason})\nSender (20%): ${recBreakdown.senderRating ?? 10}★`}
-                            >
-                              <span>⭐ {recBreakdown.overallRating}/10</span>
-                            </span>
-
-                            {/* If query made after this cutoff, receiver rating for sender is shown */}
-                            {isPostCutoff && (
-                              item.receiverSenderRating ? (
-                                <button
-                                  type="button"
-                                  className="rating-badge rating-badge--receiver"
-                                  style={{
-                                    fontSize: '0.74rem',
-                                    padding: '0.15rem 0.45rem',
-                                    background: '#fef3c7',
-                                    color: '#92400e',
-                                    border: '1px solid #fde68a',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    fontWeight: 600,
-                                  }}
-                                  onClick={() => {
-                                    setReceiverRatingModalQuery(item);
-                                    setReceiverRatingInput(item.receiverSenderRating || 10);
-                                    setReceiverRatingHover(0);
-                                    setReceiverRatingRemarkInput(item.receiverSenderRemark || '');
-                                    setReceiverRatingRemarkError('');
-                                  }}
-                                  title={`Click to view/update rating for Sender (${item.accountManagerName}): ${item.receiverSenderRating}/10\nRemark: ${item.receiverSenderRemark || 'None'}`}
-                                >
-                                  ⭐ {item.receiverSenderRating}/10 (to Sender)
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="btn-rate-prompt"
-                                  style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem' }}
-                                  onClick={() => {
-                                    setReceiverRatingModalQuery(item);
-                                    setReceiverRatingInput(10);
-                                    setReceiverRatingHover(0);
-                                    setReceiverRatingRemarkInput('');
-                                    setReceiverRatingRemarkError('');
-                                  }}
-                                  title="Click to rate the sender (10-star scale with mandatory remark)"
-                                >
-                                  ★ Rate Sender
-                                </button>
-                              )
+                            {item.receiverSenderRating ? (
+                              <button
+                                type="button"
+                                className="rating-badge rating-badge--receiver"
+                                style={{
+                                  fontSize: '0.74rem',
+                                  padding: '0.15rem 0.45rem',
+                                  background: '#fef3c7',
+                                  color: '#92400e',
+                                  border: '1px solid #fde68a',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                }}
+                                onClick={() => {
+                                  setReceiverRatingModalQuery(item);
+                                  setReceiverRatingInput(item.receiverSenderRating || 10);
+                                  setReceiverRatingHover(0);
+                                  setReceiverRatingRemarkInput(item.receiverSenderRemark || '');
+                                  setReceiverRatingRemarkError('');
+                                }}
+                                title={`Click to view/update rating for Sender (${item.accountManagerName}): ${item.receiverSenderRating}/10\nRemark: ${item.receiverSenderRemark || 'None'}`}
+                              >
+                                ⭐ {item.receiverSenderRating}/10 (to Sender)
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn-rate-prompt"
+                                style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem' }}
+                                onClick={() => {
+                                  setReceiverRatingModalQuery(item);
+                                  setReceiverRatingInput(10);
+                                  setReceiverRatingHover(0);
+                                  setReceiverRatingRemarkInput('');
+                                  setReceiverRatingRemarkError('');
+                                }}
+                                title="Click to rate the sender (10-star scale with mandatory remark)"
+                              >
+                                ★ Rate Sender
+                              </button>
                             )}
                           </div>
                         );
@@ -3934,46 +3913,51 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 <div className="query-view-section query-view-section--rating">
                   <div className="query-view-section-header">
                     <span className="query-view-section-label">
-                      {currentUser.role === 'admin' ? 'Sender Rating' : 'Your Rating'}
+                      {currentUser.role === 'admin'
+                        ? `Sender Rating (for Manager: ${activeViewingQuery.managerName})`
+                        : `Your Rating (for Manager: ${activeViewingQuery.managerName})`}
                     </span>
                   </div>
                   <div className="query-view-rating-card">
-                    {activeViewingQuery.rating ? (
+                    {activeViewingQuery.senderReceiverRating || activeViewingQuery.rating ? (
                       <div className="query-view-rating-display">
                         <span className="rating-stars-gold">
-                          {'★'.repeat(activeViewingQuery.rating)}
-                          <span className="rating-stars-dim">
-                            {'★'.repeat(5 - activeViewingQuery.rating)}
-                          </span>
+                          ⭐{' '}
+                          {activeViewingQuery.senderReceiverRating ||
+                            (activeViewingQuery.rating
+                              ? activeViewingQuery.rating <= 5
+                                ? activeViewingQuery.rating * 2
+                                : activeViewingQuery.rating
+                              : 10)}{' '}
+                          / 10 Stars
                         </span>
-                        <span className="query-view-rating-value">
-                          {activeViewingQuery.rating} / 5 Stars
-                        </span>
-                        {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin' || currentUser.role === 'account_manager') && (
-                          <div className="query-view-rating-actions">
+                        {activeViewingQuery.senderReceiverRemark && (
+                          <div style={{ fontSize: '0.82rem', color: '#634a36', marginTop: '0.3rem', fontStyle: 'italic' }}>
+                            &ldquo;{activeViewingQuery.senderReceiverRemark}&rdquo;
+                          </div>
+                        )}
+                        {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && (
+                          <div className="query-view-rating-actions" style={{ marginTop: '0.5rem' }}>
                             <button
                               type="button"
                               className="btn-inline-edit"
                               onClick={() => {
+                                const currentRating =
+                                  activeViewingQuery.senderReceiverRating ||
+                                  (activeViewingQuery.rating
+                                    ? activeViewingQuery.rating <= 5
+                                      ? activeViewingQuery.rating * 2
+                                      : activeViewingQuery.rating
+                                    : 10);
                                 setRatingModalQuery(activeViewingQuery);
-                                setRatingInput(activeViewingQuery.rating || 0);
+                                setRatingInput(currentRating);
                                 setRatingHover(0);
+                                setRatingRemarkInput(activeViewingQuery.senderReceiverRemark || '');
+                                setRatingRemarkError('');
                                 setRatingModalCompleteOnSubmit(false);
                               }}
                             >
-                              Change Rating
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-inline-clear-rating"
-                              onClick={async () => {
-                                await onUpdateQuery(activeViewingQuery.queryId, {
-                                  rating: null,
-                                });
-                              }}
-                              title="Clear rating for this query"
-                            >
-                              Clear Rating
+                              Update Rating
                             </button>
                           </div>
                         )}
@@ -3988,16 +3972,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           className="btn-rate-prompt"
                           onClick={() => {
                             setRatingModalQuery(activeViewingQuery);
-                            setRatingInput(0);
+                            setRatingInput(10);
                             setRatingHover(0);
+                            setRatingRemarkInput('');
+                            setRatingRemarkError('');
                             setRatingModalCompleteOnSubmit(false);
                           }}
                         >
-                          ★ Rate Manager (1-5 Stars)
+                          ★ Rate Manager (1-10 Stars)
                         </button>
                       </div>
                     ) : (
-                      <span className="rating-placeholder">Not rated yet.</span>
+                      <span className="rating-placeholder">Not rated by sender yet (Default 10★).</span>
                     )}
                   </div>
                 </div>
