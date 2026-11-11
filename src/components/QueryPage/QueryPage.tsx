@@ -54,6 +54,9 @@ interface QueryPageProps {
   appointments?: Appointment[];
   initialFollowupAppointment?: Appointment | null;
   onOpenBookAppointment?: (preselectedQueryId?: string | null, preselectedUserId?: string | null) => void;
+  hasMoreQueries?: boolean;
+  isAllQueriesLoaded?: boolean;
+  onLoadAllQueries?: () => void;
   onCreateQuery: (payload: {
     managerId: string;
     managerEmail: string;
@@ -143,6 +146,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   appointments = [],
   initialFollowupAppointment,
   onOpenBookAppointment,
+  hasMoreQueries = false,
+  isAllQueriesLoaded = false,
+  onLoadAllQueries,
   onCreateQuery,
   onUpdateQuery,
 }) => {
@@ -2276,6 +2282,44 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               )}
             </tbody>
           </table>
+
+          {hasMoreQueries && !isAllQueriesLoaded && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.85rem',
+                padding: '0.85rem 1rem',
+                background: '#f8fafc',
+                borderTop: '1px solid #e2e8f0',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                ⚡ Showing the {queries.length} most recent queries to minimize bandwidth & egress usage.
+              </span>
+              <button
+                type="button"
+                onClick={onLoadAllQueries}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.35rem 0.85rem',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  color: '#1d4ed8',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                📥 Load Full Archive (All Queries)
+              </button>
+            </div>
+          )}
         </div>
       </section>
 

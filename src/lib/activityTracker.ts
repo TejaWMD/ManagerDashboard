@@ -320,8 +320,13 @@ export async function updateUserPresence(
   currentAction?: string,
   force = false
 ): Promise<void> {
+  // Pause heartbeat writes when browser tab is hidden/minimized to save egress
+  if (typeof document !== 'undefined' && document.hidden && !force) {
+    return;
+  }
+
   const nowMs = Date.now();
-  if (!force && lastHeartbeatPage === currentPage && nowMs - lastHeartbeatMs < 20000) {
+  if (!force && lastHeartbeatPage === currentPage && nowMs - lastHeartbeatMs < 35000) {
     return;
   }
   lastHeartbeatMs = nowMs;
@@ -551,6 +556,9 @@ function mergeUniqueActivities(...lists: UserActivity[][]): UserActivity[] {
 
 export async function fetchUserPresencesFromDb(): Promise<Record<string, UserPresence>> {
   const cached = readCachedPresences();
+  if (typeof document !== 'undefined' && document.hidden) {
+    return cached;
+  }
   if (!isPresenceTableMissing) {
     try {
       const { data, error } = await supabase.from('user_presence').select('*');

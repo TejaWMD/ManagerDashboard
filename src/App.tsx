@@ -229,7 +229,24 @@ export const App: React.FC = () => {
     type: 'info' | 'updating' | 'success';
   } | null>(null);
 
-  const loadQueries = useCallback(async (): Promise<Query[]> => {
+  const [hasMoreQueries, setHasMoreQueries] = useState(false);
+  const [isAllQueriesLoaded, setIsAllQueriesLoaded] = useState(false);
+  const hasSeededUsersRef = useRef(false);
+
+  // Run ensureUsersSeededInDb only once per session on mount to prevent write/egress spam
+  useEffect(() => {
+    if (!hasSeededUsersRef.current) {
+      hasSeededUsersRef.current = true;
+      ensureUsersSeededInDb().catch(() => {});
+    }
+  }, []);
+
+  const loadQueries = useCallback(async (loadAll = false): Promise<Query[]> => {
+    // Skip background queries when tab is hidden unless explicitly requested
+    if (typeof document !== 'undefined' && document.hidden && !loadAll) {
+      return queriesRef.current;
+    }
+
     setIsLoadingDb(true);
     try {
       localStorage.removeItem(OLD_DUMMY_STORAGE_KEY);
@@ -243,8 +260,7 @@ export const App: React.FC = () => {
       // Ignore storage errors
     }
 
-    await ensureUsersSeededInDb();
-    const result = await fetchQueriesFromDb();
+    const result = await fetchQueriesFromDb({ loadAll: loadAll || isAllQueriesLoaded });
     if (result.error) {
       setDbTableMissing(result.tableMissing);
       setDbError(result.error);
@@ -267,13 +283,20 @@ export const App: React.FC = () => {
       setDbTableMissing(false);
       setDbError(null);
       setQueries(result.data);
+      if (loadAll) {
+        setIsAllQueriesLoaded(true);
+      }
+      setHasMoreQueries(Boolean(result.hasMore));
       persistQueriesCache(result.data);
       setIsLoadingDb(false);
       return result.data;
     }
-  }, []);
+  }, [isAllQueriesLoaded]);
 
   const loadAppointments = useCallback(async (): Promise<Appointment[]> => {
+    if (typeof document !== 'undefined' && document.hidden) {
+      return appointmentsRef.current;
+    }
     try {
       const res = await fetchAppointmentsFromDb();
       if (res.data) {
@@ -309,6 +332,9 @@ export const App: React.FC = () => {
   );
 
   const loadPresences = useCallback(async (): Promise<Record<string, UserPresence>> => {
+    if (typeof document !== 'undefined' && document.hidden) {
+      return presencesRef.current;
+    }
     try {
       const p = await fetchUserPresencesFromDb();
       setPresences(p);
@@ -815,16 +841,21 @@ export const App: React.FC = () => {
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // Automatic background polling interval (every 15s) to guarantee portal state
-    // stays in sync even if WebSocket is throttled, asleep, or dropped on mobile/laptop
+    // Relaxed background polling interval (10 minutes) to drastically reduce egress.
+    // Supabase Realtime channels already receive live inserts, updates, and deletes instantaneously!
     const backgroundSyncTimer = setInterval(() => {
+      if (document.hidden) return; // Completely pause polling when tab is hidden/minimized
       loadQueries();
       loadAppointments();
       loadPresences();
-    }, 15000);
+    }, 10 * 60 * 1000);
 
-    // Window focus & tab visibility sync: instantly refresh whenever user returns to the portal
+    // Window focus & tab visibility sync: throttled with a 2-minute cooldown to prevent refetch loops
+    let lastFocusSyncMs = 0;
     const handleFocusSync = () => {
+      const now = Date.now();
+      if (now - lastFocusSyncMs < 120000) return;
+      lastFocusSyncMs = now;
       loadQueries();
       loadAppointments();
       loadPresences();
@@ -832,6 +863,9 @@ export const App: React.FC = () => {
     window.addEventListener('focus', handleFocusSync);
     const handleVisibilitySync = () => {
       if (document.visibilityState === 'visible') {
+        if (currentUserRef.current) {
+          updateUserPresence(currentUserRef.current, activePage, undefined, true);
+        }
         handleFocusSync();
       }
     };
@@ -854,20 +888,23 @@ export const App: React.FC = () => {
     };
   }, [loadQueries, loadAppointments, loadActivities, loadPresences]);
 
-  // Real-time live presence heartbeat
+  // Real-time live presence heartbeat (paused when tab is hidden, relaxed from 25s to 45s)
   useEffect(() => {
     if (!currentUser) return;
     updateUserPresence(currentUser, activePage);
     const presenceTimer = setInterval(() => {
-      if (currentUserRef.current) {
+      if (currentUserRef.current && !document.hidden) {
         updateUserPresence(currentUserRef.current, activePage);
       }
-    }, 25000);
+    }, 45000);
     return () => clearInterval(presenceTimer);
   }, [currentUser, activePage]);
 
   const handleLoginSuccess = (user: UserAccount) => {
     setCurrentUser(user);
+    if (user.role === 'admin') {
+      ensureUsersSeededInDb().catch(() => {});
+    }
     setAllUsers((prev) => {
       if (prev.some((u) => u.email.toLowerCase() === user.email.toLowerCase())) {
         return prev;
@@ -2244,7 +2281,7 @@ export const App: React.FC = () => {
               queries={queries}
               users={allUsers}
               onNavigate={setActivePage}
-              onRefreshQueries={loadQueries}
+              onRefreshQueries={() => loadQueries(true)}
             />
           ) : activePage === 'tracking' ? (
             <TrackingPage
@@ -2304,6 +2341,9 @@ export const App: React.FC = () => {
               savingQueryId={savingQueryId}
               appointments={appointments}
               initialFollowupAppointment={pendingFollowupAppointment}
+              hasMoreQueries={hasMoreQueries}
+              isAllQueriesLoaded={isAllQueriesLoaded}
+              onLoadAllQueries={() => loadQueries(true)}
               onOpenBookAppointment={handleOpenBookAppointment}
               onCreateQuery={handleCreateQuery}
               onUpdateQuery={handleUpdateQuery}

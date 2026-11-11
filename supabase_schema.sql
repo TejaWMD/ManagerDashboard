@@ -503,3 +503,33 @@ CREATE POLICY "Allow full access to system_settings"
   ON public.system_settings FOR ALL
   USING (true)
   WITH CHECK (true);
+
+-- ============================================================================
+-- 10. Supabase Storage Bucket for Attachments (Egress & Bandwidth Optimization)
+-- Stores attachments via Supabase Storage CDN rather than heavy Base64 in database.
+-- ============================================================================
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('query-attachments', 'query-attachments', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Storage object access policies for 'query-attachments'
+DROP POLICY IF EXISTS "Allow public read query-attachments" ON storage.objects;
+CREATE POLICY "Allow public read query-attachments"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'query-attachments');
+
+DROP POLICY IF EXISTS "Allow public insert query-attachments" ON storage.objects;
+CREATE POLICY "Allow public insert query-attachments"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'query-attachments');
+
+DROP POLICY IF EXISTS "Allow public update query-attachments" ON storage.objects;
+CREATE POLICY "Allow public update query-attachments"
+  ON storage.objects FOR UPDATE
+  USING (bucket_id = 'query-attachments');
+
+DROP POLICY IF EXISTS "Allow public delete query-attachments" ON storage.objects;
+CREATE POLICY "Allow public delete query-attachments"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'query-attachments');

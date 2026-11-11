@@ -786,15 +786,30 @@ export async function updateUserSettingsInDb(
   }
 }
 
-export async function fetchQueriesFromDb(): Promise<{
+export interface FetchQueriesOptions {
+  limit?: number;
+  loadAll?: boolean;
+}
+
+export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise<{
   data: Query[];
   tableMissing: boolean;
   error: string | null;
+  hasMore?: boolean;
 }> {
-  const { data, error } = await supabase
+  const shouldLimit = !options?.loadAll;
+  const queryLimit = options?.limit || 150;
+
+  let queryBuilder = supabase
     .from('queries')
     .select('*')
     .order('created_at_ms', { ascending: false });
+
+  if (shouldLimit) {
+    queryBuilder = queryBuilder.limit(queryLimit);
+  }
+
+  const { data, error } = await queryBuilder;
 
   if (error) {
     const isMissingTable =
@@ -819,6 +834,7 @@ export async function fetchQueriesFromDb(): Promise<{
     data: mapped,
     tableMissing: false,
     error: null,
+    hasMore: shouldLimit && rows.length >= queryLimit,
   };
 }
 

@@ -1,4 +1,5 @@
 import { QueryAttachment } from '../types';
+import { supabase } from './supabase';
 
 /**
  * Document Upload Limits (Configured for Supabase Free Tier - 500 MB DB & PostgREST payload safety)
@@ -137,6 +138,46 @@ export async function readFileAsAttachment(file: File): Promise<QueryAttachment>
 }
 
 /**
+ * Attempts to upload file to Supabase Storage ('query-attachments' bucket)
+ * If the bucket exists, saves ~99% egress by storing a tiny CDN URL instead of a large Base64 string.
+ * Gracefully falls back to compressed Base64 if bucket is missing or network upload fails.
+ */
+export async function uploadOrReadAttachment(file: File): Promise<QueryAttachment> {
+  const uniqueId = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  try {
+    const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `docs/${Date.now()}_${uniqueId}_${cleanName}`;
+
+    const { data, error } = await supabase.storage
+      .from('query-attachments')
+      .upload(storagePath, file, { cacheControl: '3600', upsert: true });
+
+    if (!error && data?.path) {
+      const { data: pubData } = supabase.storage
+        .from('query-attachments')
+        .getPublicUrl(data.path);
+
+      if (pubData?.publicUrl) {
+        return {
+          id: uniqueId,
+          name: file.name,
+          size: file.size,
+          type: file.type || 'application/octet-stream',
+          url: pubData.publicUrl,
+          uploadedAt: new Date().toISOString(),
+        };
+      }
+    }
+  } catch {
+    // Supabase Storage bucket not provisioned yet; fallback smoothly to Base64
+  }
+
+  // Graceful fallback to client-side compressed Base64
+  return readFileAsAttachment(file);
+}
+
+/**
  * Validate and read an array of files against the Supabase Free Tier limits:
  * - Up to MAX_FILES_PER_UPLOAD files per section
  * - Up to MAX_FILE_SIZE_BYTES (2 MB) per file (after automatic image compression)
@@ -173,7 +214,7 @@ export async function validateAndReadAttachments(
     }
 
     try {
-      const att = await readFileAsAttachment(file);
+      const att = await uploadOrReadAttachment(file);
 
       if (att.size > MAX_FILE_SIZE_BYTES) {
         errors.push(
