@@ -1602,6 +1602,26 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     ? item.linkedAppointmentId
                     : null);
 
+                const latestMgrRemarkObj = (item.remarks || [])
+                  .filter((r) => r.type === 'manager')
+                  .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0))
+                  .slice(-1)[0];
+                const displayMgrRemarkText =
+                  latestMgrRemarkObj?.text ||
+                  item.managerRemark ||
+                  item.managerRemarkTitle ||
+                  '';
+
+                const latestSenderRemarkObj = (item.remarks || [])
+                  .filter((r) => r.type === 'sender')
+                  .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0))
+                  .slice(-1)[0];
+                const displaySenderRemarkText =
+                  latestSenderRemarkObj?.text ||
+                  item.accountManagerRemark ||
+                  item.accountManagerRemarkTitle ||
+                  '';
+
                 return (
                   <tr
                     key={item.queryId}
@@ -1799,13 +1819,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           <div className="remark-display-row">
                             <span
                               className={
-                                item.managerRemarkTitle || item.managerRemark
+                                displayMgrRemarkText
                                   ? 'remark-value query-body-text--clickable'
                                   : 'remark-placeholder'
                               }
                               onClick={() => setViewingQuery(item)}
                             >
-                              {item.managerRemarkTitle || item.managerRemark || '—'}
+                              {displayMgrRemarkText || '—'}
                             </span>
                             <button
                               type="button"
@@ -1819,13 +1839,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       ) : (
                         <span
                           className={
-                            item.managerRemarkTitle || item.managerRemark
+                            displayMgrRemarkText
                               ? 'remark-value query-body-text--clickable'
                               : 'remark-placeholder'
                           }
                           onClick={() => setViewingQuery(item)}
                         >
-                          {item.managerRemarkTitle || item.managerRemark || '—'}
+                          {displayMgrRemarkText || '—'}
                         </span>
                       )}
                     </td>
@@ -1894,15 +1914,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           <div className="remark-display-row">
                             <span
                               className={
-                                item.accountManagerRemarkTitle || item.accountManagerRemark
+                                displaySenderRemarkText
                                   ? 'remark-value query-body-text--clickable'
                                   : 'remark-placeholder'
                               }
                               onClick={() => setViewingQuery(item)}
                             >
-                              {item.accountManagerRemarkTitle ||
-                                item.accountManagerRemark ||
-                                '—'}
+                              {displaySenderRemarkText || '—'}
                             </span>
                             <button
                               type="button"
@@ -1916,15 +1934,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       ) : (
                         <span
                           className={
-                            item.accountManagerRemarkTitle || item.accountManagerRemark
+                            displaySenderRemarkText
                               ? 'remark-value query-body-text--clickable'
                               : 'remark-placeholder'
                           }
                           onClick={() => setViewingQuery(item)}
                         >
-                          {item.accountManagerRemarkTitle ||
-                            item.accountManagerRemark ||
-                            '—'}
+                          {displaySenderRemarkText || '—'}
                         </span>
                       )}
                     </td>
@@ -3629,7 +3645,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   const isAssignedManagerOrAdmin =
                     belongsToManager(activeViewingQuery, currentUser) ||
                     currentUser.role === 'admin';
-                  const mgrRemarks = (activeViewingQuery.remarks || []).filter((r) => r.type === 'manager');
+                  const mgrRemarks = [...(activeViewingQuery.remarks || [])]
+                    .filter((r) => r.type === 'manager')
+                    .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
 
                   return (
                     <div className="query-view-section query-view-section--card">
@@ -3833,7 +3851,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   const isSenderOrAdmin =
                     belongsToAccountManager(activeViewingQuery, currentUser) ||
                     currentUser.role === 'admin';
-                  const senderRemarks = (activeViewingQuery.remarks || []).filter((r) => r.type === 'sender');
+                  const senderRemarks = [...(activeViewingQuery.remarks || [])]
+                    .filter((r) => r.type === 'sender')
+                    .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
 
                   return (
                     <div className="query-view-section query-view-section--card">

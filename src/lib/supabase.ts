@@ -484,11 +484,11 @@ export function mapRowToQuery(row: QueryRow): Query {
   } else if (hasManagerRemarkInLog && mgrRemarkText) {
     // If remarks_log exists but column has newer or distinct content not in the log, merge it
     const matchesAny = resolvedRemarks.some(
-      (r) => r.type === 'manager' && (r.text === mgrRemarkText || (mgrRemarkTitle && r.title === mgrRemarkTitle))
+      (r) => r.type === 'manager' && r.text.trim() === mgrRemarkText
     );
     if (!matchesAny) {
       resolvedRemarks.push({
-        id: `rmk-sync-mgr-${row.query_id}-${Date.now()}`,
+        id: `rmk-sync-mgr-${row.query_id}-${managerDoneAtMs || Date.now()}`,
         authorId: row.manager_id,
         authorName: row.manager_name,
         authorRole: 'manager',
@@ -523,11 +523,11 @@ export function mapRowToQuery(row: QueryRow): Query {
   } else if (hasSenderRemarkInLog && amRemarkText) {
     // If remarks_log exists but column has newer or distinct content not in the log, merge it
     const matchesAny = resolvedRemarks.some(
-      (r) => r.type === 'sender' && (r.text === amRemarkText || (amRemarkTitle && r.title === amRemarkTitle))
+      (r) => r.type === 'sender' && r.text.trim() === amRemarkText
     );
     if (!matchesAny) {
       resolvedRemarks.push({
-        id: `rmk-sync-am-${row.query_id}-${Date.now()}`,
+        id: `rmk-sync-am-${row.query_id}-${completedAtMs || Date.now()}`,
         authorId: row.account_manager_id,
         authorName: row.account_manager_name,
         authorRole: 'account_manager',
@@ -539,6 +539,9 @@ export function mapRowToQuery(row: QueryRow): Query {
       });
     }
   }
+
+  // Ensure remarks are always sorted chronologically (oldest to newest)
+  resolvedRemarks.sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
 
   const adminCompletedBy = row.admin_completed_by || localMeta?.adminCompletedBy || null;
   const adminCompletedAt = row.admin_completed_at || localMeta?.adminCompletedAt || null;
