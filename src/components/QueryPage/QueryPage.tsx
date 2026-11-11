@@ -39,6 +39,7 @@ import {
 } from '../../lib/dateUtils';
 import { dispatchQueryPushNotification } from '../../lib/pushDispatcher';
 import { AUTHORIZED_USERS } from '../../data/users';
+import { fetchQueryAttachmentsFromDb } from '../../lib/supabase';
 import {
   calculateReceiverOverallRating,
   calculateSenderOverallRating,
@@ -894,12 +895,42 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
   // View Query Details Pop-up Modal state (for all users)
   const [viewingQuery, setViewingQuery] = useState<Query | null>(null);
+
+  // Lazy-load attachments on-demand when opening the query details modal
+  useEffect(() => {
+    if (!viewingQuery?.queryId) return;
+    const qId = viewingQuery.queryId;
+    const hasAtt = Boolean(viewingQuery.attachments && viewingQuery.attachments.length > 0);
+    const hasMgrAtt = Boolean(viewingQuery.managerAttachments && viewingQuery.managerAttachments.length > 0);
+    if (!hasAtt && !hasMgrAtt) {
+      fetchQueryAttachmentsFromDb(qId).then(({ attachments, managerAttachments }) => {
+        if (attachments.length > 0 || managerAttachments.length > 0) {
+          setViewingQuery((prev) =>
+            prev && prev.queryId === qId
+              ? { ...prev, attachments, managerAttachments }
+              : prev
+          );
+        }
+      });
+    }
+  }, [viewingQuery?.queryId]);
+
   const activeViewingQuery = useMemo(() => {
     if (!viewingQuery) return null;
-    return (
-      queries.find((c) => c.queryId === viewingQuery.queryId) ||
-      viewingQuery
-    );
+    const fromList = queries.find((c) => c.queryId === viewingQuery.queryId);
+    if (!fromList) return viewingQuery;
+    return {
+      ...fromList,
+      ...viewingQuery,
+      attachments:
+        viewingQuery.attachments && viewingQuery.attachments.length > 0
+          ? viewingQuery.attachments
+          : fromList.attachments || [],
+      managerAttachments:
+        viewingQuery.managerAttachments && viewingQuery.managerAttachments.length > 0
+          ? viewingQuery.managerAttachments
+          : fromList.managerAttachments || [],
+    };
   }, [queries, viewingQuery]);
 
   const activeViewingLinkedAppointment = useMemo(() => {

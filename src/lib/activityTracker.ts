@@ -313,6 +313,7 @@ export async function logUserActivity(payload: {
 // Throttle presence updates
 let lastHeartbeatMs = 0;
 let lastHeartbeatPage: PageView | null = null;
+let lastDbPresenceWriteMs = 0;
 
 export async function updateUserPresence(
   user: UserAccount,
@@ -367,11 +368,14 @@ export async function updateUserPresence(
     // Silent
   }
 
-  // 3. Multi-device broadcast via Supabase Realtime WebSockets
+  // 3. Multi-device broadcast via Supabase Realtime WebSockets (in-memory, 0 DB writes, 0 disk IO)
   safeBroadcast('user_presence', presence);
 
-  // 4. Optional DB write
-  if (!isPresenceTableMissing) {
+  // 4. Optional DB write - throttled to at most once every 10 minutes (or on initial force login/navigation)
+  // WebSockets and BroadcastChannel already keep all tabs and devices 100% in sync without database disk IO!
+  const shouldWriteDb = force || (nowMs - lastDbPresenceWriteMs > 10 * 60 * 1000);
+  if (!isPresenceTableMissing && shouldWriteDb) {
+    lastDbPresenceWriteMs = nowMs;
     try {
       supabase
         .from('user_presence')
@@ -522,7 +526,7 @@ export async function fetchRecentActivitiesFromDb(
         .from('user_activities')
         .select('*')
         .order('created_at_ms', { ascending: false })
-        .limit(80);
+        .limit(40);
 
       if (error) {
         if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {

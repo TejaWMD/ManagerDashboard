@@ -724,7 +724,17 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
   };
 }
 
+let hasSeededUsersInSession = false;
+
 export async function ensureUsersSeededInDb(): Promise<void> {
+  if (hasSeededUsersInSession) return;
+  try {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('wmd_users_seeded_v1') === 'true') {
+      hasSeededUsersInSession = true;
+      return;
+    }
+  } catch {}
+
   try {
     const userRows = AUTHORIZED_USERS.map((u) => ({
       id: u.id,
@@ -747,6 +757,12 @@ export async function ensureUsersSeededInDb(): Promise<void> {
       }));
       await supabase.from('users').upsert(fallbackRows, { onConflict: 'id' });
     }
+    hasSeededUsersInSession = true;
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('wmd_users_seeded_v1', 'true');
+      }
+    } catch {}
   } catch {
     // Non-blocking if table does not exist yet
   }
@@ -792,6 +808,129 @@ export async function updateUserSettingsInDb(
 export interface FetchQueriesOptions {
   limit?: number;
   loadAll?: boolean;
+  includeAttachments?: boolean;
+}
+
+// Exclude heavy TOAST columns ('attachments', 'manager_attachments') for table list queries.
+// This prevents reading hundreds of megabytes of Base64 chunks from disk on every sync/refresh.
+export const QUERY_LIST_COLUMNS = [
+  'query_id',
+  'account_manager_id',
+  'account_manager_name',
+  'account_manager_email',
+  'manager_id',
+  'manager_name',
+  'manager_email',
+  'query_title',
+  'query_text',
+  'manager_remark_title',
+  'manager_remark',
+  'manager_done',
+  'manager_done_at',
+  'manager_done_at_ms',
+  'account_manager_remark_title',
+  'account_manager_remark',
+  'account_manager_done',
+  'status',
+  'created_at',
+  'created_at_ms',
+  'completed_at',
+  'completed_at_ms',
+  'is_delayed',
+  'delay_notified',
+  'rating',
+  'target_due_at',
+  'target_due_at_ms',
+  'extension_status',
+  'extension_requested_at',
+  'extension_proposed_due_at',
+  'extension_proposed_due_at_ms',
+  'extension_reason',
+  'extension_review_note',
+  'extension_reviewed_at',
+  'linked_appointment_id',
+  'is_urgent',
+  'last_urgent_reminder_at_ms',
+  'remarks_log',
+  'admin_completed_by',
+  'admin_completed_at',
+  'admin_completed_at_ms',
+  'auto_completed_at',
+  'auto_completed_at_ms',
+  'completion_note',
+  'cc_users',
+].join(',');
+
+const queryAttachmentsCache = new Map<
+  string,
+  { attachments: QueryAttachment[]; managerAttachments: QueryAttachment[] }
+>();
+
+export async function fetchQueryAttachmentsFromDb(queryId: string): Promise<{
+  attachments: QueryAttachment[];
+  managerAttachments: QueryAttachment[];
+}> {
+  if (queryAttachmentsCache.has(queryId)) {
+    return queryAttachmentsCache.get(queryId)!;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('queries')
+      .select('attachments, manager_attachments, query_text, manager_remark')
+      .eq('query_id', queryId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { attachments: [], managerAttachments: [] };
+    }
+
+    let attachments: QueryAttachment[] = [];
+    if (data.attachments) {
+      try {
+        const parsed = JSON.parse(data.attachments);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          attachments = parsed;
+        }
+      } catch {}
+    }
+    if (attachments.length === 0 && data.query_text) {
+      const unpacked = unpackAttachments(data.query_text);
+      if (unpacked.attachments.length > 0) {
+        attachments = unpacked.attachments;
+      }
+    }
+
+    let managerAttachments: QueryAttachment[] = [];
+    if (data.manager_attachments) {
+      try {
+        const parsed = JSON.parse(data.manager_attachments);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          managerAttachments = parsed;
+        }
+      } catch {}
+    }
+    if (managerAttachments.length === 0 && data.manager_remark) {
+      const unpacked = unpackAttachments(data.manager_remark);
+      if (unpacked.attachments.length > 0) {
+        managerAttachments = unpacked.attachments;
+      }
+    }
+
+    const result = { attachments, managerAttachments };
+    queryAttachmentsCache.set(queryId, result);
+    return result;
+  } catch {
+    return { attachments: [], managerAttachments: [] };
+  }
+}
+
+export function invalidateQueryAttachmentsCache(queryId?: string): void {
+  if (queryId) {
+    queryAttachmentsCache.delete(queryId);
+  } else {
+    queryAttachmentsCache.clear();
+  }
 }
 
 export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise<{
@@ -802,17 +941,30 @@ export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise
 }> {
   const shouldLimit = !options?.loadAll;
   const queryLimit = options?.limit || 150;
+  const selectCols = options?.includeAttachments ? '*' : QUERY_LIST_COLUMNS;
 
   let queryBuilder = supabase
     .from('queries')
-    .select('*')
+    .select(selectCols)
     .order('created_at_ms', { ascending: false });
 
   if (shouldLimit) {
     queryBuilder = queryBuilder.limit(queryLimit);
   }
 
-  const { data, error } = await queryBuilder;
+  let { data, error } = await queryBuilder;
+
+  // Fallback to select('*') only if custom column list failed due to missing columns in DB schema
+  if (error && (error.code === '42703' || error.message?.includes('does not exist'))) {
+    let fallbackBuilder = supabase
+      .from('queries')
+      .select('*')
+      .order('created_at_ms', { ascending: false });
+    if (shouldLimit) fallbackBuilder = fallbackBuilder.limit(queryLimit);
+    const fallbackRes = await fallbackBuilder;
+    data = fallbackRes.data;
+    error = fallbackRes.error;
+  }
 
   if (error) {
     const isMissingTable =
@@ -1388,6 +1540,10 @@ export async function updateQueryInDb(
       ...(updates.receiverSenderRatedAt !== undefined ? { receiverSenderRatedAt: updates.receiverSenderRatedAt } : {}),
       ...(updates.receiverSenderRatedAtMs !== undefined ? { receiverSenderRatedAtMs: updates.receiverSenderRatedAtMs } : {}),
     });
+  }
+
+  if (updates.attachments !== undefined || updates.managerAttachments !== undefined) {
+    invalidateQueryAttachmentsCache(normalizedQueryId);
   }
 
   // Note: created_at and created_at_ms are intentionally NEVER included in updates
