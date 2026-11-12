@@ -513,7 +513,19 @@ export function isQueryDelayed(
 ): boolean {
   if (!query) return false;
 
-  // Urgent query delay rule:
+  // Exempted QRY-009 legacy
+  if (isQueryExemptFromDelay(query)) {
+    return false;
+  }
+
+  const deadlineMs = getQueryDeadlineMs(query);
+
+  // Active approved extension: NEVER delayed while within the approved extended deadline!
+  if (query.extensionStatus === 'APPROVED' && deadlineMs > 0 && nowMs <= deadlineMs) {
+    return false;
+  }
+
+  // Urgent query delay rule (unless an approved extension is active):
   // Situation 1: Manager put remark within 1 hour -> NOT delayed (completed on time)
   // Situation 2: Manager never put remark within 1 hour -> DELAYED (even when completed later)
   if (query.isUrgent) {
@@ -526,18 +538,7 @@ export function isQueryDelayed(
     return nowMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
   }
 
-  // Exempted QRY-009 legacy
-  if (isQueryExemptFromDelay(query)) {
-    return false;
-  }
-
-  const deadlineMs = getQueryDeadlineMs(query);
   if (deadlineMs <= 0) {
-    return false;
-  }
-
-  // Open query with active approved extension: NOT delayed while within extended deadline!
-  if (query.extensionStatus === 'APPROVED' && nowMs <= deadlineMs) {
     return false;
   }
 

@@ -179,6 +179,8 @@ export const App: React.FC = () => {
   queriesRef.current = queries;
   const appointmentsRef = useRef<Appointment[]>(appointments);
   appointmentsRef.current = appointments;
+  const presencesRef = useRef<Record<string, UserPresence>>(presences);
+  presencesRef.current = presences;
 
   // Initialize Service Worker for Web Push and fetch updated user phone & keys
   useEffect(() => {
@@ -536,21 +538,21 @@ export const App: React.FC = () => {
                 updated.extensionStatus
               ) {
                 if (updated.extensionStatus === 'PENDING') {
-                  if (user.id === updated.accountManagerId || user.role === 'admin') {
+                  if (belongsToAccountManager(updated, user) || user.role === 'admin') {
                     showWebNotification(
                       '⏳ Extension Requested',
                       `Manager ${updated.managerName} requested completion extension for ${updated.queryId}`
                     );
                   }
                 } else if (updated.extensionStatus === 'APPROVED') {
-                  if (user.id === updated.managerId || user.role === 'admin') {
+                  if (belongsToManager(updated, user) || user.role === 'admin') {
                     showWebNotification(
                       '✅ Extension Approved',
                       `Completion extension approved for ${updated.queryId}`
                     );
                   }
                 } else if (updated.extensionStatus === 'DECLINED') {
-                  if (user.id === updated.managerId || user.role === 'admin') {
+                  if (belongsToManager(updated, user) || user.role === 'admin') {
                     showWebNotification(
                       '❌ Extension Declined',
                       `Extension request for ${updated.queryId} was declined`
@@ -1136,7 +1138,9 @@ export const App: React.FC = () => {
     >
   ) => {
     if (!currentUser) return;
-    const existing = queries.find((c) => c.queryId === queryId);
+    const existing = queries.find(
+      (c) => c.queryId.trim().toUpperCase() === queryId.trim().toUpperCase()
+    );
     if (!existing) return;
 
     const now = new Date();
@@ -1211,14 +1215,7 @@ export const App: React.FC = () => {
     }
 
     let nextIsDelayed = false;
-    if (isUrgentQuery) {
-      const createdMs = getQueryTimestampMs(existing);
-      if (nextFirstManagerRemarkAtMs !== null) {
-        nextIsDelayed = nextFirstManagerRemarkAtMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
-      } else {
-        nextIsDelayed = nowMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
-      }
-    } else if (
+    if (
       existing.queryId &&
       (existing.queryId.trim().toUpperCase() === 'QRY-009' ||
         existing.queryId.trim().toUpperCase() === 'QRY-005')
@@ -1226,6 +1223,13 @@ export const App: React.FC = () => {
       nextIsDelayed = false;
     } else if (isApprovedExtActive) {
       nextIsDelayed = false;
+    } else if (isUrgentQuery) {
+      const createdMs = getQueryTimestampMs(existing);
+      if (nextFirstManagerRemarkAtMs !== null) {
+        nextIsDelayed = nextFirstManagerRemarkAtMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
+      } else {
+        nextIsDelayed = nowMs > createdMs + URGENT_MANAGER_REMARK_WINDOW_MS;
+      }
     } else if (nextIsCompleted) {
       nextIsDelayed = Boolean(
         wasAlreadyDelayed ||
@@ -1483,10 +1487,7 @@ export const App: React.FC = () => {
       }
 
       // Dispatch desktop background push notifications to involved users & admin
-      if (
-        updates.extensionStatus === 'PENDING' &&
-        existing.extensionStatus !== 'PENDING'
-      ) {
+      if (updates.extensionStatus === 'PENDING') {
         dispatchQueryPushNotification({
           event: 'EXTENSION_REQUESTED',
           query: data,
@@ -2235,7 +2236,7 @@ export const App: React.FC = () => {
               <button
                 type="button"
                 className="db-banner-btn"
-                onClick={loadQueries}
+                onClick={() => loadQueries()}
                 disabled={isLoadingDb}
               >
                 {isLoadingDb ? '...' : 'Retry'}
@@ -2250,7 +2251,7 @@ export const App: React.FC = () => {
             <button
               type="button"
               className="db-banner-btn"
-              onClick={loadQueries}
+              onClick={() => loadQueries()}
             >
               Retry
             </button>

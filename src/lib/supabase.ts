@@ -284,7 +284,9 @@ export function mapRowToQuery(row: QueryRow): Query {
       ? parsedCreatedMs
       : 0;
 
-  const localMeta = readLocalCompletionMetaMap()[row.query_id];
+  const normalizedQueryId = (row.query_id || '').trim().toUpperCase();
+  const metaMap = readLocalCompletionMetaMap();
+  const localMeta = metaMap[normalizedQueryId] || metaMap[row.query_id];
 
   const dbManagerDoneAtMs =
     row.manager_done_at_ms !== null && row.manager_done_at_ms !== undefined
@@ -376,14 +378,14 @@ export function mapRowToQuery(row: QueryRow): Query {
           row.query_id.trim().toUpperCase() === 'QRY-005')
     );
 
-  const computedDelayed = isExemptFromDelay
+  const computedDelayed = isApprovedExtensionActive
+    ? false
+    : isExemptFromDelay
     ? false
     : isDone
     ? completedAtMs && effectiveDeadlineMs > 0
       ? completedAtMs > effectiveDeadlineMs
       : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)
-    : isApprovedExtensionActive
-    ? false
     : Boolean(effectiveDeadlineMs > 0 && Date.now() > effectiveDeadlineMs);
 
   const { cleanText: strippedQueryText, attachments: unpackedAttachments } =
@@ -979,7 +981,7 @@ export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise
     };
   }
 
-  const rows = (data || []) as QueryRow[];
+  const rows = (data || []) as unknown as QueryRow[];
   if (rows.length > 0 && rows[0] && typeof rows[0] === 'object') {
     titleColumnsSupported = 'query_title' in rows[0];
   }

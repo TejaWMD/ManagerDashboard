@@ -1775,9 +1775,77 @@
 }
 
 .table-status-pill--ext-approved {
-  background: rgba(14, 165, 233, 0.12);
-  color: #0284c7;
-  border: 1px solid rgba(14, 165, 233, 0.35);
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+  font-weight: 700;
+}
+
+.table-status-pill--ext-declined {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  font-weight: 700;
+}
+
+.timestamp-created {
+  font-size: 0.75rem;
+  color: var(--c-espresso-light, #716250);
+  white-space: nowrap;
+}
+
+.timestamp-due {
+  font-size: 0.76rem;
+  color: var(--c-espresso, #251a0a);
+  margin-top: 0.22rem;
+  white-space: nowrap;
+}
+
+.timestamp-due--extended {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.timestamp-label {
+  font-weight: 700;
+  color: var(--c-espresso-light, #8a7863);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.due-date-val--extended {
+  color: #15803d;
+}
+
+.due-date-val--pending {
+  color: #b45309;
+}
+
+.due-date-val--urgent {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+.ext-badge-mini {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.05rem 0.35rem;
+  border-radius: 9999px;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+.ext-badge-mini--approved {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.ext-badge-mini--pending {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
 .table-action-pill-btn {
@@ -1803,6 +1871,18 @@
 
 .table-action-pill-btn--review:hover {
   background: #d97706;
+  transform: translateY(-1px);
+}
+
+.table-action-pill-btn--edit {
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.3);
+}
+
+.table-action-pill-btn--edit:hover {
+  background: #0369a1;
   transform: translateY(-1px);
 }
 

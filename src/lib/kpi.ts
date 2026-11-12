@@ -101,11 +101,11 @@ export function evaluateQueryKpi(
     query.extensionStatus === 'APPROVED' && deadlineMs > 0 && nowMs <= deadlineMs;
 
   const isPastDeadline =
-    isUrgentOverdue ||
-    (!query.isUrgent &&
-      !isQueryExemptFromDelay(query) &&
-      !isApprovedExtensionActive &&
-      (nowMs > deadlineMs || query.isDelayed === true));
+    !isApprovedExtensionActive &&
+    (isUrgentOverdue ||
+      (!query.isUrgent &&
+        !isQueryExemptFromDelay(query) &&
+        (nowMs > deadlineMs || query.isDelayed === true)));
 
   if (isPastDeadline) {
     return {
