@@ -313,10 +313,31 @@ export function isQueryDone(query: Query): boolean {
   const mgrDone = Boolean(query.managerDone);
   const senderDone = Boolean(query.accountManagerDone);
   const isBothDone = mgrDone && senderDone;
-  const isStatusCompleted = query.status === 'Completed';
+  const statusStr = (query.status || '').trim().toLowerCase();
+  const isStatusCompleted = statusStr === 'completed' || statusStr === 'done';
   const hasCompletedAt = Boolean(query.completedAtMs || query.completedAt);
   const hasAdminOrAutoCompleted = Boolean(query.adminCompletedAt || query.autoCompletedAt);
   return isBothDone || isStatusCompleted || hasCompletedAt || hasAdminOrAutoCompleted;
+}
+
+/**
+ * Returns true if an urgent query is considered completed or resolved,
+ * halting urgent reminder alerts immediately.
+ * An urgent query is resolved when:
+ * 1. Both manager & sender marked done (or status is Completed / hasCompletedAt), OR
+ * 2. Assigned manager has marked Done (the urgent resolution action is completed)
+ */
+export function isUrgentQueryCompleted(query: Query): boolean {
+  if (!query) return false;
+  const statusStr = (query.status || '').trim().toLowerCase();
+  const isStatusCompleted = statusStr === 'completed' || statusStr === 'done';
+  const hasCompletedAt = Boolean(query.completedAtMs || query.completedAt);
+  return (
+    isQueryDone(query) ||
+    Boolean(query.managerDone) ||
+    isStatusCompleted ||
+    hasCompletedAt
+  );
 }
 
 /**
@@ -448,7 +469,11 @@ export function hasManagerRemark(query: Query): boolean {
   if ((query.managerRemark || '').trim() || (query.managerRemarkTitle || '').trim()) {
     return true;
   }
-  if (query.managerDone) {
+  if (
+    query.managerDone ||
+    Boolean(query.managerDoneAt) ||
+    Boolean(query.managerDoneAtMs)
+  ) {
     return true;
   }
   if (
@@ -461,7 +486,12 @@ export function hasManagerRemark(query: Query): boolean {
 }
 
 export function isUrgentManagerRemarkOverdue(query: Query, nowMs: number = Date.now()): boolean {
-  if (!query || !query.isUrgent || isQueryDone(query)) {
+  if (
+    !query ||
+    !query.isUrgent ||
+    isQueryDone(query) ||
+    isUrgentQueryCompleted(query)
+  ) {
     return false;
   }
   if (hasManagerRemark(query)) {

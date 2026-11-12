@@ -7,6 +7,7 @@ import {
   getQueryTimestampMs,
   isQueryDelayed,
   isQueryDone,
+  isUrgentQueryCompleted,
   getFirstManagerRemarkTimestampMs,
   URGENT_MANAGER_REMARK_WINDOW_MS,
   PageView,
@@ -292,6 +293,14 @@ export const App: React.FC = () => {
       }
       setHasMoreQueries(Boolean(result.hasMore));
       persistQueriesCache(result.data);
+
+      // Register completed urgent queries so 10m reminder loops never trigger for them
+      result.data.forEach((q) => {
+        if (q.isUrgent && (isQueryDone(q) || isUrgentQueryCompleted(q))) {
+          markUrgentQueryFinished(q.queryId);
+          clearUrgentReminderLocally(q.queryId);
+        }
+      });
       setIsLoadingDb(false);
       return result.data;
     }
@@ -487,8 +496,9 @@ export const App: React.FC = () => {
             const prevItem = queriesRef.current.find((c) => c.queryId === updated.queryId);
 
             if (updated.isUrgent) {
-              if (isQueryDone(updated)) {
+              if (isUrgentQueryCompleted(updated)) {
                 markUrgentQueryFinished(updated.queryId);
+                clearUrgentReminderLocally(updated.queryId);
               } else {
                 unmarkUrgentQueryFinished(updated.queryId);
               }
@@ -822,8 +832,9 @@ export const App: React.FC = () => {
           };
         });
       } else if (data?.type === 'QUERY_UPDATED' && data.query) {
-        if (data.query.isUrgent && isQueryDone(data.query)) {
+        if (data.query.isUrgent && isUrgentQueryCompleted(data.query)) {
           markUrgentQueryFinished(data.query.queryId);
+          clearUrgentReminderLocally(data.query.queryId);
         }
         setQueries((prev) => {
           const exists = prev.some(
@@ -841,6 +852,7 @@ export const App: React.FC = () => {
         });
       } else if (data?.type === 'URGENT_QUERY_COMPLETED' && data.queryId) {
         markUrgentQueryFinished(data.queryId);
+        clearUrgentReminderLocally(data.queryId);
       }
     };
 
@@ -1256,10 +1268,16 @@ export const App: React.FC = () => {
       nextIsDelayed = Boolean(effectiveDeadlineMs > 0 && nowMs > effectiveDeadlineMs);
     }
 
-    if (nextIsCompleted && isUrgentQuery) {
+    const isCompletedForUrgent =
+      nextIsCompleted ||
+      Boolean(nextManagerDone) ||
+      (Boolean(nextStatus) && nextStatus.trim().toLowerCase() === 'completed') ||
+      Boolean(nextCompletedAt || nextCompletedAtMs);
+
+    if (isCompletedForUrgent && isUrgentQuery) {
       clearUrgentReminderLocally(queryId);
       markUrgentQueryFinished(queryId);
-    } else if (!nextIsCompleted && isUrgentQuery) {
+    } else if (!isCompletedForUrgent && isUrgentQuery) {
       unmarkUrgentQueryFinished(queryId);
     }
 
@@ -1413,7 +1431,7 @@ export const App: React.FC = () => {
           type: 'QUERY_UPDATED',
           query: optimisticItem,
         });
-        if (nextIsCompleted && isUrgentQuery) {
+        if (isCompletedForUrgent && isUrgentQuery) {
           bus.postMessage({
             type: 'URGENT_QUERY_COMPLETED',
             queryId: optimisticItem.queryId,
@@ -1479,7 +1497,7 @@ export const App: React.FC = () => {
             type: 'QUERY_UPDATED',
             query: data,
           });
-          if (isQueryDone(data) && data.isUrgent) {
+          if ((isUrgentQueryCompleted(data) || isQueryDone(data)) && data.isUrgent) {
             bus.postMessage({
               type: 'URGENT_QUERY_COMPLETED',
               queryId: data.queryId,

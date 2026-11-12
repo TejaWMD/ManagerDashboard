@@ -1,5 +1,11 @@
 // Background SLA Delay & Urgent Reminder Monitor for WMD Query Portal
-import { Query, isQueryDelayed, isQueryDone, UserAccount } from '../types';
+import {
+  Query,
+  isQueryDelayed,
+  isQueryDone,
+  isUrgentQueryCompleted,
+  UserAccount,
+} from '../types';
 import { supabase } from './supabase';
 import { dispatchQueryPushNotification } from './pushDispatcher';
 import { parseDateToMs } from './dateUtils';
@@ -109,8 +115,13 @@ function getLocalUrgentReminderMap(): Record<string, number> {
 
 function recordUrgentReminderLocally(queryId: string, timestampMs: number): void {
   try {
+    const norm = (queryId || '').trim().toUpperCase();
     const current = getLocalUrgentReminderMap();
     current[queryId] = timestampMs;
+    if (norm) {
+      current[norm] = timestampMs;
+      current[norm.toLowerCase()] = timestampMs;
+    }
     localStorage.setItem(URGENT_REMINDER_CACHE_KEY, JSON.stringify(current));
   } catch {
     // Ignore
@@ -119,9 +130,14 @@ function recordUrgentReminderLocally(queryId: string, timestampMs: number): void
 
 export function clearUrgentReminderLocally(queryId: string): void {
   try {
+    const norm = (queryId || '').trim().toUpperCase();
     markUrgentQueryFinished(queryId);
     const current = getLocalUrgentReminderMap();
     delete current[queryId];
+    if (norm) {
+      delete current[norm];
+      delete current[norm.toLowerCase()];
+    }
     localStorage.setItem(URGENT_REMINDER_CACHE_KEY, JSON.stringify(current));
   } catch {
     // Ignore
@@ -192,9 +208,15 @@ export async function checkAndNotifyUrgentReminders(
     const normId = (query.queryId || '').trim().toUpperCase();
 
     // 1. Immediately skip if not urgent or already verified as finished/completed
-    if (!query.isUrgent || isQueryDone(query) || isUrgentQueryFinished(normId)) {
-      if (isQueryDone(query)) {
+    const isCompleted =
+      isUrgentQueryCompleted(query) ||
+      isUrgentQueryFinished(normId) ||
+      isUrgentQueryFinished(query.queryId);
+
+    if (!query.isUrgent || isCompleted) {
+      if (isCompleted) {
         markUrgentQueryFinished(normId);
+        clearUrgentReminderLocally(normId);
       }
       continue;
     }
@@ -204,6 +226,7 @@ export async function checkAndNotifyUrgentReminders(
 
     // Last reminder time is the maximum of locally recorded reminder, DB record, or creation time
     const lastNotifiedAt = Math.max(
+      localReminders[normId] || 0,
       localReminders[query.queryId] || 0,
       query.lastUrgentReminderAtMs || 0,
       createdMs
@@ -217,34 +240,51 @@ export async function checkAndNotifyUrgentReminders(
       try {
         const { data: latestDbRow } = await supabase
           .from('queries')
-          .select('manager_done, account_manager_done, status, completed_at, completed_at_ms, last_urgent_reminder_at_ms, is_urgent')
-          .eq('query_id', query.queryId)
+          .select('query_id, manager_done, manager_remark, manager_remark_title, remarks_log, account_manager_done, status, completed_at, completed_at_ms, last_urgent_reminder_at_ms, is_urgent')
+          .ilike('query_id', normId)
           .maybeSingle();
 
         if (latestDbRow) {
           const dbMgrDone = Boolean(latestDbRow.manager_done);
           const dbSenderDone = Boolean(latestDbRow.account_manager_done);
+          const dbStatusStr = (latestDbRow.status || '').trim().toLowerCase();
+          const dbStatusCompleted = dbStatusStr === 'completed' || dbStatusStr === 'done';
+          const dbHasCompletedAt = Boolean(
+            latestDbRow.completed_at || latestDbRow.completed_at_ms
+          );
+          // If manager has completed/marked done, sender confirmed, status is completed, or completed_at is set:
+          // Urgent query is resolved!
           const dbIsDone =
-            (dbMgrDone && dbSenderDone) ||
-            latestDbRow.status === 'Completed' ||
-            Boolean(latestDbRow.completed_at) ||
-            Boolean(latestDbRow.completed_at_ms);
+            dbMgrDone ||
+            dbSenderDone ||
+            dbStatusCompleted ||
+            dbHasCompletedAt;
+
+          // Sync live DB state to in-memory query object so stale cache never misinforms the dispatcher
+          if (dbMgrDone) query.managerDone = true;
+          if (dbSenderDone) query.accountManagerDone = true;
+          if (dbStatusCompleted) query.status = 'Completed';
+          if (latestDbRow.manager_remark) query.managerRemark = latestDbRow.manager_remark;
+          if (latestDbRow.manager_remark_title) query.managerRemarkTitle = latestDbRow.manager_remark_title;
 
           if (dbIsDone || latestDbRow.is_urgent === false) {
             console.log(
-              `[SLAChecker] Urgent query ${query.queryId} is completed with both manager & sender done in DB. Halting 10m reminders.`
+              `[SLAChecker] Urgent query ${normId} is completed/resolved in DB. Halting 10m reminders.`
             );
             query.managerDone = true;
-            query.accountManagerDone = true;
-            query.status = 'Completed';
+            if (dbSenderDone || dbStatusCompleted) {
+              query.accountManagerDone = true;
+              query.status = 'Completed';
+            }
             markUrgentQueryFinished(normId);
+            clearUrgentReminderLocally(normId);
             continue;
           }
 
           // Check if another client or tab already sent a 10m reminder recently
           const dbLastReminderMs = Number(latestDbRow.last_urgent_reminder_at_ms) || 0;
           if (dbLastReminderMs > 0 && nowMs - dbLastReminderMs < URGENT_REMINDER_INTERVAL_MS) {
-            recordUrgentReminderLocally(query.queryId, dbLastReminderMs);
+            recordUrgentReminderLocally(normId, dbLastReminderMs);
             continue;
           }
         }
@@ -252,9 +292,9 @@ export async function checkAndNotifyUrgentReminders(
         console.warn('[SLAChecker] Live DB state verification error:', err);
       }
 
-      console.log(`[SLAChecker] 10m reminder due for urgent query ${query.queryId}. Triggering alert...`);
-      recordUrgentReminderLocally(query.queryId, nowMs);
-      remindedIds.push(query.queryId);
+      console.log(`[SLAChecker] 10m reminder due for urgent query ${normId}. Triggering alert...`);
+      recordUrgentReminderLocally(normId, nowMs);
+      remindedIds.push(normId);
 
       // 3. Dispatch push notification to sender, receiver, CCs, and admin
       await dispatchQueryPushNotification({
@@ -268,7 +308,7 @@ export async function checkAndNotifyUrgentReminders(
         await supabase
           .from('queries')
           .update({ last_urgent_reminder_at_ms: nowMs })
-          .eq('query_id', query.queryId);
+          .ilike('query_id', normId);
       } catch {
         // Non-blocking if column does not exist yet
       }

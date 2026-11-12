@@ -1,5 +1,17 @@
 // Notification Dispatcher & Role Matrix for WMD Query Portal
-import { Query, UserAccount, Appointment, isUrgentManagerRemarkOverdue, isQueryDone } from '../types';
+import {
+  Query,
+  UserAccount,
+  Appointment,
+  isUrgentManagerRemarkOverdue,
+  isQueryDone,
+  isUrgentQueryCompleted,
+} from '../types';
+import {
+  isUrgentQueryFinished,
+  markUrgentQueryFinished,
+  clearUrgentReminderLocally,
+} from './slaDelayChecker';
 import { AUTHORIZED_USERS } from '../data/users';
 import { supabase } from './supabase';
 import { showWebNotification } from './notifications';
@@ -179,14 +191,17 @@ export function formatNotificationContent(
       };
 
     case 'URGENT_REMINDER': {
-      const isRemarkMissing = isUrgentManagerRemarkOverdue(query);
-      const statusLabel = !query.managerDone
+      const isCompleted = isUrgentQueryCompleted(query);
+      const isRemarkMissing = !isCompleted && isUrgentManagerRemarkOverdue(query);
+      const statusLabel = isCompleted
+        ? 'Query is completed'
+        : !query.managerDone
         ? isRemarkMissing
           ? `⚠️ Overdue: Manager ${query.managerName} has NOT provided any remark within 1 hour!`
           : `Awaiting Manager ${query.managerName} resolution`
         : `Manager marked done, awaiting Sender ${query.accountManagerName} verification`;
       return {
-        title: isRemarkMissing
+        title: !isCompleted && isRemarkMissing
           ? `🚨 URGENT Warning (No Remark >1h): ${query.queryId}`
           : `🚨 Urgent Query Alert (10m): ${query.queryId}`,
         body: `Immediate action required: ${query.queryId} ("${(query.queryTitle || query.queryText).slice(0, 70)}") is pending completion (${statusLabel}).`,
@@ -207,10 +222,16 @@ export async function dispatchQueryPushNotification(
 ): Promise<{ success: boolean; recipientCount: number }> {
   const { event, query, actor, remarkText } = params;
 
-  // Once an urgent query is completed with both manager and sender done, halt 10m reminder push notifications immediately
+  // Once an urgent query is completed / resolved, halt 10m reminder push notifications immediately
   if (event === 'URGENT_REMINDER') {
-    if (isQueryDone(query)) {
-      console.log(`[PushDispatcher] Urgent query ${query.queryId} is completed with both manager & sender done. Halting 10m reminder push.`);
+    const isCompleted =
+      isUrgentQueryCompleted(query) ||
+      isUrgentQueryFinished(query.queryId);
+
+    if (isCompleted) {
+      console.log(`[PushDispatcher] Urgent query ${query.queryId} is completed. Halting 10m reminder push.`);
+      markUrgentQueryFinished(query.queryId);
+      clearUrgentReminderLocally(query.queryId);
       return { success: true, recipientCount: 0 };
     }
   }
