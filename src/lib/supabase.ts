@@ -268,9 +268,17 @@ export function unpackTitleAndDescription(
 }
 
 export function mapRowToQuery(row: QueryRow): Query {
-  const managerDone = Boolean(row.manager_done);
-  const accountManagerDone = Boolean(row.account_manager_done);
-  const isDone = managerDone && accountManagerDone;
+  const rawManagerDone = Boolean(row.manager_done);
+  const rawAccountManagerDone = Boolean(row.account_manager_done);
+  const isExplicitCompleted =
+    row.status === 'Completed' ||
+    Boolean(row.completed_at_ms) ||
+    Boolean(row.completed_at) ||
+    Boolean(row.admin_completed_at) ||
+    Boolean(row.auto_completed_at);
+  const isDone = (rawManagerDone && rawAccountManagerDone) || isExplicitCompleted;
+  const managerDone = isDone ? true : rawManagerDone;
+  const accountManagerDone = isDone ? true : rawAccountManagerDone;
   const status: QueryStatus = isDone ? 'Completed' : 'Pending';
 
   const rawCreatedMs = Number(row.created_at_ms);

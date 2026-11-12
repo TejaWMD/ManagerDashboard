@@ -1,5 +1,5 @@
 // Notification Dispatcher & Role Matrix for WMD Query Portal
-import { Query, UserAccount, Appointment, isUrgentManagerRemarkOverdue } from '../types';
+import { Query, UserAccount, Appointment, isUrgentManagerRemarkOverdue, isQueryDone } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 import { supabase } from './supabase';
 import { showWebNotification } from './notifications';
@@ -206,6 +206,14 @@ export async function dispatchQueryPushNotification(
   params: DispatchNotificationParams
 ): Promise<{ success: boolean; recipientCount: number }> {
   const { event, query, actor, remarkText } = params;
+
+  // Once an urgent query is completed with both manager and sender done, halt 10m reminder push notifications immediately
+  if (event === 'URGENT_REMINDER') {
+    if (isQueryDone(query)) {
+      console.log(`[PushDispatcher] Urgent query ${query.queryId} is completed with both manager & sender done. Halting 10m reminder push.`);
+      return { success: true, recipientCount: 0 };
+    }
+  }
 
   const recipientUserIds = computeTargetRecipients(event, query, actor.id);
   if (recipientUserIds.length === 0) {

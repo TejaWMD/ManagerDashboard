@@ -16,7 +16,48 @@ const SYSTEM_ACTOR: UserAccount = {
 
 const DELAY_NOTIFIED_CACHE_KEY = 'wm_delay_notified_cache_v1';
 const URGENT_REMINDER_CACHE_KEY = 'wm_urgent_reminder_cache_v1';
+const URGENT_COMPLETED_CACHE_KEY = 'wm_urgent_completed_cache_v1';
 export const URGENT_REMINDER_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes (600,000 ms)
+
+export function markUrgentQueryFinished(queryId: string): void {
+  try {
+    const norm = (queryId || '').trim().toUpperCase();
+    if (!norm) return;
+    const raw = localStorage.getItem(URGENT_COMPLETED_CACHE_KEY);
+    const set = new Set<string>(raw ? JSON.parse(raw) : []);
+    set.add(norm);
+    localStorage.setItem(URGENT_COMPLETED_CACHE_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    // Ignore
+  }
+}
+
+export function isUrgentQueryFinished(queryId: string): boolean {
+  try {
+    const norm = (queryId || '').trim().toUpperCase();
+    if (!norm) return false;
+    const raw = localStorage.getItem(URGENT_COMPLETED_CACHE_KEY);
+    if (!raw) return false;
+    const set = new Set<string>(JSON.parse(raw));
+    return set.has(norm);
+  } catch {
+    return false;
+  }
+}
+
+export function unmarkUrgentQueryFinished(queryId: string): void {
+  try {
+    const norm = (queryId || '').trim().toUpperCase();
+    if (!norm) return;
+    const raw = localStorage.getItem(URGENT_COMPLETED_CACHE_KEY);
+    if (!raw) return;
+    const set = new Set<string>(JSON.parse(raw));
+    set.delete(norm);
+    localStorage.setItem(URGENT_COMPLETED_CACHE_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    // Ignore
+  }
+}
 
 function getLocalDelayNotifiedSet(): Set<string> {
   try {
@@ -78,6 +119,7 @@ function recordUrgentReminderLocally(queryId: string, timestampMs: number): void
 
 export function clearUrgentReminderLocally(queryId: string): void {
   try {
+    markUrgentQueryFinished(queryId);
     const current = getLocalUrgentReminderMap();
     delete current[queryId];
     localStorage.setItem(URGENT_REMINDER_CACHE_KEY, JSON.stringify(current));
@@ -147,8 +189,13 @@ export async function checkAndNotifyUrgentReminders(
   const remindedIds: string[] = [];
 
   for (const query of queries) {
-    // Only monitor urgent queries that are NOT yet completed
-    if (!query.isUrgent || isQueryDone(query)) {
+    const normId = (query.queryId || '').trim().toUpperCase();
+
+    // 1. Immediately skip if not urgent or already verified as finished/completed
+    if (!query.isUrgent || isQueryDone(query) || isUrgentQueryFinished(normId)) {
+      if (isQueryDone(query)) {
+        markUrgentQueryFinished(normId);
+      }
       continue;
     }
 
@@ -164,18 +211,59 @@ export async function checkAndNotifyUrgentReminders(
 
     // Check if 10 minutes have elapsed since creation or the last 10m reminder
     if (nowMs - lastNotifiedAt >= URGENT_REMINDER_INTERVAL_MS) {
+      // 2. CRITICAL SAFEGUARD: Double-check live DB state before dispatching!
+      // This prevents idle/background tabs with stale cache from spamming alerts
+      // if manager & sender already completed this urgent query elsewhere.
+      try {
+        const { data: latestDbRow } = await supabase
+          .from('queries')
+          .select('manager_done, account_manager_done, status, completed_at, completed_at_ms, last_urgent_reminder_at_ms, is_urgent')
+          .eq('query_id', query.queryId)
+          .maybeSingle();
+
+        if (latestDbRow) {
+          const dbMgrDone = Boolean(latestDbRow.manager_done);
+          const dbSenderDone = Boolean(latestDbRow.account_manager_done);
+          const dbIsDone =
+            (dbMgrDone && dbSenderDone) ||
+            latestDbRow.status === 'Completed' ||
+            Boolean(latestDbRow.completed_at) ||
+            Boolean(latestDbRow.completed_at_ms);
+
+          if (dbIsDone || latestDbRow.is_urgent === false) {
+            console.log(
+              `[SLAChecker] Urgent query ${query.queryId} is completed with both manager & sender done in DB. Halting 10m reminders.`
+            );
+            query.managerDone = true;
+            query.accountManagerDone = true;
+            query.status = 'Completed';
+            markUrgentQueryFinished(normId);
+            continue;
+          }
+
+          // Check if another client or tab already sent a 10m reminder recently
+          const dbLastReminderMs = Number(latestDbRow.last_urgent_reminder_at_ms) || 0;
+          if (dbLastReminderMs > 0 && nowMs - dbLastReminderMs < URGENT_REMINDER_INTERVAL_MS) {
+            recordUrgentReminderLocally(query.queryId, dbLastReminderMs);
+            continue;
+          }
+        }
+      } catch (err) {
+        console.warn('[SLAChecker] Live DB state verification error:', err);
+      }
+
       console.log(`[SLAChecker] 10m reminder due for urgent query ${query.queryId}. Triggering alert...`);
       recordUrgentReminderLocally(query.queryId, nowMs);
       remindedIds.push(query.queryId);
 
-      // 1. Dispatch push notification to sender, receiver, CCs, and admin
+      // 3. Dispatch push notification to sender, receiver, CCs, and admin
       await dispatchQueryPushNotification({
         event: 'URGENT_REMINDER',
         query,
         actor: SYSTEM_ACTOR,
       });
 
-      // 2. Persist last_urgent_reminder_at_ms in Supabase
+      // 4. Persist last_urgent_reminder_at_ms in Supabase
       try {
         await supabase
           .from('queries')

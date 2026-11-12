@@ -309,7 +309,14 @@ export const DELAY_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours (86,400,000 m
 export const SENDER_GRACE_PERIOD_MS = 12 * 60 * 60 * 1000; // 12 hours (43,200,000 ms) auto-completion grace period after manager marks Done
 
 export function isQueryDone(query: Query): boolean {
-  return Boolean(query.managerDone && query.accountManagerDone);
+  if (!query) return false;
+  const mgrDone = Boolean(query.managerDone);
+  const senderDone = Boolean(query.accountManagerDone);
+  const isBothDone = mgrDone && senderDone;
+  const isStatusCompleted = query.status === 'Completed';
+  const hasCompletedAt = Boolean(query.completedAtMs || query.completedAt);
+  const hasAdminOrAutoCompleted = Boolean(query.adminCompletedAt || query.autoCompletedAt);
+  return isBothDone || isStatusCompleted || hasCompletedAt || hasAdminOrAutoCompleted;
 }
 
 /**

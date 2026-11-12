@@ -82,6 +82,8 @@ import {
   checkAndNotifyUrgentReminders,
   resetDelayNotifiedLocally,
   clearUrgentReminderLocally,
+  markUrgentQueryFinished,
+  unmarkUrgentQueryFinished,
 } from './lib/slaDelayChecker';
 import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
@@ -484,6 +486,14 @@ export const App: React.FC = () => {
             const updated = mapRowToQuery(payload.new as QueryRow);
             const prevItem = queriesRef.current.find((c) => c.queryId === updated.queryId);
 
+            if (updated.isUrgent) {
+              if (isQueryDone(updated)) {
+                markUrgentQueryFinished(updated.queryId);
+              } else {
+                unmarkUrgentQueryFinished(updated.queryId);
+              }
+            }
+
             setQueries((prev) => {
               const next = prev.map((c) =>
                 c.queryId.toUpperCase() === updated.queryId.toUpperCase() ? updated : c
@@ -812,6 +822,9 @@ export const App: React.FC = () => {
           };
         });
       } else if (data?.type === 'QUERY_UPDATED' && data.query) {
+        if (data.query.isUrgent && isQueryDone(data.query)) {
+          markUrgentQueryFinished(data.query.queryId);
+        }
         setQueries((prev) => {
           const exists = prev.some(
             (c) => c.queryId.toUpperCase() === data.query.queryId.toUpperCase()
@@ -826,6 +839,8 @@ export const App: React.FC = () => {
           persistQueriesCache(next);
           return next;
         });
+      } else if (data?.type === 'URGENT_QUERY_COMPLETED' && data.queryId) {
+        markUrgentQueryFinished(data.queryId);
       }
     };
 
@@ -1243,6 +1258,9 @@ export const App: React.FC = () => {
 
     if (nextIsCompleted && isUrgentQuery) {
       clearUrgentReminderLocally(queryId);
+      markUrgentQueryFinished(queryId);
+    } else if (!nextIsCompleted && isUrgentQuery) {
+      unmarkUrgentQueryFinished(queryId);
     }
 
     const nextManagerRemarkTitle =
@@ -1395,6 +1413,12 @@ export const App: React.FC = () => {
           type: 'QUERY_UPDATED',
           query: optimisticItem,
         });
+        if (nextIsCompleted && isUrgentQuery) {
+          bus.postMessage({
+            type: 'URGENT_QUERY_COMPLETED',
+            queryId: optimisticItem.queryId,
+          });
+        }
       } catch {}
     }
 
@@ -1455,6 +1479,12 @@ export const App: React.FC = () => {
             type: 'QUERY_UPDATED',
             query: data,
           });
+          if (isQueryDone(data) && data.isUrgent) {
+            bus.postMessage({
+              type: 'URGENT_QUERY_COMPLETED',
+              queryId: data.queryId,
+            });
+          }
         } catch {}
       }
 
