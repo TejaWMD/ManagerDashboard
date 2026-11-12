@@ -46,6 +46,7 @@ import {
   PRESENCE_STORAGE_KEY,
   ActivityRow,
   PresenceRow,
+  broadcastQueryUpdate,
   fetchRecentActivitiesFromDb,
   fetchUserPresencesFromDb,
   getCrossTabBus,
@@ -216,10 +217,14 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (queries.length === 0) return;
 
-    checkAndNotifyDelayedQueries(queries);
-    checkAndNotifyUrgentReminders(queries);
+    if (typeof document === 'undefined' || !document.hidden) {
+      checkAndNotifyDelayedQueries(queries);
+      checkAndNotifyUrgentReminders(queries);
+    }
 
     const delayTimer = window.setInterval(() => {
+      // Only run SLA and urgent reminder checks in visible/active tabs so hidden stale background tabs never fire duplicate alerts
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (queriesRef.current.length > 0) {
         checkAndNotifyDelayedQueries(queriesRef.current);
         checkAndNotifyUrgentReminders(queriesRef.current);
@@ -228,6 +233,21 @@ export const App: React.FC = () => {
 
     return () => window.clearInterval(delayTimer);
   }, [queries.length]);
+
+  // Periodically check if a newer version of the portal was deployed and seamlessly reload
+  useEffect(() => {
+    const versionTimer = window.setInterval(async () => {
+      try {
+        const hasNewVersion = await checkForAppUpdate();
+        if (hasNewVersion) {
+          await applyAppUpdate();
+        }
+      } catch {
+        // Ignore network errors
+      }
+    }, 3 * 60 * 1000);
+    return () => window.clearInterval(versionTimer);
+  }, []);
 
   const [syncToast, setSyncToast] = useState<{
     message: string;
@@ -294,11 +314,29 @@ export const App: React.FC = () => {
       setHasMoreQueries(Boolean(result.hasMore));
       persistQueriesCache(result.data);
 
-      // Register completed urgent queries so 10m reminder loops never trigger for them
+      // Register completed urgent queries so 10m reminder loops never trigger for them,
+      // and broadcast to any other open tabs (including older background tabs)
+      const bus = getCrossTabBus();
       result.data.forEach((q) => {
         if (q.isUrgent && (isQueryDone(q) || isUrgentQueryCompleted(q))) {
           markUrgentQueryFinished(q.queryId);
           clearUrgentReminderLocally(q.queryId);
+          if (bus) {
+            try {
+              bus.postMessage({
+                type: 'QUERY_UPDATED',
+                query: q,
+                data: { type: 'QUERY_UPDATED', query: q },
+              });
+              bus.postMessage({
+                type: 'URGENT_QUERY_COMPLETED',
+                queryId: q.queryId,
+                data: { type: 'URGENT_QUERY_COMPLETED', queryId: q.queryId },
+              });
+            } catch {
+              // Ignore broadcast errors
+            }
+          }
         }
       });
       setIsLoadingDb(false);
@@ -775,6 +813,43 @@ export const App: React.FC = () => {
           });
         }
       })
+      .on('broadcast', { event: 'query_updated' }, ({ payload }) => {
+        if (payload && payload.queryId) {
+          const incoming = payload as Query;
+          if (incoming.isUrgent && (isQueryDone(incoming) || isUrgentQueryCompleted(incoming))) {
+            markUrgentQueryFinished(incoming.queryId);
+            clearUrgentReminderLocally(incoming.queryId);
+          }
+          setQueries((prev) => {
+            const existing = prev.find(
+              (c) => c.queryId.toUpperCase() === incoming.queryId.toUpperCase()
+            );
+            const merged: Query = existing
+              ? {
+                  ...existing,
+                  ...incoming,
+                  attachments:
+                    incoming.attachments && incoming.attachments.length > 0
+                      ? incoming.attachments
+                      : existing.attachments || [],
+                  managerAttachments:
+                    incoming.managerAttachments && incoming.managerAttachments.length > 0
+                      ? incoming.managerAttachments
+                      : existing.managerAttachments || [],
+                }
+              : incoming;
+            const next = existing
+              ? prev.map((c) =>
+                  c.queryId.toUpperCase() === incoming.queryId.toUpperCase()
+                    ? merged
+                    : c
+                )
+              : [merged, ...prev];
+            persistQueriesCache(next);
+            return next;
+          });
+        }
+      })
       .subscribe();
 
     // Listen to local events for instantaneous 0ms local response
@@ -807,7 +882,21 @@ export const App: React.FC = () => {
     // Cross-tab broadcast bus listener (instant 0ms sync between multiple tabs/windows)
     const crossTabBus = getCrossTabBus();
     const handleCrossTabMessage = (event: MessageEvent) => {
-      const { type, data } = event.data || {};
+      const raw = event.data || {};
+      const { type, data } = raw;
+      const updatedQuery: Query | undefined =
+        type === 'QUERY_UPDATED' && raw.query
+          ? raw.query
+          : data?.type === 'QUERY_UPDATED' && data.query
+          ? data.query
+          : undefined;
+      const completedUrgentQueryId: string | undefined =
+        type === 'URGENT_QUERY_COMPLETED' && raw.queryId
+          ? raw.queryId
+          : data?.type === 'URGENT_QUERY_COMPLETED' && data.queryId
+          ? data.queryId
+          : undefined;
+
       if (type === 'activity' && data) {
         setActivities((prev) => {
           if (prev.some((a) => a.id === data.id)) return prev;
@@ -831,28 +920,47 @@ export const App: React.FC = () => {
             },
           };
         });
-      } else if (data?.type === 'QUERY_UPDATED' && data.query) {
-        if (data.query.isUrgent && isUrgentQueryCompleted(data.query)) {
-          markUrgentQueryFinished(data.query.queryId);
-          clearUrgentReminderLocally(data.query.queryId);
+      }
+
+      if (updatedQuery && updatedQuery.queryId) {
+        if (
+          updatedQuery.isUrgent &&
+          (isQueryDone(updatedQuery) || isUrgentQueryCompleted(updatedQuery))
+        ) {
+          markUrgentQueryFinished(updatedQuery.queryId);
+          clearUrgentReminderLocally(updatedQuery.queryId);
         }
         setQueries((prev) => {
           const exists = prev.some(
-            (c) => c.queryId.toUpperCase() === data.query.queryId.toUpperCase()
+            (c) => c.queryId.toUpperCase() === updatedQuery.queryId.toUpperCase()
           );
           const next = exists
             ? prev.map((c) =>
-                c.queryId.toUpperCase() === data.query.queryId.toUpperCase()
-                  ? data.query
+                c.queryId.toUpperCase() === updatedQuery.queryId.toUpperCase()
+                  ? {
+                      ...c,
+                      ...updatedQuery,
+                      attachments:
+                        updatedQuery.attachments && updatedQuery.attachments.length > 0
+                          ? updatedQuery.attachments
+                          : c.attachments || [],
+                      managerAttachments:
+                        updatedQuery.managerAttachments &&
+                        updatedQuery.managerAttachments.length > 0
+                          ? updatedQuery.managerAttachments
+                          : c.managerAttachments || [],
+                    }
                   : c
               )
-            : [data.query, ...prev];
+            : [updatedQuery, ...prev];
           persistQueriesCache(next);
           return next;
         });
-      } else if (data?.type === 'URGENT_QUERY_COMPLETED' && data.queryId) {
-        markUrgentQueryFinished(data.queryId);
-        clearUrgentReminderLocally(data.queryId);
+      }
+
+      if (completedUrgentQueryId) {
+        markUrgentQueryFinished(completedUrgentQueryId);
+        clearUrgentReminderLocally(completedUrgentQueryId);
       }
     };
 
@@ -860,12 +968,21 @@ export const App: React.FC = () => {
       crossTabBus.addEventListener('message', handleCrossTabMessage);
     }
 
-    // Storage event listener fallback (detects when other tabs log in or out)
+    // Storage event listener fallback (detects when other tabs update queries, activities, or presence)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === ACTIVITIES_STORAGE_KEY) {
         setActivities(readCachedActivities());
       } else if (e.key === PRESENCE_STORAGE_KEY) {
         setPresences(readCachedPresences());
+      } else if (e.key === STORAGE_KEY_QUERIES && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setQueries(parsed as Query[]);
+          }
+        } catch {
+          // Ignore parse errors
+        }
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -1070,6 +1187,18 @@ export const App: React.FC = () => {
         persistQueriesCache(next);
         return next;
       });
+
+      const bus = getCrossTabBus();
+      if (bus) {
+        try {
+          bus.postMessage({
+            type: 'QUERY_UPDATED',
+            query: data,
+            data: { type: 'QUERY_UPDATED', query: data },
+          });
+        } catch {}
+      }
+      broadcastQueryUpdate(data);
 
       // Bidirectionally link the appointment to this created query if linkedAppointmentId was specified
       if (payload.linkedAppointmentId) {
@@ -1367,6 +1496,13 @@ export const App: React.FC = () => {
       }
     }
 
+    const nextLastUrgentReminderAtMs =
+      isCompletedForUrgent && isUrgentQuery
+        ? 9999999999999
+        : updates.lastUrgentReminderAtMs !== undefined
+        ? updates.lastUrgentReminderAtMs
+        : existing.lastUrgentReminderAtMs;
+
     const optimisticItem: Query = {
       ...existing,
       ...updates,
@@ -1386,6 +1522,7 @@ export const App: React.FC = () => {
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
       firstManagerRemarkAtMs: nextFirstManagerRemarkAtMs,
+      lastUrgentReminderAtMs: nextLastUrgentReminderAtMs,
       adminCompletedBy:
         updates.adminCompletedBy !== undefined
           ? updates.adminCompletedBy
@@ -1423,22 +1560,25 @@ export const App: React.FC = () => {
       return next;
     });
 
-    // Broadcast optimistic query update across browser tabs in 0ms
+    // Broadcast optimistic query update across browser tabs & devices in 0ms
     const bus = getCrossTabBus();
     if (bus) {
       try {
         bus.postMessage({
           type: 'QUERY_UPDATED',
           query: optimisticItem,
+          data: { type: 'QUERY_UPDATED', query: optimisticItem },
         });
         if (isCompletedForUrgent && isUrgentQuery) {
           bus.postMessage({
             type: 'URGENT_QUERY_COMPLETED',
             queryId: optimisticItem.queryId,
+            data: { type: 'URGENT_QUERY_COMPLETED', queryId: optimisticItem.queryId },
           });
         }
       } catch {}
     }
+    broadcastQueryUpdate(optimisticItem);
 
     const dbPayload: Parameters<typeof updateQueryInDb>[1] = {
       ...updates,
@@ -1451,6 +1591,9 @@ export const App: React.FC = () => {
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
       firstManagerRemarkAtMs: nextFirstManagerRemarkAtMs,
+      ...(isCompletedForUrgent && isUrgentQuery
+        ? { lastUrgentReminderAtMs: 9999999999999 }
+        : {}),
     };
 
     if (
@@ -1496,15 +1639,18 @@ export const App: React.FC = () => {
           bus.postMessage({
             type: 'QUERY_UPDATED',
             query: data,
+            data: { type: 'QUERY_UPDATED', query: data },
           });
           if ((isUrgentQueryCompleted(data) || isQueryDone(data)) && data.isUrgent) {
             bus.postMessage({
               type: 'URGENT_QUERY_COMPLETED',
               queryId: data.queryId,
+              data: { type: 'URGENT_QUERY_COMPLETED', queryId: data.queryId },
             });
           }
         } catch {}
       }
+      broadcastQueryUpdate(data);
 
       // Synchronize appointment's queryId if linkedAppointmentId changed
       if (updates.linkedAppointmentId !== undefined) {

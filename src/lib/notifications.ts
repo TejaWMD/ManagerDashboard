@@ -189,12 +189,79 @@ function initTabDotListeners(): void {
         (event.data.type === 'SW_NOTIFICATION_RECEIVED' ||
           event.data.type === 'SHOW_NOTIFICATION')
       ) {
+        if (
+          shouldSuppressUrgentAlert(
+            event.data.title,
+            event.data.body,
+            event.data.tag,
+            event.data.data?.queryId
+          )
+        ) {
+          return;
+        }
         if (Date.now() - lastDotTriggeredAt > 2000) {
           showTabNotificationDot();
         }
       }
     });
   }
+}
+
+function shouldSuppressUrgentAlert(
+  title?: string,
+  body?: string,
+  tag?: string,
+  explicitQueryId?: string
+): boolean {
+  const isUrgentReminder =
+    (tag && tag.toLowerCase().includes('urgent_reminder')) ||
+    (title &&
+      (title.includes('Urgent Query Alert') ||
+        title.includes('URGENT Warning') ||
+        title.includes('10m Reminder')));
+
+  if (!isUrgentReminder) return false;
+
+  const combined = `${explicitQueryId || ''} ${title || ''} ${body || ''} ${tag || ''}`;
+  const match = combined.match(/QRY-\d+/i);
+  if (!match) return false;
+  const normId = match[0].toUpperCase();
+
+  try {
+    const completedRaw = localStorage.getItem('wm_urgent_completed_cache_v1');
+    if (completedRaw) {
+      const completedArr = JSON.parse(completedRaw);
+      if (Array.isArray(completedArr) && completedArr.includes(normId)) {
+        return true;
+      }
+    }
+
+    const queriesRaw = localStorage.getItem('wm_portal_queries_v4');
+    if (queriesRaw) {
+      const queries = JSON.parse(queriesRaw);
+      if (Array.isArray(queries)) {
+        const q = queries.find(
+          (item: { queryId?: string }) =>
+            (item.queryId || '').trim().toUpperCase() === normId
+        );
+        if (
+          q &&
+          (q.managerDone ||
+            q.accountManagerDone ||
+            (q.status && String(q.status).trim().toLowerCase() === 'completed') ||
+            q.completedAt ||
+            q.completedAtMs ||
+            q.isUrgent === false)
+        ) {
+          return true;
+        }
+      }
+    }
+  } catch {
+    // Ignore storage read errors
+  }
+
+  return false;
 }
 
 export function showTabNotificationDot(): void {
@@ -285,6 +352,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
     const { scriptUrl, scope } = getServiceWorkerConfig();
     const reg = await navigator.serviceWorker.register(scriptUrl, { scope });
     swRegistration = reg;
+    reg.update().catch(() => {});
     return reg;
   } catch (err) {
     console.warn('[SW] Registration failed:', err);
@@ -292,6 +360,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
       // Fallback relative register
       const regFallback = await navigator.serviceWorker.register('./sw.js');
       swRegistration = regFallback;
+      regFallback.update().catch(() => {});
       return regFallback;
     } catch {
       return null;
@@ -340,6 +409,11 @@ export async function showWebNotification(
   body: string,
   tag = 'wmd-query-alert'
 ): Promise<void> {
+  // Suppress stale urgent reminder notifications for already-completed queries
+  if (shouldSuppressUrgentAlert(title, body, tag)) {
+    return;
+  }
+
   // If user disabled notifications, do not trigger sound, tab dot or system banner
   try {
     if (localStorage.getItem('wm_notifications_disabled') === 'true') {

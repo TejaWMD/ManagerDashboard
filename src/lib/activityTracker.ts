@@ -207,6 +207,19 @@ function safeBroadcast(event: string, payload: any): void {
 }
 
 /**
+ * Broadcasts a query creation or update across all connected devices/tabs via Supabase WebSockets
+ * (without heavy attachment blobs to stay well within WebSocket payload limits).
+ */
+export function broadcastQueryUpdate(query: Query): void {
+  const lightweightQuery: Query = {
+    ...query,
+    attachments: undefined,
+    managerAttachments: undefined,
+  };
+  safeBroadcast('query_updated', lightweightQuery);
+}
+
+/**
  * Log a user action.
  * 1. Dispatches locally in 0ms (current tab).
  * 2. Broadcasts to other tabs via BroadcastChannel (0ms).

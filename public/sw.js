@@ -1,5 +1,73 @@
 // Service Worker for Manager Dashboard Desktop Push Notifications
-const SW_VERSION = 'v1.2.0';
+const SW_VERSION = 'v1.3.0';
+const SUPABASE_URL = 'https://mjrqamakqqsqqmuvaqpw.supabase.co';
+const SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnFhbWFrcXFzcXFtdXZhcXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NjQyOTgsImV4cCI6MjEwODA0MDI5OH0.5VWlGTl87khT4JHlLLoT8IAwmceToyNZcN2EjfDohKg';
+
+// Verify against live Supabase DB whether an urgent reminder notification is for an already-completed query
+async function shouldSuppressUrgentNotification(title, tag, data) {
+  try {
+    const titleStr = String(title || '');
+    const tagStr = String(tag || '').toLowerCase();
+    const eventStr = String((data && data.event) || '').toUpperCase();
+
+    const isUrgentReminder =
+      eventStr === 'URGENT_REMINDER' ||
+      tagStr.includes('urgent_reminder') ||
+      titleStr.includes('Urgent Query Alert') ||
+      titleStr.includes('URGENT Warning');
+
+    if (!isUrgentReminder) {
+      return false;
+    }
+
+    const rawQueryId =
+      (data && data.queryId) ||
+      (titleStr.match(/QRY-\d+/i) && titleStr.match(/QRY-\d+/i)[0]) ||
+      (tagStr.match(/qry-\d+/i) && tagStr.match(/qry-\d+/i)[0]);
+
+    if (!rawQueryId) {
+      return false;
+    }
+
+    const normId = String(rawQueryId).trim().toUpperCase();
+    const url = `${SUPABASE_URL}/rest/v1/queries?query_id=ilike.${encodeURIComponent(
+      normId
+    )}&select=query_id,status,manager_done,account_manager_done,completed_at,completed_at_ms,is_urgent`;
+
+    const res = await fetch(url, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      cache: 'no-store',
+    });
+
+    if (res.ok) {
+      const rows = await res.json();
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (row) {
+        const statusLower = String(row.status || '').trim().toLowerCase();
+        const isResolved =
+          Boolean(row.manager_done) ||
+          Boolean(row.account_manager_done) ||
+          statusLower === 'completed' ||
+          statusLower === 'done' ||
+          Boolean(row.completed_at) ||
+          Boolean(row.completed_at_ms) ||
+          row.is_urgent === false;
+
+        if (isResolved) {
+          console.log(`[SW] Suppressed urgent reminder for resolved query ${normId}`);
+          return true;
+        }
+      }
+    }
+  } catch (err) {
+    // Non-blocking fallback
+  }
+  return false;
+}
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -53,22 +121,31 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    Promise.all([
-      self.registration.showNotification(
-        payload.title || 'WMD Query Portal',
-        notificationOptions
-      ),
-      self.clients
-        .matchAll({ type: 'window', includeUncontrolled: true })
-        .then((clientList) => {
-          for (const client of clientList) {
-            client.postMessage({
-              type: 'SW_NOTIFICATION_RECEIVED',
-              tag: notificationOptions.tag,
-            });
-          }
-        }),
-    ])
+    (async () => {
+      const suppress = await shouldSuppressUrgentNotification(
+        payload.title,
+        notificationOptions.tag,
+        notificationOptions.data
+      );
+      if (suppress) return;
+
+      await Promise.all([
+        self.registration.showNotification(
+          payload.title || 'WMD Query Portal',
+          notificationOptions
+        ),
+        self.clients
+          .matchAll({ type: 'window', includeUncontrolled: true })
+          .then((clientList) => {
+            for (const client of clientList) {
+              client.postMessage({
+                type: 'SW_NOTIFICATION_RECEIVED',
+                tag: notificationOptions.tag,
+              });
+            }
+          }),
+      ]);
+    })()
   );
 });
 
@@ -118,7 +195,15 @@ self.addEventListener('message', (event) => {
       ...options,
     };
     event.waitUntil(
-      self.registration.showNotification(title, notificationOptions)
+      (async () => {
+        const suppress = await shouldSuppressUrgentNotification(
+          title,
+          notificationOptions.tag,
+          notificationOptions.data
+        );
+        if (suppress) return;
+        await self.registration.showNotification(title, notificationOptions);
+      })()
     );
   }
 });

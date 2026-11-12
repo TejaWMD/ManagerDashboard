@@ -121,19 +121,21 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   const activeViewingQuery = useMemo(() => {
     if (!viewingQuery) return null;
-    const fromList = queries.find((c) => c.queryId === viewingQuery.queryId);
+    const fromList = queries.find(
+      (c) => c.queryId.toUpperCase() === viewingQuery.queryId.toUpperCase()
+    );
     if (!fromList) return viewingQuery;
     return {
-      ...fromList,
       ...viewingQuery,
+      ...fromList,
       attachments:
-        viewingQuery.attachments && viewingQuery.attachments.length > 0
-          ? viewingQuery.attachments
-          : fromList.attachments || [],
+        fromList.attachments && fromList.attachments.length > 0
+          ? fromList.attachments
+          : viewingQuery.attachments || [],
       managerAttachments:
-        viewingQuery.managerAttachments && viewingQuery.managerAttachments.length > 0
-          ? viewingQuery.managerAttachments
-          : fromList.managerAttachments || [],
+        fromList.managerAttachments && fromList.managerAttachments.length > 0
+          ? fromList.managerAttachments
+          : viewingQuery.managerAttachments || [],
     };
   }, [queries, viewingQuery]);
 
@@ -779,6 +781,22 @@ export const HomePage: React.FC<HomePageProps> = ({
                         Pending
                       </span>
                     )}
+
+                    {activeViewingQuery.extensionStatus === 'PENDING' && (
+                      <span className="table-status-pill table-status-pill--ext-pending">
+                        ⏳ Ext Req
+                      </span>
+                    )}
+                    {activeViewingQuery.extensionStatus === 'APPROVED' && (
+                      <span className="table-status-pill table-status-pill--ext-approved">
+                        ✅ Extended
+                      </span>
+                    )}
+                    {activeViewingQuery.extensionStatus === 'DECLINED' && (
+                      <span className="table-status-pill table-status-pill--ext-declined">
+                        ❌ Ext Declined
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span className="modal-sender-badge">
@@ -841,6 +859,63 @@ export const HomePage: React.FC<HomePageProps> = ({
                   </div>
                 </div>
               </div>
+
+              {(activeViewingQuery.extensionStatus === 'PENDING' ||
+                activeViewingQuery.extensionStatus === 'APPROVED' ||
+                activeViewingQuery.extensionStatus === 'DECLINED') && (
+                <div className="query-view-section query-view-section--extension">
+                  <span className="query-view-section-label">Extension Request Status</span>
+                  {activeViewingQuery.extensionStatus === 'PENDING' && (
+                    <div className="query-view-ext-banner query-view-ext-banner--pending">
+                      <div className="ext-banner-top">
+                        <span className="ext-banner-title">
+                          ⏳ Extension Requested by Manager {activeViewingQuery.managerName}
+                        </span>
+                        <span className="ext-proposed-pill">
+                          Proposed: {formatDateTime(activeViewingQuery.extensionProposedDueAt) || '—'}
+                        </span>
+                      </div>
+                      <p className="ext-banner-reason">
+                        <strong>Reason:</strong> {activeViewingQuery.extensionReason || '—'}
+                      </p>
+                      {activeViewingQuery.extensionRequestedAt && (
+                        <span style={{ fontSize: '0.75rem', color: '#92400e', opacity: 0.85 }}>
+                          Submitted on: {activeViewingQuery.extensionRequestedAt}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {activeViewingQuery.extensionStatus === 'APPROVED' && (
+                    <div className="query-view-ext-banner query-view-ext-banner--approved">
+                      <div className="ext-banner-top">
+                        <span>
+                          ✅ <strong>Extension Approved:</strong> New completion deadline is{' '}
+                          <strong>{formatDateTime(activeViewingQuery.targetDueAt)}</strong>.
+                        </span>
+                      </div>
+                      {activeViewingQuery.extensionReason && (
+                        <p className="ext-banner-reason" style={{ background: 'rgba(255,255,255,0.7)', color: '#166534' }}>
+                          <strong>Manager&apos;s Reason:</strong> {activeViewingQuery.extensionReason}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {activeViewingQuery.extensionStatus === 'DECLINED' && (
+                    <div className="query-view-ext-banner query-view-ext-banner--declined">
+                      <div className="ext-banner-top">
+                        <span>
+                          ❌ <strong>Extension Request Declined</strong>.
+                        </span>
+                      </div>
+                      {activeViewingQuery.extensionReviewNote && (
+                        <p className="ext-banner-reason" style={{ background: 'rgba(255,255,255,0.7)', color: '#991b1b' }}>
+                          <strong>Sender Feedback / Note:</strong> {activeViewingQuery.extensionReviewNote}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {activeViewingQuery.attachments && activeViewingQuery.attachments.length > 0 && (
                 <div className="query-view-section">

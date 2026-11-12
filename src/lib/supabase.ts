@@ -338,8 +338,13 @@ export function mapRowToQuery(row: QueryRow): Query {
   const targetDueAt =
     row.target_due_at || localMeta?.targetDueAt || null;
 
-  const extensionStatus =
-    (row.extension_status as ExtensionStatus) || localMeta?.extensionStatus || 'NONE';
+  const rawExtStatus = (row.extension_status || '').trim().toUpperCase();
+  const extensionStatus: ExtensionStatus =
+    rawExtStatus === 'PENDING' || rawExtStatus === 'APPROVED' || rawExtStatus === 'DECLINED'
+      ? (rawExtStatus as ExtensionStatus)
+      : localMeta?.extensionStatus && localMeta.extensionStatus !== 'NONE'
+      ? localMeta.extensionStatus
+      : 'NONE';
 
   const extensionRequestedAt =
     row.extension_requested_at || localMeta?.extensionRequestedAt || null;
@@ -1003,6 +1008,29 @@ export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise
   };
 }
 
+// Cache of columns discovered to be missing from the live public.queries table
+const unsupportedQueryColumns = new Set<string>();
+
+function extractMissingColumnFromError(message?: string): string | null {
+  if (!message) return null;
+  // PostgREST format: Could not find the 'first_manager_remark_at_ms' column of 'queries' in the schema cache
+  const pgrstMatch = message.match(/Could not find the '([^']+)' column/i);
+  if (pgrstMatch && pgrstMatch[1]) {
+    return pgrstMatch[1];
+  }
+  // Postgres format: column "first_manager_remark_at_ms" of relation "queries" does not exist
+  const pgMatch = message.match(/column "([^"]+)"(?: of relation "[^"]+")? does not exist/i);
+  if (pgMatch && pgMatch[1]) {
+    return pgMatch[1];
+  }
+  const pgMatchUnquoted = message.match(/column ([a-zA-Z0-9_.]+) does not exist/i);
+  if (pgMatchUnquoted && pgMatchUnquoted[1]) {
+    const parts = pgMatchUnquoted[1].split('.');
+    return parts[parts.length - 1];
+  }
+  return null;
+}
+
 function isMissingTitleColumnError(message?: string): boolean {
   if (!message) return false;
   return (
@@ -1015,6 +1043,7 @@ function isMissingTitleColumnError(message?: string): boolean {
 function isMissingExtendedColumnError(message?: string): boolean {
   if (!message) return false;
   return (
+    Boolean(extractMissingColumnFromError(message)) ||
     message.includes('completed_at') ||
     message.includes('completed_at_ms') ||
     message.includes('is_delayed') ||
@@ -1044,6 +1073,18 @@ function isMissingExtendedColumnError(message?: string): boolean {
     message.includes('auto_completed_at_ms') ||
     message.includes('completion_note') ||
     message.includes('cc_users') ||
+    message.includes('admin_receiver_rating') ||
+    message.includes('admin_receiver_remark') ||
+    message.includes('admin_receiver_rated_at') ||
+    message.includes('admin_receiver_rated_at_ms') ||
+    message.includes('sender_receiver_rating') ||
+    message.includes('sender_receiver_remark') ||
+    message.includes('sender_receiver_rated_at') ||
+    message.includes('sender_receiver_rated_at_ms') ||
+    message.includes('admin_sender_rating') ||
+    message.includes('admin_sender_remark') ||
+    message.includes('admin_sender_rated_at') ||
+    message.includes('admin_sender_rated_at_ms') ||
     message.includes('receiver_sender_rating') ||
     message.includes('receiver_sender_remark') ||
     message.includes('receiver_sender_rated_at') ||
@@ -1115,8 +1156,8 @@ export async function insertQueryInDb(query: Query): Promise<{
     });
   }
 
-  const rowToInsert: QueryRow =
-    titleColumnsSupported !== false
+  const payloadToInsert: Record<string, unknown> = {
+    ...(titleColumnsSupported !== false
       ? {
           ...extendedRow,
           query_title: (query.queryTitle || '').trim(),
@@ -1125,47 +1166,67 @@ export async function insertQueryInDb(query: Query): Promise<{
             query.accountManagerRemarkTitle || ''
           ).trim(),
         }
-      : extendedRow;
+      : extendedRow),
+  };
+
+  for (const col of unsupportedQueryColumns) {
+    delete payloadToInsert[col];
+  }
 
   let { data, error } = await supabase
     .from('queries')
-    .insert([rowToInsert])
+    .insert([payloadToInsert])
     .select('*')
     .single();
 
-  if (error && isMissingTitleColumnError(error.message)) {
-    titleColumnsSupported = false;
-    const retryWithoutTitles = await supabase
-      .from('queries')
-      .insert([extendedRow])
-      .select('*')
-      .single();
-    data = retryWithoutTitles.data;
-    error = retryWithoutTitles.error;
-  }
-
-  // Fallback if user hasn't run ALTER TABLE for completed_at / is_delayed yet
-  if (error && isMissingExtendedColumnError(error.message)) {
-    const retryBase = await supabase
-      .from('queries')
-      .insert([baseRow])
-      .select('*')
-      .single();
-    data = retryBase.data;
-    error = retryBase.error;
-  }
-
-  // Handle duplicate query_id collision automatically by fetching max ID from DB
-  if (error && (error.code === '23505' || error.message?.includes('duplicate key'))) {
-    const nextId = await computeNextQueryIdFromDb();
-    const retryRow = { ...extendedRow, query_id: nextId };
-    const retryDuplicate = await supabase
-      .from('queries')
-      .insert([retryRow])
-      .select('*')
-      .single();
-    data = retryDuplicate.data;
-    error = retryDuplicate.error;
+  let insertAttempts = 0;
+  while (error && insertAttempts < 20) {
+    insertAttempts++;
+    const missingCol = extractMissingColumnFromError(error.message);
+    if (missingCol && missingCol in payloadToInsert) {
+      unsupportedQueryColumns.add(missingCol);
+      delete payloadToInsert[missingCol];
+      const retryRes = await supabase
+        .from('queries')
+        .insert([payloadToInsert])
+        .select('*')
+        .single();
+      data = retryRes.data;
+      error = retryRes.error;
+    } else if (isMissingTitleColumnError(error.message)) {
+      titleColumnsSupported = false;
+      delete payloadToInsert.query_title;
+      delete payloadToInsert.manager_remark_title;
+      delete payloadToInsert.account_manager_remark_title;
+      const retryRes = await supabase
+        .from('queries')
+        .insert([payloadToInsert])
+        .select('*')
+        .single();
+      data = retryRes.data;
+      error = retryRes.error;
+    } else if (error.code === '23505' || error.message?.includes('duplicate key')) {
+      const nextId = await computeNextQueryIdFromDb();
+      payloadToInsert.query_id = nextId;
+      const retryDuplicate = await supabase
+        .from('queries')
+        .insert([payloadToInsert])
+        .select('*')
+        .single();
+      data = retryDuplicate.data;
+      error = retryDuplicate.error;
+    } else if (isMissingExtendedColumnError(error.message)) {
+      const retryBase = await supabase
+        .from('queries')
+        .insert([baseRow])
+        .select('*')
+        .single();
+      data = retryBase.data;
+      error = retryBase.error;
+      break;
+    } else {
+      break;
+    }
   }
 
   if (error) {
@@ -1558,41 +1619,75 @@ export async function updateQueryInDb(
 
   // Note: created_at and created_at_ms are intentionally NEVER included in updates
   // so the original creation timestamp is strictly preserved.
+  const payloadToUpdate: Record<string, unknown> = {
+    ...updatesWithTitles,
+  };
+  for (const col of unsupportedQueryColumns) {
+    delete payloadToUpdate[col];
+  }
+
   let { data, error } = await supabase
     .from('queries')
-    .update(updatesWithTitles)
-    .eq('query_id', normalizedQueryId)
+    .update(payloadToUpdate)
+    .ilike('query_id', normalizedQueryId)
     .select('*')
     .maybeSingle();
 
-  if (error && isMissingTitleColumnError(error.message)) {
-    titleColumnsSupported = false;
-    const retryWithoutTitles = await supabase
-      .from('queries')
-      .update(extendedUpdates)
-      .eq('query_id', normalizedQueryId)
-      .select('*')
-      .maybeSingle();
-    data = retryWithoutTitles.data;
-    error = retryWithoutTitles.error;
-  }
-
-  if (error && isMissingExtendedColumnError(error.message)) {
-    const retryBase =
-      Object.keys(baseUpdates).length > 0
-        ? await supabase
-            .from('queries')
-            .update(baseUpdates)
-            .eq('query_id', normalizedQueryId)
-            .select('*')
-            .maybeSingle()
-        : await supabase
-            .from('queries')
-            .select('*')
-            .eq('query_id', normalizedQueryId)
-            .maybeSingle();
-    data = retryBase.data;
-    error = retryBase.error;
+  let updateAttempts = 0;
+  while (error && updateAttempts < 25) {
+    updateAttempts++;
+    const missingCol = extractMissingColumnFromError(error.message);
+    if (missingCol && missingCol in payloadToUpdate) {
+      console.warn(
+        `[Supabase] Stripping unsupported column '${missingCol}' from update on ${normalizedQueryId}`
+      );
+      unsupportedQueryColumns.add(missingCol);
+      delete payloadToUpdate[missingCol];
+      if (Object.keys(payloadToUpdate).length === 0) {
+        error = null;
+        break;
+      }
+      const retryRes = await supabase
+        .from('queries')
+        .update(payloadToUpdate)
+        .ilike('query_id', normalizedQueryId)
+        .select('*')
+        .maybeSingle();
+      data = retryRes.data;
+      error = retryRes.error;
+    } else if (isMissingTitleColumnError(error.message)) {
+      titleColumnsSupported = false;
+      delete payloadToUpdate.query_title;
+      delete payloadToUpdate.manager_remark_title;
+      delete payloadToUpdate.account_manager_remark_title;
+      const retryRes = await supabase
+        .from('queries')
+        .update(payloadToUpdate)
+        .ilike('query_id', normalizedQueryId)
+        .select('*')
+        .maybeSingle();
+      data = retryRes.data;
+      error = retryRes.error;
+    } else if (isMissingExtendedColumnError(error.message)) {
+      const retryBase =
+        Object.keys(baseUpdates).length > 0
+          ? await supabase
+              .from('queries')
+              .update(baseUpdates)
+              .ilike('query_id', normalizedQueryId)
+              .select('*')
+              .maybeSingle()
+          : await supabase
+              .from('queries')
+              .select('*')
+              .ilike('query_id', normalizedQueryId)
+              .maybeSingle();
+      data = retryBase.data;
+      error = retryBase.error;
+      break;
+    } else {
+      break;
+    }
   }
 
   if (error) {
@@ -1604,7 +1699,7 @@ export async function updateQueryInDb(
     const fetchRes = await supabase
       .from('queries')
       .select('*')
-      .eq('query_id', normalizedQueryId)
+      .ilike('query_id', normalizedQueryId)
       .maybeSingle();
     data = fetchRes.data;
   }

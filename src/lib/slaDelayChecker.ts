@@ -56,10 +56,21 @@ export function unmarkUrgentQueryFinished(queryId: string): void {
     const norm = (queryId || '').trim().toUpperCase();
     if (!norm) return;
     const raw = localStorage.getItem(URGENT_COMPLETED_CACHE_KEY);
-    if (!raw) return;
-    const set = new Set<string>(JSON.parse(raw));
-    set.delete(norm);
-    localStorage.setItem(URGENT_COMPLETED_CACHE_KEY, JSON.stringify(Array.from(set)));
+    if (raw) {
+      const set = new Set<string>(JSON.parse(raw));
+      set.delete(norm);
+      localStorage.setItem(URGENT_COMPLETED_CACHE_KEY, JSON.stringify(Array.from(set)));
+    }
+    const reminderRaw = localStorage.getItem(URGENT_REMINDER_CACHE_KEY);
+    if (reminderRaw) {
+      const current = JSON.parse(reminderRaw);
+      if (current && typeof current === 'object') {
+        delete current[queryId];
+        delete current[norm];
+        delete current[norm.toLowerCase()];
+        localStorage.setItem(URGENT_REMINDER_CACHE_KEY, JSON.stringify(current));
+      }
+    }
   } catch {
     // Ignore
   }
@@ -128,15 +139,17 @@ function recordUrgentReminderLocally(queryId: string, timestampMs: number): void
   }
 }
 
+const PERMANENT_STOP_REMINDER_MS = 9999999999999;
+
 export function clearUrgentReminderLocally(queryId: string): void {
   try {
     const norm = (queryId || '').trim().toUpperCase();
     markUrgentQueryFinished(queryId);
     const current = getLocalUrgentReminderMap();
-    delete current[queryId];
+    current[queryId] = PERMANENT_STOP_REMINDER_MS;
     if (norm) {
-      delete current[norm];
-      delete current[norm.toLowerCase()];
+      current[norm] = PERMANENT_STOP_REMINDER_MS;
+      current[norm.toLowerCase()] = PERMANENT_STOP_REMINDER_MS;
     }
     localStorage.setItem(URGENT_REMINDER_CACHE_KEY, JSON.stringify(current));
   } catch {
@@ -272,12 +285,20 @@ export async function checkAndNotifyUrgentReminders(
               `[SLAChecker] Urgent query ${normId} is completed/resolved in DB. Halting 10m reminders.`
             );
             query.managerDone = true;
+            query.lastUrgentReminderAtMs = PERMANENT_STOP_REMINDER_MS;
             if (dbSenderDone || dbStatusCompleted) {
               query.accountManagerDone = true;
               query.status = 'Completed';
             }
             markUrgentQueryFinished(normId);
             clearUrgentReminderLocally(normId);
+            if ((Number(latestDbRow.last_urgent_reminder_at_ms) || 0) < PERMANENT_STOP_REMINDER_MS) {
+              supabase
+                .from('queries')
+                .update({ last_urgent_reminder_at_ms: PERMANENT_STOP_REMINDER_MS })
+                .ilike('query_id', normId)
+                .then(() => {});
+            }
             continue;
           }
 

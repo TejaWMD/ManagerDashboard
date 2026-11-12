@@ -23,6 +23,8 @@ const VAPID_SUBJECT =
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
 interface PushPayload {
+  event?: string;
+  queryId?: string;
   recipientUserIds: string[];
   title: string;
   body: string;
@@ -45,7 +47,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey =
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
       Deno.env.get('SUPABASE_ANON_KEY') ||
-      '';
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnFhbWFrcXFzcXFtdXZhcXB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NjQyOTgsImV4cCI6MjEwODA0MDI5OH0.5VWlGTl87khT4JHlLLoT8IAwmceToyNZcN2EjfDohKg';
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -57,6 +59,60 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: 'No recipientUserIds provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // 1b. Server-side safeguard: NEVER dispatch URGENT_REMINDER or QUERY_DELAYED if the query is already completed/resolved in DB!
+    const eventType = String(body.event || data?.event || '').toUpperCase();
+    const tagStr = String(tag || '').toLowerCase();
+    const titleStr = String(title || '');
+    const isUrgentReminder =
+      eventType === 'URGENT_REMINDER' ||
+      tagStr.includes('urgent_reminder') ||
+      titleStr.includes('Urgent Query Alert') ||
+      titleStr.includes('URGENT Warning');
+
+    const rawQueryId =
+      body.queryId ||
+      (data?.queryId as string | undefined) ||
+      (titleStr.match(/QRY-\d+/i)?.[0]) ||
+      (tagStr.match(/qry-\d+/i)?.[0]);
+
+    if (isUrgentReminder && rawQueryId) {
+      const normQueryId = String(rawQueryId).trim().toUpperCase();
+      try {
+        const { data: qRow } = await supabase
+          .from('queries')
+          .select('query_id, status, manager_done, account_manager_done, completed_at, completed_at_ms, is_urgent')
+          .ilike('query_id', normQueryId)
+          .maybeSingle();
+
+        if (qRow) {
+          const statusLower = String(qRow.status || '').trim().toLowerCase();
+          const isResolved =
+            Boolean(qRow.manager_done) ||
+            Boolean(qRow.account_manager_done) ||
+            statusLower === 'completed' ||
+            statusLower === 'done' ||
+            Boolean(qRow.completed_at) ||
+            Boolean(qRow.completed_at_ms) ||
+            qRow.is_urgent === false;
+
+          if (isResolved) {
+            console.log(`[send-push] Blocked URGENT_REMINDER for resolved query ${normQueryId}`);
+            return new Response(
+              JSON.stringify({
+                success: true,
+                blockedResolvedUrgent: true,
+                queryId: normQueryId,
+                deliveredCount: 0,
+              }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+      } catch (checkErr) {
+        console.warn('[send-push] Query status check warning:', checkErr);
+      }
     }
 
     // 2. Fetch all push subscriptions belonging to the target recipients

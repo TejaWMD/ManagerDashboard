@@ -3029,7 +3029,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     )}
                     {activeViewingQuery.extensionStatus === 'APPROVED' && (
                       <span className="table-status-pill table-status-pill--ext-approved">
-                        Extended
+                        ✅ Extended
+                      </span>
+                    )}
+                    {activeViewingQuery.extensionStatus === 'DECLINED' && (
+                      <span className="table-status-pill table-status-pill--ext-declined">
+                        ❌ Ext Declined
                       </span>
                     )}
                   </div>
@@ -3058,8 +3063,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
             <div className="query-view-body">
               {/* CC View-Only Awareness Banner */}
               {(() => {
-                const isSender = currentUser.id === activeViewingQuery.accountManagerId;
-                const isAssignedMgr = currentUser.id === activeViewingQuery.managerId;
+                const isSender = belongsToAccountManager(activeViewingQuery, currentUser);
+                const isAssignedMgr = belongsToManager(activeViewingQuery, currentUser);
                 const isCc = isUserCcOnQuery(activeViewingQuery, currentUser);
                 const isCcOnly = isCc && !isSender && !isAssignedMgr && currentUser.role !== 'admin';
 
@@ -3139,7 +3144,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 <div className="query-view-meta-box query-view-meta-box--cc" style={{ gridColumn: 'span 2' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                     <span className="query-view-meta-label">👥 CC'd Members (View-Only)</span>
-                    {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && !isEditingModalCc && (
+                    {(belongsToAccountManager(activeViewingQuery, currentUser) || currentUser.role === 'admin') && !isEditingModalCc && (
                       <button
                         type="button"
                         className="btn-meta-edit-cc"
@@ -3257,7 +3262,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
               {(() => {
                 const isSenderOrAdmin =
-                  currentUser.id === activeViewingQuery.accountManagerId ||
+                  belongsToAccountManager(activeViewingQuery, currentUser) ||
                   currentUser.role === 'admin';
 
                 return (
