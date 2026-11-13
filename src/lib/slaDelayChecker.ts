@@ -181,6 +181,33 @@ export async function checkAndNotifyDelayedQueries(
       continue;
     }
 
+    // Verify live DB state before dispatching to prevent cross-device/tab duplicate alerts
+    try {
+      const { data: latestDbRow } = await supabase
+        .from('queries')
+        .select('query_id, manager_done, delay_notified, status, completed_at, completed_at_ms')
+        .eq('query_id', (query.queryId || '').trim().toUpperCase())
+        .maybeSingle();
+
+      if (latestDbRow) {
+        const dbStatus = (latestDbRow.status || '').trim().toLowerCase();
+        const dbCompleted =
+          Boolean(latestDbRow.manager_done) ||
+          dbStatus === 'completed' ||
+          dbStatus === 'done' ||
+          Boolean(latestDbRow.completed_at || latestDbRow.completed_at_ms);
+
+        if (dbCompleted || latestDbRow.delay_notified === true) {
+          query.delayNotified = Boolean(latestDbRow.delay_notified);
+          if (latestDbRow.manager_done) query.managerDone = true;
+          recordDelayNotifiedLocally(query.queryId);
+          continue;
+        }
+      }
+    } catch (err) {
+      console.warn('[SLAChecker] Live DB delay verification error:', err);
+    }
+
     console.log(`[SLAChecker] Query ${query.queryId} is delayed. Triggering alerts...`);
     recordDelayNotifiedLocally(query.queryId);
     notifiedIds.push(query.queryId);
@@ -194,12 +221,15 @@ export async function checkAndNotifyDelayedQueries(
 
     // 2. Persist delay_notified = TRUE in Supabase
     try {
-      await supabase
+      const { error: updateErr } = await supabase
         .from('queries')
         .update({ delay_notified: true })
         .eq('query_id', query.queryId);
-    } catch {
-      // Non-blocking if column does not exist yet
+      if (updateErr) {
+        console.warn('[SLAChecker] Failed to persist delay_notified in Supabase:', updateErr.message);
+      }
+    } catch (err) {
+      console.warn('[SLAChecker] Error persisting delay_notified:', err);
     }
   }
 
@@ -254,7 +284,7 @@ export async function checkAndNotifyUrgentReminders(
         const { data: latestDbRow } = await supabase
           .from('queries')
           .select('query_id, manager_done, manager_remark, manager_remark_title, remarks_log, account_manager_done, status, completed_at, completed_at_ms, last_urgent_reminder_at_ms, is_urgent')
-          .ilike('query_id', normId)
+          .eq('query_id', normId)
           .maybeSingle();
 
         if (latestDbRow) {
@@ -296,7 +326,7 @@ export async function checkAndNotifyUrgentReminders(
               supabase
                 .from('queries')
                 .update({ last_urgent_reminder_at_ms: PERMANENT_STOP_REMINDER_MS })
-                .ilike('query_id', normId)
+                .eq('query_id', normId)
                 .then(() => {});
             }
             continue;
@@ -329,7 +359,7 @@ export async function checkAndNotifyUrgentReminders(
         await supabase
           .from('queries')
           .update({ last_urgent_reminder_at_ms: nowMs })
-          .ilike('query_id', normId);
+          .eq('query_id', normId);
       } catch {
         // Non-blocking if column does not exist yet
       }

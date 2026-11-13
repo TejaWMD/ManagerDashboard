@@ -1092,6 +1092,18 @@ function isMissingExtendedColumnError(message?: string): boolean {
   );
 }
 
+export async function fetchNextQueryIdFromRpcOrDb(): Promise<string> {
+  try {
+    const { data, error } = await supabase.rpc('next_query_id');
+    if (!error && typeof data === 'string' && /^QRY-\d+$/i.test(data.trim())) {
+      return data.trim().toUpperCase();
+    }
+  } catch {
+    // RPC not deployed yet; fall back to DB scan + duplicate-key retry
+  }
+  return computeNextQueryIdFromDb();
+}
+
 async function computeNextQueryIdFromDb(): Promise<string> {
   const { data } = await supabase
     .from('queries')
@@ -1184,6 +1196,9 @@ export async function insertQueryInDb(query: Query): Promise<{
     insertAttempts++;
     const missingCol = extractMissingColumnFromError(error.message);
     if (missingCol && missingCol in payloadToInsert) {
+      console.error(
+        `[Supabase] Schema mismatch: column "${missingCol}" is missing in "queries" table and was omitted from insert.`
+      );
       unsupportedQueryColumns.add(missingCol);
       delete payloadToInsert[missingCol];
       const retryRes = await supabase
@@ -1194,6 +1209,9 @@ export async function insertQueryInDb(query: Query): Promise<{
       data = retryRes.data;
       error = retryRes.error;
     } else if (isMissingTitleColumnError(error.message)) {
+      console.error(
+        '[Supabase] Schema mismatch: title columns (query_title, manager_remark_title, account_manager_remark_title) are missing in "queries" table.'
+      );
       titleColumnsSupported = false;
       delete payloadToInsert.query_title;
       delete payloadToInsert.manager_remark_title;
@@ -1206,7 +1224,7 @@ export async function insertQueryInDb(query: Query): Promise<{
       data = retryRes.data;
       error = retryRes.error;
     } else if (error.code === '23505' || error.message?.includes('duplicate key')) {
-      const nextId = await computeNextQueryIdFromDb();
+      const nextId = await fetchNextQueryIdFromRpcOrDb();
       payloadToInsert.query_id = nextId;
       const retryDuplicate = await supabase
         .from('queries')
@@ -1216,6 +1234,10 @@ export async function insertQueryInDb(query: Query): Promise<{
       data = retryDuplicate.data;
       error = retryDuplicate.error;
     } else if (isMissingExtendedColumnError(error.message)) {
+      console.error(
+        '[Supabase] Schema mismatch: extended columns missing in "queries" table, falling back to baseRow:',
+        error.message
+      );
       const retryBase = await supabase
         .from('queries')
         .insert([baseRow])
@@ -1629,7 +1651,7 @@ export async function updateQueryInDb(
   let { data, error } = await supabase
     .from('queries')
     .update(payloadToUpdate)
-    .ilike('query_id', normalizedQueryId)
+    .eq('query_id', normalizedQueryId)
     .select('*')
     .maybeSingle();
 
@@ -1650,7 +1672,7 @@ export async function updateQueryInDb(
       const retryRes = await supabase
         .from('queries')
         .update(payloadToUpdate)
-        .ilike('query_id', normalizedQueryId)
+        .eq('query_id', normalizedQueryId)
         .select('*')
         .maybeSingle();
       data = retryRes.data;
@@ -1663,7 +1685,7 @@ export async function updateQueryInDb(
       const retryRes = await supabase
         .from('queries')
         .update(payloadToUpdate)
-        .ilike('query_id', normalizedQueryId)
+        .eq('query_id', normalizedQueryId)
         .select('*')
         .maybeSingle();
       data = retryRes.data;
@@ -1674,13 +1696,13 @@ export async function updateQueryInDb(
           ? await supabase
               .from('queries')
               .update(baseUpdates)
-              .ilike('query_id', normalizedQueryId)
+              .eq('query_id', normalizedQueryId)
               .select('*')
               .maybeSingle()
           : await supabase
               .from('queries')
               .select('*')
-              .ilike('query_id', normalizedQueryId)
+              .eq('query_id', normalizedQueryId)
               .maybeSingle();
       data = retryBase.data;
       error = retryBase.error;
@@ -1699,7 +1721,7 @@ export async function updateQueryInDb(
     const fetchRes = await supabase
       .from('queries')
       .select('*')
-      .ilike('query_id', normalizedQueryId)
+      .eq('query_id', normalizedQueryId)
       .maybeSingle();
     data = fetchRes.data;
   }
@@ -2015,6 +2037,18 @@ export async function fetchAppointmentsFromDb(): Promise<{
   };
 }
 
+export async function fetchNextAppointmentIdFromRpcOrDb(): Promise<string> {
+  try {
+    const { data, error } = await supabase.rpc('next_appointment_id');
+    if (!error && typeof data === 'string' && /^APT-\d+$/i.test(data.trim())) {
+      return data.trim().toUpperCase();
+    }
+  } catch {
+    // RPC not deployed yet; fall back to DB scan + duplicate-key retry
+  }
+  return computeNextAppointmentIdFromDb();
+}
+
 async function computeNextAppointmentIdFromDb(): Promise<string> {
   const { data } = await supabase.from('appointments').select('id');
   let maxNum = 0;
@@ -2064,9 +2098,15 @@ export async function insertAppointmentInDb(
     error = retryAfterSeed.error;
   }
 
-  // Handle duplicate ID collision automatically
-  if (error && (error.code === '23505' || error.message?.includes('duplicate key'))) {
-    const nextId = await computeNextAppointmentIdFromDb();
+  // Handle duplicate ID collision automatically (up to 5 attempts)
+  let aptDupAttempts = 0;
+  while (
+    error &&
+    aptDupAttempts < 5 &&
+    (error.code === '23505' || error.message?.includes('duplicate key'))
+  ) {
+    aptDupAttempts++;
+    const nextId = await fetchNextAppointmentIdFromRpcOrDb();
     const retryDuplicate = await supabase
       .from('appointments')
       .insert([{ ...row, id: nextId }])

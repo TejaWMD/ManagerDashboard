@@ -227,7 +227,7 @@ export const App: React.FC = () => {
         checkAndNotifyDelayedQueries(queriesRef.current);
         checkAndNotifyUrgentReminders(queriesRef.current);
       }
-    }, 60 * 1000); // Check every minute
+    }, 3 * 60 * 1000); // Check every 3 minutes to reduce Disk IO
 
     return () => window.clearInterval(delayTimer);
   }, [queries.length]);
@@ -236,8 +236,8 @@ export const App: React.FC = () => {
   useEffect(() => {
     const versionTimer = window.setInterval(async () => {
       try {
-        const hasNewVersion = await checkForAppUpdate();
-        if (hasNewVersion) {
+        const updateResult = await checkForAppUpdate();
+        if (updateResult.hasUpdate) {
           await applyAppUpdate();
         }
       } catch {
@@ -1032,7 +1032,7 @@ export const App: React.FC = () => {
     };
   }, [loadQueries, loadAppointments, loadActivities, loadPresences]);
 
-  // Real-time live presence heartbeat (paused when tab is hidden, relaxed from 25s to 45s)
+  // Real-time live presence heartbeat (paused when tab is hidden, relaxed to 3 minutes to reduce Disk IO)
   useEffect(() => {
     if (!currentUser) return;
     updateUserPresence(currentUser, activePage);
@@ -1040,7 +1040,7 @@ export const App: React.FC = () => {
       if (currentUserRef.current && !document.hidden) {
         updateUserPresence(currentUserRef.current, activePage);
       }
-    }, 45000);
+    }, 3 * 60 * 1000);
     return () => clearInterval(presenceTimer);
   }, [currentUser, activePage]);
 
