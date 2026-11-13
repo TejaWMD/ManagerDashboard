@@ -87,8 +87,12 @@ import {
   markUrgentQueryFinished,
   unmarkUrgentQueryFinished,
 } from './lib/slaDelayChecker';
-import { Login } from './components/Login/Login';
 import { Navbar } from './components/Navbar/Navbar';
+import {
+  resolveInitialSsoSession,
+  redirectToMainApp,
+  STORAGE_KEY_SESSION,
+} from './lib/sso';
 import { HomePage } from './components/HomePage/HomePage';
 import { QueryPage } from './components/QueryPage/QueryPage';
 import { KPIPage } from './components/KPIPage/KPIPage';
@@ -104,7 +108,6 @@ import './App.css';
 
 const OLD_DUMMY_STORAGE_KEY = 'wm_portal_queries_v1';
 const STORAGE_KEY_QUERIES = 'wm_portal_queries_v4';
-const STORAGE_KEY_SESSION = 'wm_portal_active_user_v1';
 
 // One-time cleanup of legacy and corrupted mock/test keys
 try {
@@ -128,19 +131,14 @@ function persistQueriesCache(list: Query[]): void {
 }
 
 export const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
-    try {
-      const saved = sessionStorage.getItem(STORAGE_KEY_SESSION);
-      if (!saved) return null;
-      const parsed = JSON.parse(saved) as UserAccount;
-      if (parsed && parsed.email) {
-        return parsed;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  });
+  const initialSsoRef = useRef<{ user: UserAccount | null; isFreshSso: boolean } | null>(null);
+  if (initialSsoRef.current === null) {
+    initialSsoRef.current = resolveInitialSsoSession();
+  }
+
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(
+    () => initialSsoRef.current?.user ?? null
+  );
 
   const [activePage, setActivePage] = useState<PageView>('home');
   const [tvMode, setTvMode] = useState<boolean>(false);
@@ -1046,36 +1044,36 @@ export const App: React.FC = () => {
     return () => clearInterval(presenceTimer);
   }, [currentUser, activePage]);
 
-  const handleLoginSuccess = (user: UserAccount) => {
-    setCurrentUser(user);
-    if (user.role === 'admin') {
+  useEffect(() => {
+    if (!currentUser) {
+      redirectToMainApp(true);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    const ssoUser = initialSsoRef.current?.user;
+    if (!ssoUser || !initialSsoRef.current?.isFreshSso) return;
+
+    if (ssoUser.role === 'admin') {
       ensureUsersSeededInDb().catch(() => {});
     }
     setAllUsers((prev) => {
-      if (prev.some((u) => u.email.toLowerCase() === user.email.toLowerCase())) {
+      if (prev.some((u) => u.email.toLowerCase() === ssoUser.email.toLowerCase())) {
         return prev;
       }
-      return [...prev, user];
+      return [...prev, ssoUser];
     });
-    setActivePage('home');
-    try {
-      sessionStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(user));
-    } catch {
-      // Ignore storage errors
-    }
     logUserActivity({
-      userId: user.id,
-      userName: user.name,
-      userEmail: user.email,
-      userRole: user.role,
+      userId: ssoUser.id,
+      userName: ssoUser.name,
+      userEmail: ssoUser.email,
+      userRole: ssoUser.role,
       actionType: 'USER_LOGIN',
-      actionTitle: `${user.name} logged in`,
+      actionTitle: `${ssoUser.name} logged in`,
       targetType: 'auth',
     });
-    updateUserPresence(user, 'home', 'Logged into portal', true);
-    loadActivities();
-    loadPresences();
-  };
+    updateUserPresence(ssoUser, 'home', 'Logged into portal', true);
+  }, []);
 
   const handleLogout = () => {
     if (currentUser) {
@@ -1090,13 +1088,16 @@ export const App: React.FC = () => {
       });
       setUserOffline(currentUser.id);
     }
-    setCurrentUser(null);
-    setActivePage('home');
     try {
       sessionStorage.removeItem(STORAGE_KEY_SESSION);
     } catch {
       // Ignore
     }
+    redirectToMainApp(false);
+  };
+
+  const handleGoToMainApp = () => {
+    redirectToMainApp(false);
   };
 
   const formatTimestamp = (date: Date) => {
@@ -2382,7 +2383,7 @@ export const App: React.FC = () => {
   };
 
   if (!currentUser) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return null;
   }
 
   const openQueriesCount = queries.filter((c) => {
@@ -2406,6 +2407,7 @@ export const App: React.FC = () => {
         activePage={activePage}
         onNavigate={setActivePage}
         onLogout={handleLogout}
+        onGoToMainApp={handleGoToMainApp}
         tvMode={tvMode}
         onToggleTvMode={() => setTvMode((prev) => !prev)}
         openQueriesCount={openQueriesCount}

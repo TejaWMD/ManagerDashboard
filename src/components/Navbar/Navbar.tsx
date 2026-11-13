@@ -8,6 +8,7 @@ interface NavbarProps {
   activePage: PageView;
   onNavigate: (page: PageView) => void;
   onLogout: () => void;
+  onGoToMainApp: () => void;
   tvMode: boolean;
   onToggleTvMode: () => void;
   openQueriesCount: number;
@@ -22,6 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activePage,
   onNavigate,
   onLogout,
+  onGoToMainApp,
   tvMode,
   onToggleTvMode,
   openQueriesCount,
@@ -86,9 +88,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             }
           }}
         >
-          <div className="mobile-header-logo">
+          <button
+            type="button"
+            className="mobile-header-logo"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMobileOpen(false);
+              onGoToMainApp();
+            }}
+            title="Back to WMD Hub"
+            aria-label="Back to WMD Hub"
+          >
             <img src={wmdLogo} alt="WMD" className="mobile-header-logo-img" />
-          </div>
+          </button>
           <div className="mobile-header-brand-text">
             <span className="mobile-header-app-name">WMD Portal</span>
             <span className="mobile-header-role-pill">{currentUser.roleLabel}</span>
@@ -188,9 +200,18 @@ export const Navbar: React.FC<NavbarProps> = ({
       >
         <div className="sidebar-top">
           <div className="sidebar-brand">
-            <div className="sidebar-logo">
+            <button
+              type="button"
+              className="sidebar-logo"
+              onClick={() => {
+                setIsMobileOpen(false);
+                onGoToMainApp();
+              }}
+              title="Back to WMD Hub"
+              aria-label="Back to WMD Hub"
+            >
               <img src={wmdLogo} alt="WMD" className="sidebar-logo-img" />
-            </div>
+            </button>
             {(!isCollapsed || isMobileOpen) && (
               <div className="sidebar-brand-text">
                 <span className="sidebar-app-name">WMD Query Portal</span>
