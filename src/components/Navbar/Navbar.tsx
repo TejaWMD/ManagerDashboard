@@ -88,19 +88,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             }
           }}
         >
-          <button
-            type="button"
-            className="mobile-header-logo"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsMobileOpen(false);
-              onGoToMainApp();
-            }}
-            title="Back to WMD Hub"
-            aria-label="Back to WMD Hub"
-          >
-            <img src={wmdLogo} alt="WMD" className="mobile-header-logo-img" />
-          </button>
           <div className="mobile-header-brand-text">
             <span className="mobile-header-app-name">WMD Portal</span>
             <span className="mobile-header-role-pill">{currentUser.roleLabel}</span>
@@ -181,6 +168,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="mobile-hamburger-badge">{openQueriesCount}</span>
             )}
           </button>
+
+          <button
+            type="button"
+            className="mobile-header-logo"
+            onClick={() => {
+              setIsMobileOpen(false);
+              onGoToMainApp();
+            }}
+            title="Back to WMD Hub"
+            aria-label="Back to WMD Hub"
+          >
+            <img src={wmdLogo} alt="WMD" className="mobile-header-logo-img" />
+          </button>
         </div>
       </header>
 
@@ -200,18 +200,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       >
         <div className="sidebar-top">
           <div className="sidebar-brand">
-            <button
-              type="button"
-              className="sidebar-logo"
-              onClick={() => {
-                setIsMobileOpen(false);
-                onGoToMainApp();
-              }}
-              title="Back to WMD Hub"
-              aria-label="Back to WMD Hub"
-            >
-              <img src={wmdLogo} alt="WMD" className="sidebar-logo-img" />
-            </button>
             {(!isCollapsed || isMobileOpen) && (
               <div className="sidebar-brand-text">
                 <span className="sidebar-app-name">WMD Query Portal</span>

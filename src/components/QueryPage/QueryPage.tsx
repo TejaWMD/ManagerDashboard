@@ -46,6 +46,7 @@ import {
   calculateSenderOverallRating,
   RECEIVER_RATING_FEATURE_START_MS,
 } from '../../lib/ratingUtils';
+import { redirectToMainApp } from '../../lib/sso';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './QueryPage.css';
 
@@ -1588,13 +1589,20 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
 
         {/* Company Logo at Top Right */}
-        <div className="header-company-logo-badge" title="WMD">
+        <button
+          type="button"
+          className="header-company-logo-badge"
+          onClick={() => redirectToMainApp()}
+          title="Back to WMD Hub"
+          aria-label="Back to WMD Hub"
+          style={{ cursor: 'pointer' }}
+        >
           <img
             src={wmdLogo}
             alt="WMD Company Logo"
             className="header-company-logo-img"
           />
-        </div>
+        </button>
       </header>
 
       <section className="queries-table-card">

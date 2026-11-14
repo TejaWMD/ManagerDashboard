@@ -8,6 +8,7 @@ import {
   calculateAllManagersKpi,
   KpiTimeWindow,
 } from '../../lib/kpi';
+import { redirectToMainApp } from '../../lib/sso';
 import wmdLogo from '../../assets/wmd-logo.jpg';
 import './KPIPage.css';
 
@@ -121,9 +122,16 @@ export const KPIPage: React.FC<KPIPageProps> = ({
             </button>
           </div>
 
-          <div className="kpi-brand-logo-badge" title="WMD">
+          <button
+            type="button"
+            className="kpi-brand-logo-badge"
+            onClick={() => redirectToMainApp()}
+            title="Back to WMD Hub"
+            aria-label="Back to WMD Hub"
+            style={{ cursor: 'pointer' }}
+          >
             <img src={wmdLogo} alt="WMD" className="kpi-brand-logo-img" />
-          </div>
+          </button>
         </div>
       </header>
 
