@@ -28,7 +28,6 @@ import {
   validateAndReadAttachments,
   MAX_FILE_SIZE_LABEL,
   MAX_FILES_PER_UPLOAD,
-  MAX_TOTAL_ATTACHMENTS_LABEL,
   downloadAttachment,
   openAttachment,
 } from '../../lib/attachments';
@@ -155,23 +154,16 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   onCreateQuery,
   onUpdateQuery,
 }) => {
-  // All potential senders (Account Managers + Managers)
   const senders = useMemo(
-    () =>
-      AUTHORIZED_USERS.filter(
-        (u) => u.role === 'account_manager' || u.role === 'manager'
-      ),
+    () => AUTHORIZED_USERS.filter((u) => u.role === 'account_manager' || u.role === 'manager'),
     []
   );
 
-  // All managers (queries can ONLY be sent to managers)
   const managers = useMemo(
     () => AUTHORIZED_USERS.filter((u) => u.role === 'manager'),
     []
   );
 
-  // Available target managers when creating a new query
-  // If currentUser is a manager, prioritize other managers so they send queries among themselves
   const targetManagersForCreation = useMemo(() => {
     if (currentUser.role === 'manager') {
       const otherManagers = managers.filter((m) => m.id !== currentUser.id);
@@ -180,16 +172,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     return managers;
   }, [currentUser, managers]);
 
-  // Live clock so Delayed status updates automatically
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 5000);
+    const timer = window.setInterval(() => setNowMs(Date.now()), 5000);
     return () => window.clearInterval(timer);
   }, []);
 
-  // Header filter states
+  // Header & Collapsible Filter states
+  const [showFiltersPanel, setShowFiltersPanel] = useState<boolean>(false);
   const [managerViewType, setManagerViewType] = useState<ManagerViewScope>('ALL');
   const [filterSenderId, setFilterSenderId] = useState<string>('ALL');
   const [filterManagerId, setFilterManagerId] = useState<string>('ALL');
@@ -199,9 +189,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   // Create modal states
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [isUrgentDraft, setIsUrgentDraft] = useState<boolean>(false);
-  const [selectedManagerId, setSelectedManagerId] = useState<string>(
-    targetManagersForCreation[0]?.id || ''
-  );
+  const [selectedManagerId, setSelectedManagerId] = useState<string>(targetManagersForCreation[0]?.id || '');
   const [selectedCcUserIds, setSelectedCcUserIds] = useState<string[]>([]);
   const [queryTitleInput, setQueryTitleInput] = useState<string>('');
   const [queryInput, setQueryInput] = useState<string>('');
@@ -222,32 +210,22 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         uploadedBy: currentUser.name,
         uploaderRole: 'sender',
       });
-      if (errors.length > 0) {
-        alert(errors.join('\n\n'));
-      }
-      if (added.length > 0) {
-        setAttachedFiles((prev) => [...prev, ...added]);
-      }
+      if (errors.length > 0) alert(errors.join('\n\n'));
+      if (added.length > 0) setAttachedFiles((prev) => [...prev, ...added]);
     } finally {
       setIsReadingFiles(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleFilesAdded(e.target.files);
-    }
+    if (e.target.files && e.target.files.length > 0) handleFilesAdded(e.target.files);
   };
 
   const handleDropFiles = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDraggingOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFilesAdded(e.dataTransfer.files);
-    }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handleFilesAdded(e.dataTransfer.files);
   };
 
   const handleRemoveAttachedFile = (id: string) => {
@@ -275,18 +253,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         uploadedBy: currentUser.name,
         uploaderRole: 'sender',
       });
-      if (errors.length > 0) {
-        alert(errors.join('\n\n'));
-      }
+      if (errors.length > 0) alert(errors.join('\n\n'));
       if (added.length > 0) {
         setDetailAttachmentsDraft((prev) => [...prev, ...added]);
         setHasUnsavedDetailChanges(true);
       }
     } finally {
       setIsReadingDetailFiles(false);
-      if (detailFileInputRef.current) {
-        detailFileInputRef.current.value = '';
-      }
+      if (detailFileInputRef.current) detailFileInputRef.current.value = '';
     }
   };
 
@@ -319,7 +293,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         attachments: detailAttachmentsDraft,
       });
 
-      // Update viewing query in state
       setViewingQuery((prev) =>
         prev
           ? {
@@ -363,9 +336,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       const previousIds = (activeViewingQuery.ccUsers || []).map((u) => u.id);
       const newlyAddedUsers = newCcUsers.filter((u) => !previousIds.includes(u.id));
 
-      await onUpdateQuery(activeViewingQuery.queryId, {
-        ccUsers: newCcUsers,
-      });
+      await onUpdateQuery(activeViewingQuery.queryId, { ccUsers: newCcUsers });
 
       setViewingQuery((prev) =>
         prev && prev.queryId === activeViewingQuery.queryId
@@ -377,7 +348,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setModalCcSaveSuccess(true);
       setTimeout(() => setModalCcSaveSuccess(false), 3500);
 
-      // Dispatch notification to newly CC'd users
       if (newlyAddedUsers.length > 0) {
         const updatedQuery = { ...activeViewingQuery, ccUsers: newCcUsers };
         dispatchQueryPushNotification({
@@ -391,13 +361,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     }
   };
 
-  // Manager Remark in-place editing in Query View modal (receiving manager & admin)
+  // Manager Remark in-place editing
   const [isEditingModalMgrRemark, setIsEditingModalMgrRemark] = useState<boolean>(false);
   const [modalMgrRemarkTitleDraft, setModalMgrRemarkTitleDraft] = useState<string>('');
   const [modalMgrRemarkDraft, setModalMgrRemarkDraft] = useState<string>('');
   const [modalMgrAttachmentsDraft, setModalMgrAttachmentsDraft] = useState<QueryAttachment[]>([]);
   const [isReadingMgrFiles, setIsReadingMgrFiles] = useState<boolean>(false);
-  const [isSavingModalMgrRemark, setIsSavingModalMgrRemark] = useState<boolean>(false);
   const [modalMgrRemarkSaveSuccess, setModalMgrRemarkSaveSuccess] = useState<boolean>(false);
   const mgrFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -411,9 +380,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         uploadedBy: currentUser.name,
         uploaderRole: 'manager',
       });
-      if (errors.length > 0) {
-        alert(errors.join('\n\n'));
-      }
+      if (errors.length > 0) alert(errors.join('\n\n'));
 
       if (added.length > 0) {
         const nextMgrAttachments = [...modalMgrAttachmentsDraft, ...added];
@@ -433,9 +400,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       }
     } finally {
       setIsReadingMgrFiles(false);
-      if (mgrFileInputRef.current) {
-        mgrFileInputRef.current.value = '';
-      }
+      if (mgrFileInputRef.current) mgrFileInputRef.current.value = '';
     }
   };
 
@@ -454,91 +419,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     }
   };
 
-  const handleSaveModalMgrRemark = async () => {
-    if (!activeViewingQuery) return;
-    setIsSavingModalMgrRemark(true);
-    try {
-      const finalTitle = modalMgrRemarkTitleDraft.trim();
-      const finalDesc = modalMgrRemarkDraft.trim();
-      await onUpdateQuery(activeViewingQuery.queryId, {
-        managerRemarkTitle: finalTitle,
-        managerRemark: finalDesc,
-        managerAttachments: modalMgrAttachmentsDraft,
-      });
-
-      setViewingQuery((prev) =>
-        prev && prev.queryId === activeViewingQuery.queryId
-          ? {
-              ...prev,
-              managerRemarkTitle: finalTitle,
-              managerRemark: finalDesc,
-              managerAttachments: modalMgrAttachmentsDraft,
-            }
-          : null
-      );
-
-      setIsEditingModalMgrRemark(false);
-      setModalMgrRemarkSaveSuccess(true);
-      setTimeout(() => setModalMgrRemarkSaveSuccess(false), 3500);
-    } finally {
-      setIsSavingModalMgrRemark(false);
-    }
-  };
-
-  const handleCancelModalMgrRemark = () => {
-    if (!activeViewingQuery) return;
-    setModalMgrRemarkTitleDraft(activeViewingQuery.managerRemarkTitle || '');
-    setModalMgrRemarkDraft(activeViewingQuery.managerRemark || '');
-    setModalMgrAttachmentsDraft(
-      activeViewingQuery.managerAttachments ? [...activeViewingQuery.managerAttachments] : []
-    );
-    setIsEditingModalMgrRemark(false);
-  };
-
-  // Sender Remark in-place editing in Query View modal (sender & admin)
+  // Sender Remark in-place editing
   const [isEditingModalSenderRemark, setIsEditingModalSenderRemark] = useState<boolean>(false);
   const [modalSenderRemarkTitleDraft, setModalSenderRemarkTitleDraft] = useState<string>('');
   const [modalSenderRemarkDraft, setModalSenderRemarkDraft] = useState<string>('');
-  const [isSavingModalSenderRemark, setIsSavingModalSenderRemark] = useState<boolean>(false);
   const [modalSenderRemarkSaveSuccess, setModalSenderRemarkSaveSuccess] = useState<boolean>(false);
 
-  const handleSaveModalSenderRemark = async () => {
-    if (!activeViewingQuery) return;
-    setIsSavingModalSenderRemark(true);
-    try {
-      const finalTitle = modalSenderRemarkTitleDraft.trim();
-      const finalDesc = modalSenderRemarkDraft.trim();
-      await onUpdateQuery(activeViewingQuery.queryId, {
-        accountManagerRemarkTitle: finalTitle,
-        accountManagerRemark: finalDesc,
-      });
-
-      setViewingQuery((prev) =>
-        prev && prev.queryId === activeViewingQuery.queryId
-          ? {
-              ...prev,
-              accountManagerRemarkTitle: finalTitle,
-              accountManagerRemark: finalDesc,
-            }
-          : null
-      );
-
-      setIsEditingModalSenderRemark(false);
-      setModalSenderRemarkSaveSuccess(true);
-      setTimeout(() => setModalSenderRemarkSaveSuccess(false), 3500);
-    } finally {
-      setIsSavingModalSenderRemark(false);
-    }
-  };
-
-  const handleCancelModalSenderRemark = () => {
-    if (!activeViewingQuery) return;
-    setModalSenderRemarkTitleDraft(activeViewingQuery.accountManagerRemarkTitle || '');
-    setModalSenderRemarkDraft(activeViewingQuery.accountManagerRemark || '');
-    setIsEditingModalSenderRemark(false);
-  };
-
-  // Timestamped Remarks Posting (for Manager & Sender)
+  // Timestamped Remarks Posting
   const [newMgrRemarkTitle, setNewMgrRemarkTitle] = useState<string>('');
   const [newMgrRemarkText, setNewMgrRemarkText] = useState<string>('');
   const [isPostingMgrRemark, setIsPostingMgrRemark] = useState<boolean>(false);
@@ -641,7 +528,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     }
   };
 
-  // If redirected from an appointment follow-up action, prefill the create query modal
   useEffect(() => {
     if (initialFollowupAppointment) {
       setShowCreateModal(true);
@@ -651,7 +537,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       );
       setSelectedAppointmentId(initialFollowupAppointment.id);
 
-      // Match target manager from the appointment
       const mgr = managers.find(
         (m) =>
           m.id === initialFollowupAppointment.receiverId ||
@@ -659,13 +544,10 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           (Array.isArray(initialFollowupAppointment.attendees) &&
             initialFollowupAppointment.attendees.some((a) => a.id === m.id))
       );
-      if (mgr) {
-        setSelectedManagerId(mgr.id);
-      }
+      if (mgr) setSelectedManagerId(mgr.id);
     }
   }, [initialFollowupAppointment, managers]);
 
-  // Keep target manager selection in sync when modal opens
   const handleOpenCreateModal = () => {
     if (targetManagersForCreation.length > 0) {
       setSelectedManagerId(targetManagersForCreation[0].id);
@@ -674,20 +556,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     setShowCreateModal(true);
   };
 
-  // Manager currently selected in Create Query modal
   const selectedManagerForCreation = useMemo(() => {
     return managers.find((m) => m.id === selectedManagerId) || null;
   }, [managers, selectedManagerId]);
 
-  // Eligible CC users when creating a query: Any user except current sender and receiving manager
   const eligibleCcUsersForCreation = useMemo(() => {
-    return AUTHORIZED_USERS.filter(
-      (u) => u.id !== currentUser.id && u.id !== selectedManagerId
-    );
+    return AUTHORIZED_USERS.filter((u) => u.id !== currentUser.id && u.id !== selectedManagerId);
   }, [currentUser.id, selectedManagerId]);
 
-  // Requirement 1: In query list, if linking an existing appointment to the query,
-  // the receiving manager should be one of the attendees in the appointment.
   const linkableAppointmentsForCreation = useMemo(() => {
     if (!selectedManagerForCreation) return [];
     return appointments.filter(
@@ -697,7 +573,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     );
   }, [appointments, currentUser, selectedManagerForCreation]);
 
-  // If receiving manager changes and the selected appointment does not include this manager, clear selection
   useEffect(() => {
     if (selectedAppointmentId && selectedManagerForCreation) {
       const apt = appointments.find((a) => a.id === selectedAppointmentId);
@@ -720,7 +595,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [mgrRemarkTitleDraft, setMgrRemarkTitleDraft] = useState<string>('');
   const [mgrRemarkDraft, setMgrRemarkDraft] = useState<string>('');
 
-  // Rating modal states (Sender rating for receiver)
+  // Rating modal states
   const [ratingModalQuery, setRatingModalQuery] = useState<Query | null>(null);
   const [ratingInput, setRatingInput] = useState<number>(0);
   const [ratingHover, setRatingHover] = useState<number>(0);
@@ -728,21 +603,19 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [ratingRemarkError, setRatingRemarkError] = useState<string>('');
   const [ratingModalCompleteOnSubmit, setRatingModalCompleteOnSubmit] = useState<boolean>(false);
 
-  // Receiver Rating modal states (Receiver rating for sender)
   const [receiverRatingModalQuery, setReceiverRatingModalQuery] = useState<Query | null>(null);
   const [receiverRatingInput, setReceiverRatingInput] = useState<number>(10);
   const [receiverRatingHover, setReceiverRatingHover] = useState<number>(0);
   const [receiverRatingRemarkInput, setReceiverRatingRemarkInput] = useState<string>('');
   const [receiverRatingRemarkError, setReceiverRatingRemarkError] = useState<string>('');
 
-  // Admin Rating modal states (for Mr. Mani on Query Page)
   const [adminRatingQuery, setAdminRatingQuery] = useState<Query | null>(null);
   const [adminRatingTargetRole, setAdminRatingTargetRole] = useState<'receiver' | 'sender'>('receiver');
   const [adminRatingInput, setAdminRatingInput] = useState<number>(10);
   const [adminRemarkInput, setAdminRemarkInput] = useState<string>('');
   const [adminRemarkError, setAdminRemarkError] = useState<string>('');
 
-  // Mandatory Solution Remark Modal state (Director Policy Requirement)
+  // Mandatory Solution Remark Modal state
   const [remarkModalQuery, setRemarkModalQuery] = useState<Query | null>(null);
   const [mandatoryRemarkTitleDraft, setMandatoryRemarkTitleDraft] = useState<string>('');
   const [mandatoryRemarkDraft, setMandatoryRemarkDraft] = useState<string>('');
@@ -751,21 +624,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const [remarkError, setRemarkError] = useState<string>('');
   const mandatoryFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Completion Extension Modal states (for Manager requesting extra time)
+  // Extension Modals
   const [extensionModalQuery, setExtensionModalQuery] = useState<Query | null>(null);
   const [extensionProposedDateInput, setExtensionProposedDateInput] = useState<string>('');
   const [extensionReasonInput, setExtensionReasonInput] = useState<string>('');
   const [extensionError, setExtensionError] = useState<string>('');
   const [isSubmittingExtension, setIsSubmittingExtension] = useState<boolean>(false);
 
-  // Review Extension Modal states (for Sender AM or Admin approving/declining)
   const [extensionReviewModalQuery, setExtensionReviewModalQuery] = useState<Query | null>(null);
   const [extensionReviewNoteInput, setExtensionReviewNoteInput] = useState<string>('');
   const [isReviewingExtension, setIsReviewingExtension] = useState<boolean>(false);
 
-  const formatTimestamp = (date: Date): string => {
-    return formatTimestampUtil(date);
-  };
+  const formatTimestamp = (date: Date): string => formatTimestampUtil(date);
 
   const openExtensionModal = (query: Query) => {
     let initialDateStr = '';
@@ -778,22 +648,17 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
     if (existingMs > Date.now()) {
       const d = new Date(existingMs);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      const hh = String(d.getHours()).padStart(2, '0');
-      const min = String(d.getMinutes()).padStart(2, '0');
-      initialDateStr = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+      initialDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate()
+      ).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     } else {
-      // Default proposed date to 3 days from now at 18:00
       const defaultDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
       defaultDate.setHours(18, 0, 0, 0);
-      const yyyy = defaultDate.getFullYear();
-      const mm = String(defaultDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(defaultDate.getDate()).padStart(2, '0');
-      const hh = String(defaultDate.getHours()).padStart(2, '0');
-      const min = String(defaultDate.getMinutes()).padStart(2, '0');
-      initialDateStr = `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+      initialDateStr = `${defaultDate.getFullYear()}-${String(defaultDate.getMonth() + 1).padStart(2, '0')}-${String(
+        defaultDate.getDate()
+      ).padStart(2, '0')}T${String(defaultDate.getHours()).padStart(2, '0')}:${String(
+        defaultDate.getMinutes()
+      ).padStart(2, '0')}`;
     }
 
     setExtensionProposedDateInput(initialDateStr);
@@ -806,17 +671,17 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     e.preventDefault();
     if (!extensionModalQuery) return;
     if (!extensionProposedDateInput) {
-      setExtensionError('Please pick a proposed completion date & time.');
+      setExtensionError('Please select a new date & time.');
       return;
     }
     const proposedMs = Date.parse(extensionProposedDateInput);
     if (Number.isNaN(proposedMs) || proposedMs <= Date.now()) {
-      setExtensionError('Proposed completion date must be in the future.');
+      setExtensionError('Proposed date must be in the future.');
       return;
     }
     const cleanReason = extensionReasonInput.trim();
     if (cleanReason.length < 5) {
-      setExtensionError('Please explain why extra time is needed (min 5 chars).');
+      setExtensionError('Please provide a reason (min 5 characters).');
       return;
     }
 
@@ -839,7 +704,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       setExtensionProposedDateInput('');
       setExtensionError('');
 
-      // Instantly update viewingQuery state if the details modal is open
       setViewingQuery((prev) =>
         prev && prev.queryId.toUpperCase() === qId.toUpperCase()
           ? {
@@ -867,7 +731,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         : null;
 
     if (!proposedDueAt || !proposedDueAtMs) {
-      alert('Cannot approve extension: No proposed extension date specified.');
+      alert('No proposed extension date specified.');
       return;
     }
 
@@ -926,10 +790,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     }
   };
 
-  // View Query Details Pop-up Modal state (for all users)
   const [viewingQuery, setViewingQuery] = useState<Query | null>(null);
 
-  // Lazy-load attachments on-demand when opening the query details modal
   useEffect(() => {
     if (!viewingQuery?.queryId) return;
     const qId = viewingQuery.queryId;
@@ -939,9 +801,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       fetchQueryAttachmentsFromDb(qId).then(({ attachments, managerAttachments }) => {
         if (attachments.length > 0 || managerAttachments.length > 0) {
           setViewingQuery((prev) =>
-            prev && prev.queryId === qId
-              ? { ...prev, attachments, managerAttachments }
-              : prev
+            prev && prev.queryId === qId ? { ...prev, attachments, managerAttachments } : prev
           );
         }
       });
@@ -950,13 +810,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
   const activeViewingQuery = useMemo(() => {
     if (!viewingQuery) return null;
-    const fromList = queries.find(
-      (c) => c.queryId.toUpperCase() === viewingQuery.queryId.toUpperCase()
-    );
+    const fromList = queries.find((c) => c.queryId.toUpperCase() === viewingQuery.queryId.toUpperCase());
     if (!fromList) return viewingQuery;
     return {
       ...viewingQuery,
-      ...fromList, // Live query state from queries list takes precedence!
+      ...fromList,
       attachments:
         fromList.attachments && fromList.attachments.length > 0
           ? fromList.attachments
@@ -973,20 +831,16 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     return getLinkedAppointmentForQuery(activeViewingQuery, appointments);
   }, [activeViewingQuery, appointments]);
 
-  // Linking an existing appointment to the currently viewed query
   const [isLinkingExistingApt, setIsLinkingExistingApt] = useState<boolean>(false);
   const [chosenExistingAptId, setChosenExistingAptId] = useState<string>('');
   const [linkExistingError, setLinkExistingError] = useState<string | null>(null);
   const [isSubmittingLinkApt, setIsSubmittingLinkApt] = useState<boolean>(false);
 
-  // CC Editing in View Query Details Modal (for Sender AM & Admin)
   const [isEditingModalCc, setIsEditingModalCc] = useState<boolean>(false);
   const [modalCcDraftIds, setModalCcDraftIds] = useState<string[]>([]);
   const [isSavingModalCc, setIsSavingModalCc] = useState<boolean>(false);
   const [modalCcSaveSuccess, setModalCcSaveSuccess] = useState<boolean>(false);
 
-  // Eligible existing appointments for the active viewing query:
-  // Must belong to currentUser AND receiving manager of activeViewingQuery must be an attendee/participant
   const linkableAppointmentsForActiveQuery = useMemo(() => {
     if (!activeViewingQuery) return [];
     const receivingManager = {
@@ -1046,7 +900,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       return;
     }
 
-    // Same query updated via background polling/realtime: only sync fields the user is not currently editing
     if (!isEditingDescription && !hasUnsavedDetailChanges) {
       setDetailTitleDraft(activeViewingQuery.queryTitle || activeViewingQuery.queryText || '');
       setDetailDescDraft(activeViewingQuery.queryText || '');
@@ -1082,10 +935,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     isEditingModalSenderRemark,
   ]);
 
-  // 1. Role-scoped queries
-  // Account Managers see queries they created + queries where they are CC'd.
-  // Managers see queries assigned to them, queries they sent, and queries where they are CC'd.
-  // Admin sees all queries.
   const roleScopedQueries = useMemo(() => {
     return queries.filter((c) => {
       if (currentUser.role === 'account_manager') {
@@ -1102,45 +951,29 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     });
   }, [queries, currentUser]);
 
-  // Count of queries where the current user is CC'd
   const ccCountForUser = useMemo(() => {
     return queries.filter((c) => isUserCcOnQuery(c, currentUser)).length;
   }, [queries, currentUser]);
 
-  // 2. Apply header filters & automatic status + timestamp sorting
   const sortedAndFilteredQueries = useMemo(() => {
     const selectedSenderObj = senders.find((s) => s.id === filterSenderId);
     const selectedMgrObj = managers.find((m) => m.id === filterManagerId);
 
     const filtered = roleScopedQueries.filter((c) => {
-      // View scope (All, Received, Sent, or CC'd to Me)
       if (managerViewType !== 'ALL') {
-        if (managerViewType === 'RECEIVED' && !belongsToManager(c, currentUser)) {
-          return false;
-        }
-        if (managerViewType === 'SENT' && !belongsToAccountManager(c, currentUser)) {
-          return false;
-        }
-        if (managerViewType === 'CC' && !isUserCcOnQuery(c, currentUser)) {
-          return false;
-        }
+        if (managerViewType === 'RECEIVED' && !belongsToManager(c, currentUser)) return false;
+        if (managerViewType === 'SENT' && !belongsToAccountManager(c, currentUser)) return false;
+        if (managerViewType === 'CC' && !isUserCcOnQuery(c, currentUser)) return false;
       }
 
-      // Sender filter (From)
-      if (filterSenderId !== 'ALL' && selectedSenderObj) {
-        if (!belongsToAccountManager(c, selectedSenderObj)) {
-          return false;
-        }
+      if (filterSenderId !== 'ALL' && selectedSenderObj && !belongsToAccountManager(c, selectedSenderObj)) {
+        return false;
       }
 
-      // Assigned Manager filter (To)
-      if (filterManagerId !== 'ALL' && selectedMgrObj) {
-        if (!belongsToManager(c, selectedMgrObj)) {
-          return false;
-        }
+      if (filterManagerId !== 'ALL' && selectedMgrObj && !belongsToManager(c, selectedMgrObj)) {
+        return false;
       }
 
-      // Status filter
       if (filterStatus !== 'ALL') {
         const done = isQueryDone(c);
         const delayed = isQueryDelayed(c, nowMs);
@@ -1151,12 +984,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         if (filterStatus === 'Pending' && !pendingUnder48h) return false;
         if (filterStatus === 'ExtensionPending' && c.extensionStatus !== 'PENDING') return false;
         if (filterStatus === 'Delayed' && !delayed) return false;
-        if (filterStatus === 'Unchecked' && (c.managerDone || c.accountManagerDone)) {
-          return false;
-        }
-        if (filterStatus === 'ManagerDone' && (!c.managerDone || c.accountManagerDone)) {
-          return false;
-        }
+        if (filterStatus === 'Unchecked' && (c.managerDone || c.accountManagerDone)) return false;
+        if (filterStatus === 'ManagerDone' && (!c.managerDone || c.accountManagerDone)) return false;
       }
 
       return true;
@@ -1165,7 +994,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     return sortQueriesByStatusAndTimestamp(filtered, timestampOrder);
   }, [
     roleScopedQueries,
-    currentUser.role,
     managerViewType,
     filterSenderId,
     filterManagerId,
@@ -1177,12 +1005,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     currentUser,
   ]);
 
-  const hasActiveFilters =
-    managerViewType !== 'ALL' ||
-    filterSenderId !== 'ALL' ||
-    filterManagerId !== 'ALL' ||
-    filterStatus !== 'ALL' ||
-    timestampOrder !== 'desc';
+  const activeFilterCount = [
+    managerViewType !== 'ALL',
+    filterSenderId !== 'ALL',
+    filterManagerId !== 'ALL',
+    filterStatus !== 'ALL',
+  ].filter(Boolean).length;
+
+  const hasActiveFilters = activeFilterCount > 0 || timestampOrder !== 'desc';
 
   const handleResetFilters = () => {
     setManagerViewType('ALL');
@@ -1196,30 +1026,19 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     if (e) e.preventDefault();
     const effectiveIsUrgent = forceUrgent !== undefined ? forceUrgent : isUrgentDraft;
 
-    if (
-      !selectedManagerId ||
-      !queryTitleInput.trim() ||
-      !queryInput.trim() ||
-      isSubmittingNew
-    ) {
-      if (!queryTitleInput.trim()) {
-        document.getElementById('query-title-input')?.focus();
-      } else if (!queryInput.trim()) {
-        document.getElementById('write-query')?.focus();
-      }
+    if (!selectedManagerId || !queryTitleInput.trim() || !queryInput.trim() || isSubmittingNew) {
+      if (!queryTitleInput.trim()) document.getElementById('query-title-input')?.focus();
+      else if (!queryInput.trim()) document.getElementById('write-query')?.focus();
       return;
     }
 
     const targetManager = managers.find((m) => m.id === selectedManagerId);
     if (!targetManager) return;
 
-    // Requirement 1: If linking an existing appointment to the query, the receiving manager must be an attendee in the appointment
     if (selectedAppointmentId) {
       const linkedApt = appointments.find((a) => a.id === selectedAppointmentId);
       if (!linkedApt || !isUserParticipantInAppointment(linkedApt, targetManager)) {
-        alert(
-          `The receiving manager (${targetManager.name}) must be one of the attendees in the linked appointment.`
-        );
+        alert(`Manager ${targetManager.name} must be an attendee in the linked appointment.`);
         return;
       }
     }
@@ -1259,17 +1078,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
   const handleUrgentButtonClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    // If query fields are already filled, submit immediately as urgent
     if (queryTitleInput.trim() && queryInput.trim() && selectedManagerId) {
       handleCreateSubmit(undefined, true);
     } else {
-      // Toggle urgent mode on and direct user to fill missing fields
       setIsUrgentDraft((prev) => !prev);
-      if (!queryTitleInput.trim()) {
-        document.getElementById('query-title-input')?.focus();
-      } else if (!queryInput.trim()) {
-        document.getElementById('write-query')?.focus();
-      }
+      if (!queryTitleInput.trim()) document.getElementById('query-title-input')?.focus();
+      else if (!queryInput.trim()) document.getElementById('write-query')?.focus();
     }
   };
 
@@ -1337,13 +1151,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   };
 
   const handleToggleManagerDone = async (item: Query) => {
-    // Only assigned manager or admin can toggle Manager Done
     const isAssigned = belongsToManager(item, currentUser);
     if (!isAssigned && currentUser.role !== 'admin') return;
 
     const nextManagerDone = !item.managerDone;
 
-    // Director policy: Mandatory Solution Remark before marking Done
     const hasExistingMgrRemark = Boolean(
       (item.managerRemarkTitle && item.managerRemarkTitle.trim()) ||
         (item.managerRemark && item.managerRemark.trim())
@@ -1359,10 +1171,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
     await onUpdateQuery(item.queryId, {
       managerDone: nextManagerDone,
-      // If manager unchecks their box, also reset sender verification so sender only checks when resolved
-      ...(!nextManagerDone && item.accountManagerDone
-        ? { accountManagerDone: false }
-        : {}),
+      ...(!nextManagerDone && item.accountManagerDone ? { accountManagerDone: false } : {}),
     });
   };
 
@@ -1372,7 +1181,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     const trimmedTitle = mandatoryRemarkTitleDraft.trim();
     const trimmedDesc = mandatoryRemarkDraft.trim();
     if (!trimmedTitle && !trimmedDesc) {
-      setRemarkError('A solution remark title and description are required before marking Done.');
+      setRemarkError('Please enter a solution remark before marking Done.');
       return;
     }
     const newRmk: QueryRemark = {
@@ -1402,14 +1211,10 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   };
 
   const handleToggleSenderDone = async (item: Query) => {
-    // Only the creator/sender or admin can toggle Sender Done
     const isSender = belongsToAccountManager(item, currentUser);
     if (!isSender && currentUser.role !== 'admin') return;
-
-    // Sender will only check the box once the query is completed by assigned manager
     if (!item.accountManagerDone && !item.managerDone) return;
 
-    // If sender is marking Done and has not rated yet, enforce mandatory rating
     if (!item.accountManagerDone && (!item.rating || item.rating < 1)) {
       setRatingModalQuery(item);
       setRatingInput(0);
@@ -1423,21 +1228,166 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     });
   };
 
-  // Helper to get role badge for sender
   const getSenderRoleBadge = (senderId: string) => {
     const userMatch = AUTHORIZED_USERS.find((u) => u.id === senderId);
     if (!userMatch) return null;
     return userMatch.role === 'manager' ? 'Mgr' : userMatch.role === 'account_manager' ? 'AM' : 'Admin';
   };
 
-  // Can current user add a query? (AMs, Managers, and Admins)
   const canAddQuery =
     currentUser.role === 'account_manager' ||
     currentUser.role === 'manager' ||
     currentUser.role === 'admin';
 
+  // Reusable status pill renderer for both table rows and detail modal
+  const renderStatusPills = (item: Query, interactiveExt = false) => {
+    const completed = isQueryDone(item);
+    const delayed = isQueryDelayed(item, nowMs);
+    const managerOnlyChecked = item.managerDone && !item.accountManagerDone;
+    const isSender = belongsToAccountManager(item, currentUser);
+    const isAdmin = currentUser.role === 'admin';
+
+    return (
+      <div className="td-status-pills-wrap">
+        {completed ? (
+          <>
+            <span className="table-status-pill table-status-pill--completed">Completed</span>
+            {item.autoCompletedAt && (
+              <span className="table-status-pill table-status-pill--auto" title={`Auto-completed on ${item.autoCompletedAt}`}>
+                ⚡ Auto
+              </span>
+            )}
+            {item.adminCompletedAt && (
+              <span className="table-status-pill table-status-pill--admin" title={`Admin completed on ${item.adminCompletedAt}`}>
+                🛡️ Admin
+              </span>
+            )}
+            {item.isUrgent && <span className="table-status-pill table-status-pill--urgent-tag">Urgent</span>}
+            {delayed && <span className="table-status-pill table-status-pill--delayed">Delayed</span>}
+          </>
+        ) : item.isUrgent ? (
+          managerOnlyChecked ? (
+            <>
+              <span className="table-status-pill table-status-pill--urgent-mgr">🚨 Urgent • Mgr Checked</span>
+              {delayed && <span className="table-status-pill table-status-pill--delayed">Delayed</span>}
+            </>
+          ) : (
+            <>
+              <span className="table-status-pill table-status-pill--urgent">🚨 Urgent</span>
+              {(() => {
+                const isOverdue = isUrgentManagerRemarkOverdue(item, nowMs);
+                const hasRemark = hasManagerRemark(item);
+                if (isOverdue || delayed) {
+                  return (
+                    <>
+                      <span className="table-status-pill table-status-pill--remark-overdue">⚠️ Remark Overdue</span>
+                      <span className="table-status-pill table-status-pill--delayed">Delayed</span>
+                    </>
+                  );
+                }
+                if (hasRemark) {
+                  return <span className="table-status-pill table-status-pill--remark-done">✅ Remark Added</span>;
+                }
+                const createdMs = getQueryTimestampMs(item);
+                const minsLeft = Math.max(1, Math.ceil((60 * 60 * 1000 - (nowMs - createdMs)) / 60000));
+                return <span className="table-status-pill table-status-pill--remark-due">⏱️ {minsLeft}m left</span>;
+              })()}
+            </>
+          )
+        ) : managerOnlyChecked ? (
+          <>
+            <span className="table-status-pill table-status-pill--mgr-done">Mgr Checked</span>
+            {delayed && <span className="table-status-pill table-status-pill--delayed">Delayed</span>}
+          </>
+        ) : delayed ? (
+          <span className="table-status-pill table-status-pill--delayed">Delayed</span>
+        ) : (
+          <span className="table-status-pill table-status-pill--pending">Pending</span>
+        )}
+
+        {item.extensionStatus === 'PENDING' && (
+          <span
+            className="table-status-pill table-status-pill--ext-pending"
+            onClick={
+              interactiveExt
+                ? (e) => {
+                    e.stopPropagation();
+                    if (isSender || isAdmin || currentUser.role === 'account_manager') {
+                      setExtensionReviewModalQuery(item);
+                    } else {
+                      openExtensionModal(item);
+                    }
+                  }
+                : undefined
+            }
+          >
+            ⏳ Ext Req
+          </span>
+        )}
+        {item.extensionStatus === 'APPROVED' && (
+          <span className="table-status-pill table-status-pill--ext-approved">✅ Extended</span>
+        )}
+        {item.extensionStatus === 'DECLINED' && (
+          <span className="table-status-pill table-status-pill--ext-declined">❌ Declined</span>
+        )}
+      </div>
+    );
+  };
+
+  // Reusable attachment card renderer
+  const renderAttachmentCard = (
+    att: QueryAttachment,
+    canRemove: boolean,
+    onRemove: (id: string) => void,
+    showDate = false
+  ) => (
+    <div key={att.id} className="query-attachment-card">
+      <div className="query-attachment-card-main">
+        <span className="query-attachment-card-icon">{getFileIcon(att.name, att.type)}</span>
+        <div className="query-attachment-card-details">
+          <div className="query-attachment-card-name" title={att.name}>
+            {att.name}
+          </div>
+          <div className="query-attachment-card-meta">
+            <span className="query-attachment-card-size">{formatFileSize(att.size)}</span>
+            {showDate && att.uploadedAt && (
+              <span className="query-attachment-card-date">&bull; {formatDate(att.uploadedAt)}</span>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="query-attachment-card-actions">
+        <button
+          type="button"
+          className="btn-attachment-action btn-attachment-action--view"
+          onClick={() => openAttachment(att)}
+        >
+          👁️ Open
+        </button>
+        <button
+          type="button"
+          className="btn-attachment-action btn-attachment-action--download"
+          onClick={() => downloadAttachment(att)}
+        >
+          ⬇️ Save
+        </button>
+        {canRemove && (
+          <button
+            type="button"
+            className="btn-attachment-action btn-attachment-action--remove"
+            onClick={() => onRemove(att.id)}
+            aria-label={`Remove ${att.name}`}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="query-page-container">
+      {/* Compact, Clean & Responsive Header */}
       <header className="query-page-header">
         <div className="query-header-title-group">
           <h1 className="query-page-title">Queries</h1>
@@ -1446,165 +1396,133 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           </span>
         </div>
 
-        <div className="query-header-controls">
-          {/* Manager View Scope Filter: All, Received, Sent, CC */}
-          {currentUser.role === 'manager' && (
-            <div className="header-filter-group">
-              <label htmlFor="filter-view-scope" className="header-filter-label">
-                View
-              </label>
-              <select
-                id="filter-view-scope"
-                className="header-filter-select"
-                value={managerViewType}
-                onChange={(e) => setManagerViewType(e.target.value as ManagerViewScope)}
-                title="Filter queries: All, Received (Assigned), Sent (By Me), or CC'd"
-              >
-                <option value="ALL">All Queries</option>
-                <option value="RECEIVED">Received (Assigned)</option>
-                <option value="SENT">Sent (By Me)</option>
-                <option value="CC">CC'd to Me ({ccCountForUser})</option>
-              </select>
-            </div>
-          )}
-
-          {/* Account Manager View Scope Filter: All, Sent, CC */}
-          {currentUser.role === 'account_manager' && (
-            <div className="header-filter-group">
-              <label htmlFor="filter-view-scope-am" className="header-filter-label">
-                View
-              </label>
-              <select
-                id="filter-view-scope-am"
-                className="header-filter-select"
-                value={managerViewType}
-                onChange={(e) => setManagerViewType(e.target.value as ManagerViewScope)}
-                title="Filter queries: All, Sent by Me, or CC'd to Me"
-              >
-                <option value="ALL">All (Mine &amp; CC'd)</option>
-                <option value="SENT">Sent (By Me)</option>
-                <option value="CC">CC'd to Me ({ccCountForUser})</option>
-              </select>
-            </div>
-          )}
-
-          {/* Quick CC Pill button for instant filtering */}
+        <div className="query-header-actions">
           {ccCountForUser > 0 && (
             <button
               type="button"
-              className={`header-cc-quick-toggle ${managerViewType === 'CC' ? 'header-cc-quick-toggle--active' : ''}`}
+              className={`header-pill-btn ${managerViewType === 'CC' ? 'header-pill-btn--active' : ''}`}
               onClick={() => setManagerViewType((prev) => (prev === 'CC' ? 'ALL' : 'CC'))}
-              title={managerViewType === 'CC' ? 'Show all queries' : 'Quick toggle to view only queries where you are CC\'d'}
             >
-              ✉️ CC'd to Me ({ccCountForUser})
+              ✉️ CC ({ccCountForUser})
             </button>
           )}
 
-          {/* Sender Filter: shown for Managers & Admin */}
-          {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
-            <div className="header-filter-group">
-              <label htmlFor="filter-sender" className="header-filter-label">
-                From
-              </label>
+          <button
+            type="button"
+            className={`header-pill-btn ${showFiltersPanel || hasActiveFilters ? 'header-pill-btn--active' : ''}`}
+            onClick={() => setShowFiltersPanel((prev) => !prev)}
+            aria-expanded={showFiltersPanel}
+          >
+            🔍 Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </button>
+
+          {canAddQuery && (
+            <button type="button" className="header-add-btn" onClick={handleOpenCreateModal}>
+              + New Query
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="header-company-logo-badge"
+            onClick={() => redirectToMainApp()}
+            title="Back to WMD Hub"
+            aria-label="Back to WMD Hub"
+          >
+            <img src={wmdLogo} alt="WMD Logo" className="header-company-logo-img" />
+          </button>
+        </div>
+
+        {/* Collapsible Filter Drawer (prevents header overflow on mobile & laptop) */}
+        {showFiltersPanel && (
+          <div className="query-filter-drawer">
+            {(currentUser.role === 'manager' || currentUser.role === 'account_manager') && (
+              <div className="filter-drawer-item">
+                <label htmlFor="filter-view-scope">Scope</label>
+                <select
+                  id="filter-view-scope"
+                  value={managerViewType}
+                  onChange={(e) => setManagerViewType(e.target.value as ManagerViewScope)}
+                >
+                  <option value="ALL">All Queries</option>
+                  {currentUser.role === 'manager' && <option value="RECEIVED">Assigned to Me</option>}
+                  <option value="SENT">Sent by Me</option>
+                  <option value="CC">CC&apos;d ({ccCountForUser})</option>
+                </select>
+              </div>
+            )}
+
+            {(currentUser.role === 'manager' || currentUser.role === 'admin') && (
+              <div className="filter-drawer-item">
+                <label htmlFor="filter-sender">Sender</label>
+                <select
+                  id="filter-sender"
+                  value={filterSenderId}
+                  onChange={(e) => setFilterSenderId(e.target.value)}
+                >
+                  <option value="ALL">All Senders</option>
+                  {senders.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.role === 'manager' ? 'Mgr' : 'AM'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="filter-drawer-item">
+              <label htmlFor="filter-mgr">Manager</label>
               <select
-                id="filter-sender"
-                className="header-filter-select"
-                value={filterSenderId}
-                onChange={(e) => setFilterSenderId(e.target.value)}
+                id="filter-mgr"
+                value={filterManagerId}
+                onChange={(e) => setFilterManagerId(e.target.value)}
               >
-                <option value="ALL">All Senders</option>
-                {senders.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.role === 'manager' ? 'Mgr' : 'AM'})
+                <option value="ALL">All Managers</option>
+                {managers.map((mgr) => (
+                  <option key={mgr.id} value={mgr.id}>
+                    {mgr.name}
                   </option>
                 ))}
               </select>
             </div>
-          )}
 
-          {/* Assigned Manager Filter: shown for all roles */}
-          <div className="header-filter-group">
-            <label htmlFor="filter-mgr" className="header-filter-label">
-              Manager
-            </label>
-            <select
-              id="filter-mgr"
-              className="header-filter-select"
-              value={filterManagerId}
-              onChange={(e) => setFilterManagerId(e.target.value)}
-            >
-              <option value="ALL">All Managers</option>
-              {managers.map((mgr) => (
-                <option key={mgr.id} value={mgr.id}>
-                  {mgr.name}
-                </option>
-              ))}
-            </select>
+            <div className="filter-drawer-item">
+              <label htmlFor="filter-status">Status</label>
+              <select
+                id="filter-status"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as StatusFilterValue)}
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="Urgent">🚨 Urgent</option>
+                <option value="Pending">Pending</option>
+                <option value="ExtensionPending">⏳ Extension Req</option>
+                <option value="Unchecked">Unchecked</option>
+                <option value="ManagerDone">Mgr Checked</option>
+                <option value="Delayed">Delayed</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
+
+            <div className="filter-drawer-actions">
+              <button
+                type="button"
+                className="filter-sort-btn"
+                onClick={() => setTimestampOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+              >
+                Sort: {timestampOrder === 'desc' ? 'Newest ↓' : 'Oldest ↑'}
+              </button>
+              {hasActiveFilters && (
+                <button type="button" className="header-reset-btn" onClick={handleResetFilters}>
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
-
-          {/* Status Filter */}
-          <div className="header-filter-group">
-            <label htmlFor="filter-status" className="header-filter-label">
-              Status
-            </label>
-            <select
-              id="filter-status"
-              className="header-filter-select"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as StatusFilterValue)}
-            >
-              <option value="ALL">All Status</option>
-              <option value="Urgent">🚨 Urgent</option>
-              <option value="Pending">Pending (On Track)</option>
-              <option value="ExtensionPending">Extension Requested ⏳</option>
-              <option value="Unchecked">Unchecked</option>
-              <option value="ManagerDone">Manager Checked</option>
-              <option value="Delayed">Delayed (Overdue)</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </div>
-
-          {hasActiveFilters && (
-            <button
-              type="button"
-              className="header-reset-btn"
-              onClick={handleResetFilters}
-              title="Reset Filters & Sorting"
-            >
-              Reset
-            </button>
-          )}
-
-          {/* Add Query Button: available for Managers & Account Managers */}
-          {canAddQuery && (
-            <button
-              type="button"
-              className="header-add-btn"
-              onClick={handleOpenCreateModal}
-              title="Submit a new query to a manager"
-            >
-              + Add Query
-            </button>
-          )}
-        </div>
-
-        {/* Company Logo at Top Right */}
-        <button
-          type="button"
-          className="header-company-logo-badge"
-          onClick={() => redirectToMainApp()}
-          title="Back to WMD Hub"
-          aria-label="Back to WMD Hub"
-          style={{ cursor: 'pointer' }}
-        >
-          <img
-            src={wmdLogo}
-            alt="WMD Company Logo"
-            className="header-company-logo-img"
-          />
-        </button>
+        )}
       </header>
 
+      {/* Main Content Card (Desktop Table + Mobile Responsive Cards) */}
       <section className="queries-table-card">
         <div className="queries-table-wrapper">
           <table className="queries-table">
@@ -1612,21 +1530,16 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               <tr>
                 <th
                   className="th-sortable"
-                  onClick={() =>
-                    setTimestampOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))
-                  }
-                  title="Click to toggle timestamp order within each status group"
+                  onClick={() => setTimestampOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
                 >
                   <span>Date</span>
-                  <span className="sort-indicator">
-                    {timestampOrder === 'desc' ? '↓' : '↑'}
-                  </span>
+                  <span className="sort-indicator">{timestampOrder === 'desc' ? '↓' : '↑'}</span>
                 </th>
                 <th>ID</th>
-                <th>From (Sender)</th>
-                <th>Assigned Mgr</th>
+                <th>From</th>
+                <th>Manager</th>
                 <th>Query</th>
-                <th>Manager Remark</th>
+                <th>Mgr Remark</th>
                 <th className="th-center">Mgr Done</th>
                 <th>Sender Remark</th>
                 <th className="th-center">Sender Done</th>
@@ -1637,7 +1550,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
             <tbody>
               {sortedAndFilteredQueries.map((item) => {
                 const completed = isQueryDone(item);
-                const delayed = isQueryDelayed(item, nowMs);
                 const managerOnlyChecked = item.managerDone && !item.accountManagerDone;
                 const isRowSaving = savingQueryId === item.queryId;
 
@@ -1645,18 +1557,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 const isAssignedManager = belongsToManager(item, currentUser);
                 const isAdmin = currentUser.role === 'admin';
 
-                const canEditQueryText = isSender;
-                const canEditMgrRemark = isAssignedManager;
-                const canToggleMgrDone = (isAssignedManager) && !isRowSaving;
-                const canEditSenderRemark = isSender;
-
-                const senderCannotCheckYet =
-                  !item.managerDone && !item.accountManagerDone;
-                const isSenderCheckboxDisabled =
-                  !(isSender) ||
-                  isRowSaving ||
-                  senderCannotCheckYet;
-
+                const senderCannotCheckYet = !item.managerDone && !item.accountManagerDone;
+                const isSenderCheckboxDisabled = !isSender || isRowSaving || senderCannotCheckYet;
                 const senderRoleBadge = getSenderRoleBadge(item.accountManagerId);
 
                 const rowStateClass = completed
@@ -1670,8 +1572,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 const rowLinkedApt = getLinkedAppointmentForQuery(item, appointments);
                 const rowLinkedAptId =
                   rowLinkedApt?.id ||
-                  (item.linkedAppointmentId &&
-                  appointments.some((a) => a.id === item.linkedAppointmentId)
+                  (item.linkedAppointmentId && appointments.some((a) => a.id === item.linkedAppointmentId)
                     ? item.linkedAppointmentId
                     : null);
 
@@ -1680,20 +1581,14 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0))
                   .slice(-1)[0];
                 const displayMgrRemarkText =
-                  latestMgrRemarkObj?.text ||
-                  item.managerRemark ||
-                  item.managerRemarkTitle ||
-                  '';
+                  latestMgrRemarkObj?.text || item.managerRemark || item.managerRemarkTitle || '';
 
                 const latestSenderRemarkObj = (item.remarks || [])
                   .filter((r) => r.type === 'sender')
                   .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0))
                   .slice(-1)[0];
                 const displaySenderRemarkText =
-                  latestSenderRemarkObj?.text ||
-                  item.accountManagerRemark ||
-                  item.accountManagerRemarkTitle ||
-                  '';
+                  latestSenderRemarkObj?.text || item.accountManagerRemark || item.accountManagerRemarkTitle || '';
 
                 return (
                   <tr
@@ -1701,52 +1596,37 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     className={`${rowStateClass} query-row-clickable`}
                     onClick={(e) => {
                       const target = e.target as HTMLElement;
-                      if (
-                        target.closest(
-                          'button, input, textarea, select, label, .inline-edit-box'
-                        )
-                      ) {
-                        return;
-                      }
+                      if (target.closest('button, input, textarea, select, label, .inline-edit-box')) return;
                       setViewingQuery(item);
                     }}
-                    title="Click to view query details"
                   >
-                    <td className="td-timestamp">
-                      <div className="timestamp-created" title={`Query created: ${formatDateTime(item.createdAt)}`}>
-                        <span className="timestamp-label">Created:</span> {formatDateTime(item.createdAt)}
+                    {/* Date & Due */}
+                    <td className="td-timestamp" data-label="Timeline">
+                      <div className="timestamp-created">
+                        <span className="timestamp-label">Sent:</span> {formatDateTime(item.createdAt)}
                       </div>
                       <div className={`timestamp-due ${item.extensionStatus === 'APPROVED' ? 'timestamp-due--extended' : ''}`}>
                         <span className="timestamp-label">Due:</span>{' '}
                         {item.extensionStatus === 'APPROVED' && item.targetDueAt ? (
-                          <span
-                            className="due-date-val due-date-val--extended"
-                            title={`Approved new target completion deadline: ${formatDateTime(item.targetDueAt)}`}
-                          >
+                          <span className="due-date-val due-date-val--extended">
                             <strong>{formatDateTime(item.targetDueAt)}</strong>{' '}
-                            <span className="ext-badge-mini ext-badge-mini--approved">Extended</span>
+                            <span className="ext-badge-mini ext-badge-mini--approved">Ext</span>
                           </span>
                         ) : item.extensionStatus === 'PENDING' && item.extensionProposedDueAt ? (
-                          <span
-                            className="due-date-val due-date-val--pending"
-                            title={`Proposed completion deadline: ${formatDateTime(item.extensionProposedDueAt)} (Awaiting sender approval)`}
-                          >
-                            <span>{formatDateTime(item.extensionProposedDueAt)}</span>{' '}
+                          <span className="due-date-val due-date-val--pending">
+                            {formatDateTime(item.extensionProposedDueAt)}{' '}
                             <span className="ext-badge-mini ext-badge-mini--pending">Ext Req</span>
                           </span>
                         ) : item.isUrgent ? (
-                          <span className="due-date-val due-date-val--urgent" title="Urgent SLA: Immediate priority, remark within 1 hour">
-                            🚨 Due Now
-                          </span>
+                          <span className="due-date-val due-date-val--urgent">🚨 Immediate</span>
                         ) : (
-                          <span className="due-date-val" title="Standard SLA: 24 hours from creation">
-                            {formatDateTime(getQueryDeadlineMs(item))}
-                          </span>
+                          <span className="due-date-val">{formatDateTime(getQueryDeadlineMs(item))}</span>
                         )}
                       </div>
                     </td>
 
-                    <td className="td-query-id">
+                    {/* Query ID & Badges */}
+                    <td className="td-query-id" data-label="Query ID">
                       <div className="query-id-stack">
                         <span
                           className="query-id-badge query-id-badge--clickable"
@@ -1754,96 +1634,70 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         >
                           {item.queryId}
                         </span>
-                        {isUserCcOnQuery(item, currentUser) ? (
-                          <span
-                            className="query-cc-tag"
-                            title="You are CC'd on this query (View-Only)"
-                          >
-                            CC
-                          </span>
-                        ) : item.ccUsers && item.ccUsers.length > 0 ? (
-                          <span
-                            className="query-cc-tag query-cc-tag--other"
-                            title={`CC: ${item.ccUsers.map((u) => u.name).join(', ')}`}
-                          >
-                            CC ({item.ccUsers.length})
-                          </span>
-                        ) : null}
-                        {item.isUrgent && (
-                          <span
-                            className={`query-urgent-tag ${completed ? 'query-urgent-tag--completed' : ''}`}
-                            title={completed ? 'Urgent query (Completed)' : '🚨 URGENT: Immediate response required!'}
-                          >
-                            🚨 URGENT
-                          </span>
-                        )}
+                        <div className="query-mini-tags">
+                          {isUserCcOnQuery(item, currentUser) ? (
+                            <span className="query-cc-tag">CC</span>
+                          ) : item.ccUsers && item.ccUsers.length > 0 ? (
+                            <span className="query-cc-tag query-cc-tag--other">CC ({item.ccUsers.length})</span>
+                          ) : null}
+                          {item.isUrgent && (
+                            <span className={`query-urgent-tag ${completed ? 'query-urgent-tag--completed' : ''}`}>
+                              🚨 URGENT
+                            </span>
+                          )}
+                          {rowLinkedAptId && <span className="query-linked-apt-chip">📅 {rowLinkedAptId}</span>}
+                          {item.attachments && item.attachments.length > 0 && (
+                            <span
+                              className="query-attachment-badge"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setViewingQuery(item);
+                              }}
+                            >
+                              📎 {item.attachments.length}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {rowLinkedAptId && (
-                        <span
-                          className="query-linked-apt-chip"
-                          title={`Linked to appointment ${rowLinkedAptId}${rowLinkedApt ? `: ${rowLinkedApt.title} (${rowLinkedApt.scheduledAt})` : ''}`}
-                        >
-                          📅 {rowLinkedAptId}
-                        </span>
-                      )}
-                      {item.attachments && item.attachments.length > 0 && (
-                        <span
-                          className="query-attachment-badge"
-                          title={`${item.attachments.length} attached document(s): ${item.attachments.map((a) => a.name).join(', ')}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setViewingQuery(item);
-                          }}
-                        >
-                          📎 {item.attachments.length} {item.attachments.length === 1 ? 'doc' : 'docs'}
-                        </span>
-                      )}
                     </td>
 
-                    {/* Sender Cell */}
-                    <td className="td-person">
+                    {/* Sender */}
+                    <td className="td-person" data-label="From">
                       <div className="person-cell-wrapper">
                         <span>{item.accountManagerName}</span>
                         {senderRoleBadge && (
-                          <span
-                            className={`person-role-tag person-role-tag--${senderRoleBadge.toLowerCase()}`}
-                          >
+                          <span className={`person-role-tag person-role-tag--${senderRoleBadge.toLowerCase()}`}>
                             {senderRoleBadge}
                           </span>
                         )}
-                        {isSender && (
-                          <span className="person-self-tag">(You)</span>
-                        )}
+                        {isSender && <span className="person-self-tag">(You)</span>}
                       </div>
                     </td>
 
-                    {/* Assigned Manager Cell */}
-                    <td className="td-person">
+                    {/* Manager */}
+                    <td className="td-person" data-label="Manager">
                       <div className="person-cell-wrapper">
                         <span>{item.managerName}</span>
-                        {isAssignedManager && (
-                          <span className="person-self-tag">(You)</span>
-                        )}
+                        {isAssignedManager && <span className="person-self-tag">(You)</span>}
                       </div>
                     </td>
 
-                    {/* Query Text */}
-                    <td className="td-query-text">
-                      {canEditQueryText &&
-                      editingQueryTextId === item.queryId ? (
+                    {/* Query Title */}
+                    <td className="td-query-text" data-label="Query">
+                      {isSender && editingQueryTextId === item.queryId ? (
                         <div className="inline-edit-box">
                           <input
                             type="text"
                             className="inline-edit-title-input"
                             value={queryTitleDraft}
                             onChange={(e) => setQueryTitleDraft(e.target.value)}
-                            placeholder="Query title..."
+                            placeholder="Title..."
                           />
                           <textarea
                             rows={2}
                             value={queryTextDraft}
                             onChange={(e) => setQueryTextDraft(e.target.value)}
-                            placeholder="Query description..."
+                            placeholder="Details..."
                           />
                           <div className="inline-edit-actions">
                             <button
@@ -1871,7 +1725,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           >
                             {item.queryTitle || item.queryText}
                           </p>
-                          {canEditQueryText && (
+                          {isSender && (
                             <button
                               type="button"
                               className="btn-inline-edit"
@@ -1885,8 +1739,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     </td>
 
                     {/* Manager Remark */}
-                    <td className="td-remark">
-                      {canEditMgrRemark ? (
+                    <td className="td-remark" data-label="Mgr Remark">
+                      {isAssignedManager ? (
                         editingMgrRemarkId === item.queryId ? (
                           <div className="inline-edit-box">
                             <input
@@ -1894,13 +1748,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               className="inline-edit-title-input"
                               value={mgrRemarkTitleDraft}
                               onChange={(e) => setMgrRemarkTitleDraft(e.target.value)}
-                              placeholder="Remark title..."
+                              placeholder="Title..."
                             />
                             <textarea
                               rows={2}
                               value={mgrRemarkDraft}
                               onChange={(e) => setMgrRemarkDraft(e.target.value)}
-                              placeholder="Remark description..."
+                              placeholder="Remark..."
                             />
                             <div className="inline-edit-actions">
                               <button
@@ -1923,11 +1777,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         ) : (
                           <div className="remark-display-row">
                             <span
-                              className={
-                                displayMgrRemarkText
-                                  ? 'remark-value query-body-text--clickable'
-                                  : 'remark-placeholder'
-                              }
+                              className={displayMgrRemarkText ? 'remark-value query-body-text--clickable' : 'remark-placeholder'}
                               onClick={() => setViewingQuery(item)}
                             >
                               {displayMgrRemarkText || '—'}
@@ -1943,11 +1793,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         )
                       ) : (
                         <span
-                          className={
-                            displayMgrRemarkText
-                              ? 'remark-value query-body-text--clickable'
-                              : 'remark-placeholder'
-                          }
+                          className={displayMgrRemarkText ? 'remark-value query-body-text--clickable' : 'remark-placeholder'}
                           onClick={() => setViewingQuery(item)}
                         >
                           {displayMgrRemarkText || '—'}
@@ -1955,33 +1801,26 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       )}
                     </td>
 
-                    {/* Manager Done Checkbox */}
-                    <td className="td-check-cell">
+                    {/* Manager Done */}
+                    <td className="td-check-cell" data-label="Mgr Done">
                       <label
-                        className={`check-button-label ${
-                          item.managerDone ? 'check-button-label--checked' : ''
-                        } ${
-                          !canToggleMgrDone ? 'check-button-label--readonly' : ''
+                        className={`check-button-label ${item.managerDone ? 'check-button-label--checked' : ''} ${
+                          !(isAssignedManager && !isRowSaving) ? 'check-button-label--readonly' : ''
                         }`}
-                        title={
-                          !isAssignedManager
-                            ? `Only assigned manager (${item.managerName}) can mark Manager Done`
-                            : undefined
-                        }
                       >
                         <input
                           type="checkbox"
                           checked={item.managerDone}
-                          disabled={!canToggleMgrDone}
+                          disabled={!(isAssignedManager && !isRowSaving)}
                           onChange={() => handleToggleManagerDone(item)}
                         />
                         <span>Done</span>
                       </label>
                     </td>
 
-                    {/* Sender Remark (accountManagerRemark) */}
-                    <td className="td-remark">
-                      {canEditSenderRemark ? (
+                    {/* Sender Remark */}
+                    <td className="td-remark" data-label="Sender Remark">
+                      {isSender ? (
                         editingSenderRemarkId === item.queryId ? (
                           <div className="inline-edit-box">
                             <input
@@ -1989,13 +1828,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               className="inline-edit-title-input"
                               value={senderRemarkTitleDraft}
                               onChange={(e) => setSenderRemarkTitleDraft(e.target.value)}
-                              placeholder="Remark title..."
+                              placeholder="Title..."
                             />
                             <textarea
                               rows={2}
                               value={senderRemarkDraft}
                               onChange={(e) => setSenderRemarkDraft(e.target.value)}
-                              placeholder="Remark description..."
+                              placeholder="Remark..."
                             />
                             <div className="inline-edit-actions">
                               <button
@@ -2018,11 +1857,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         ) : (
                           <div className="remark-display-row">
                             <span
-                              className={
-                                displaySenderRemarkText
-                                  ? 'remark-value query-body-text--clickable'
-                                  : 'remark-placeholder'
-                              }
+                              className={displaySenderRemarkText ? 'remark-value query-body-text--clickable' : 'remark-placeholder'}
                               onClick={() => setViewingQuery(item)}
                             >
                               {displaySenderRemarkText || '—'}
@@ -2038,11 +1873,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         )
                       ) : (
                         <span
-                          className={
-                            displaySenderRemarkText
-                              ? 'remark-value query-body-text--clickable'
-                              : 'remark-placeholder'
-                          }
+                          className={displaySenderRemarkText ? 'remark-value query-body-text--clickable' : 'remark-placeholder'}
                           onClick={() => setViewingQuery(item)}
                         >
                           {displaySenderRemarkText || '—'}
@@ -2050,100 +1881,86 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       )}
                     </td>
 
-                    {/* Sender Done Checkbox (accountManagerDone) */}
-                    <td className="td-check-cell">
-                      <div className="check-cell-flex-wrap">
-                        <label
-                          className={`check-button-label ${
-                            item.accountManagerDone ? 'check-button-label--checked' : ''
-                          } ${
-                            isSenderCheckboxDisabled ? 'check-button-label--readonly' : ''
-                          }`}
-                          title={
-                            !(isSender)
-                              ? `Only sender (${item.accountManagerName}) can mark verified completion`
-                              : senderCannotCheckYet
-                              ? 'Assigned Manager must mark Done before you can verify & complete'
-                              : undefined
-                          }
-                        >
-                          <input
-                            type="checkbox"
-                            checked={item.accountManagerDone}
-                            disabled={isSenderCheckboxDisabled}
-                            onChange={() => handleToggleSenderDone(item)}
-                          />
-                          <span>Done</span>
-                        </label>
-                      </div>
+                    {/* Sender Done */}
+                    <td className="td-check-cell" data-label="Sender Done">
+                      <label
+                        className={`check-button-label ${item.accountManagerDone ? 'check-button-label--checked' : ''} ${
+                          isSenderCheckboxDisabled ? 'check-button-label--readonly' : ''
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.accountManagerDone}
+                          disabled={isSenderCheckboxDisabled}
+                          onChange={() => handleToggleSenderDone(item)}
+                        />
+                        <span>Done</span>
+                      </label>
                     </td>
 
-                    {/* Rating Cell */}
-                    <td className="td-rating th-center">
-                      {isAdmin ? (() => {
-                        const recBreakdown = calculateReceiverOverallRating(item);
-                        const sndBreakdown = calculateSenderOverallRating(item);
-                        return (
-                          <div className="admin-rating-badge-pair">
-                            <button
-                              type="button"
-                              className="rating-badge--composite"
-                              onClick={() => {
-                                setAdminRatingQuery(item);
-                                setAdminRatingTargetRole('receiver');
-                                setAdminRatingInput(item.adminReceiverRating ?? 10);
-                                setAdminRemarkInput(item.adminReceiverRemark || 'Proper turnaround and response');
-                                setAdminRemarkError('');
-                              }}
-                              title={`Receiver Rating: ${recBreakdown.overallRating}/10 stars\nAdmin (50%): ${recBreakdown.adminRating}★\nSystem (30%): ${recBreakdown.systemRating}★ (${recBreakdown.systemReason})\nSender (20%): ${recBreakdown.senderRating ?? 10}★\nClick to edit Admin Rating & Remark`}
-                            >
-                              <span style={{ color: '#0369a1', fontWeight: 800 }}>Rec:</span>
-                              <span>⭐ {recBreakdown.overallRating}/10</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="rating-badge--composite"
-                              onClick={() => {
-                                setAdminRatingQuery(item);
-                                setAdminRatingTargetRole('sender');
-                                setAdminRatingInput(item.adminSenderRating ?? 10);
-                                setAdminRemarkInput(item.adminSenderRemark || 'Prompt responses to queries and requests');
-                                setAdminRemarkError('');
-                              }}
-                              title={`Sender Rating: ${sndBreakdown.overallRating}/10 stars\nAdmin (50%): ${sndBreakdown.adminRating}★\nSystem (30%): ${sndBreakdown.systemRating}★ (${sndBreakdown.systemReason})\nReceiver (20%): ${sndBreakdown.receiverRating ?? 10}★\nClick to edit Admin Rating & Remark`}
-                            >
-                              <span style={{ color: '#92400e', fontWeight: 800 }}>Snd:</span>
-                              <span>⭐ {sndBreakdown.overallRating}/10</span>
-                            </button>
-                          </div>
-                        );
-                      })() : isSender ? (
+                    {/* Rating */}
+                    <td className="td-rating th-center" data-label="Rating">
+                      {isAdmin ? (
+                        (() => {
+                          const recBreakdown = calculateReceiverOverallRating(item);
+                          const sndBreakdown = calculateSenderOverallRating(item);
+                          return (
+                            <div className="admin-rating-badge-pair">
+                              <button
+                                type="button"
+                                className="rating-badge--composite"
+                                onClick={() => {
+                                  setAdminRatingQuery(item);
+                                  setAdminRatingTargetRole('receiver');
+                                  setAdminRatingInput(item.adminReceiverRating ?? 10);
+                                  setAdminRemarkInput(item.adminReceiverRemark || 'Proper turnaround and response');
+                                  setAdminRemarkError('');
+                                }}
+                              >
+                                <span className="rating-role-prefix rating-role-prefix--rec">Mgr:</span>
+                                <span>⭐ {recBreakdown.overallRating}/10</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="rating-badge--composite"
+                                onClick={() => {
+                                  setAdminRatingQuery(item);
+                                  setAdminRatingTargetRole('sender');
+                                  setAdminRatingInput(item.adminSenderRating ?? 10);
+                                  setAdminRemarkInput(item.adminSenderRemark || 'Prompt responses to queries and requests');
+                                  setAdminRemarkError('');
+                                }}
+                              >
+                                <span className="rating-role-prefix rating-role-prefix--snd">Snd:</span>
+                                <span>⭐ {sndBreakdown.overallRating}/10</span>
+                              </button>
+                            </div>
+                          );
+                        })()
+                      ) : isSender ? (
                         item.senderReceiverRating || item.rating ? (
-                          <div className="rating-cell-sender-wrap">
-                            <button
-                              type="button"
-                              className="rating-badge rating-badge--sender"
-                              onClick={() => {
-                                const currentRating =
-                                  item.senderReceiverRating ||
-                                  (item.rating ? (item.rating <= 5 ? item.rating * 2 : item.rating) : 10);
-                                setRatingModalQuery(item);
-                                setRatingInput(currentRating);
-                                setRatingHover(0);
-                                setRatingRemarkInput(item.senderReceiverRemark || '');
-                                setRatingRemarkError('');
-                                setRatingModalCompleteOnSubmit(false);
-                              }}
-                              title="Click to view/update your rating and remark for the receiving manager"
-                            >
-                              <span className="rating-stars-gold">⭐</span>
-                              <span className="rating-score-num">
-                                {item.senderReceiverRating ||
-                                  (item.rating ? (item.rating <= 5 ? item.rating * 2 : item.rating) : 10)}
-                                /10
-                              </span>
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            className="rating-badge rating-badge--sender"
+                            onClick={() => {
+                              const currentRating =
+                                item.senderReceiverRating ||
+                                (item.rating ? (item.rating <= 5 ? item.rating * 2 : item.rating) : 10);
+                              setRatingModalQuery(item);
+                              setRatingInput(currentRating);
+                              setRatingHover(0);
+                              setRatingRemarkInput(item.senderReceiverRemark || '');
+                              setRatingRemarkError('');
+                              setRatingModalCompleteOnSubmit(false);
+                            }}
+                          >
+                            <span className="rating-stars-gold">⭐</span>
+                            <span className="rating-score-num">
+                              {item.senderReceiverRating ||
+                                (item.rating ? (item.rating <= 5 ? item.rating * 2 : item.rating) : 10)}
+                              /10
+                            </span>
+                          </button>
                         ) : (
                           <button
                             type="button"
@@ -2156,220 +1973,56 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               setRatingRemarkError('');
                               setRatingModalCompleteOnSubmit(false);
                             }}
-                            title="Click to rate the receiving manager (10-star scale with mandatory remark)"
                           >
-                            ★ Rate Manager
+                            ★ Rate
                           </button>
                         )
-                      ) : isAssignedManager ? (() => {
-                        const isPostCutoff = Boolean(
-                          (item.createdAtMs && item.createdAtMs > RECEIVER_RATING_FEATURE_START_MS) ||
-                          (item.receiverSenderRating !== undefined && item.receiverSenderRating !== null)
-                        );
-                        if (!isPostCutoff) {
-                          return <span className="rating-placeholder">—</span>;
-                        }
-                        return (
-                          <div className="rating-cell-receiver-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
-                            {item.receiverSenderRating ? (
-                              <button
-                                type="button"
-                                className="rating-badge rating-badge--receiver"
-                                style={{
-                                  fontSize: '0.74rem',
-                                  padding: '0.15rem 0.45rem',
-                                  background: '#fef3c7',
-                                  color: '#92400e',
-                                  border: '1px solid #fde68a',
-                                  borderRadius: '6px',
-                                  cursor: 'pointer',
-                                  fontWeight: 600,
-                                }}
-                                onClick={() => {
-                                  setReceiverRatingModalQuery(item);
-                                  setReceiverRatingInput(item.receiverSenderRating || 10);
-                                  setReceiverRatingHover(0);
-                                  setReceiverRatingRemarkInput(item.receiverSenderRemark || '');
-                                  setReceiverRatingRemarkError('');
-                                }}
-                                title={`Click to view/update rating for Sender (${item.accountManagerName}): ${item.receiverSenderRating}/10\nRemark: ${item.receiverSenderRemark || 'None'}`}
-                              >
-                                ⭐ {item.receiverSenderRating}/10 (to Sender)
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn-rate-prompt"
-                                style={{ fontSize: '0.74rem', padding: '0.2rem 0.5rem' }}
-                                onClick={() => {
-                                  setReceiverRatingModalQuery(item);
-                                  setReceiverRatingInput(10);
-                                  setReceiverRatingHover(0);
-                                  setReceiverRatingRemarkInput('');
-                                  setReceiverRatingRemarkError('');
-                                }}
-                                title="Click to rate the sender (10-star scale with mandatory remark)"
-                              >
-                                ★ Rate Sender
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })() : (
-                        /* Senders or other users cannot see receiver ratings for senders */
+                      ) : isAssignedManager ? (
+                        (() => {
+                          const isPostCutoff = Boolean(
+                            (item.createdAtMs && item.createdAtMs > RECEIVER_RATING_FEATURE_START_MS) ||
+                              (item.receiverSenderRating !== undefined && item.receiverSenderRating !== null)
+                          );
+                          if (!isPostCutoff) return <span className="rating-placeholder">—</span>;
+                          return item.receiverSenderRating ? (
+                            <button
+                              type="button"
+                              className="rating-badge rating-badge--receiver"
+                              onClick={() => {
+                                setReceiverRatingModalQuery(item);
+                                setReceiverRatingInput(item.receiverSenderRating || 10);
+                                setReceiverRatingHover(0);
+                                setReceiverRatingRemarkInput(item.receiverSenderRemark || '');
+                                setReceiverRatingRemarkError('');
+                              }}
+                            >
+                              ⭐ {item.receiverSenderRating}/10
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn-rate-prompt"
+                              onClick={() => {
+                                setReceiverRatingModalQuery(item);
+                                setReceiverRatingInput(10);
+                                setReceiverRatingHover(0);
+                                setReceiverRatingRemarkInput('');
+                                setReceiverRatingRemarkError('');
+                              }}
+                            >
+                              ★ Rate
+                            </button>
+                          );
+                        })()
+                      ) : (
                         <span className="rating-placeholder">—</span>
                       )}
                     </td>
 
-                    {/* Status Cell */}
-                    <td className="td-status-cell">
-                      <div className="td-status-pills-wrap">
-                        {completed ? (
-                          <>
-                            <span className="table-status-pill table-status-pill--completed">
-                              Completed
-                            </span>
-                            {item.autoCompletedAt && (
-                              <span className="table-status-pill table-status-pill--auto" title={`Auto-completed after 12h grace period on ${item.autoCompletedAt}`}>
-                                ⚡ Auto
-                              </span>
-                            )}
-                            {item.adminCompletedAt && (
-                              <span className="table-status-pill table-status-pill--admin" title={`Admin force completed on ${item.adminCompletedAt}`}>
-                                🛡️ Admin
-                              </span>
-                            )}
-                            {item.isUrgent && (
-                              <span
-                                className="table-status-pill table-status-pill--urgent-tag"
-                                title={delayed ? 'Urgent query completed late (No remark within 1 hour)' : 'Urgent query completed on-time'}
-                              >
-                                Urgent
-                              </span>
-                            )}
-                            {delayed && (
-                              <span
-                                className="table-status-pill table-status-pill--delayed"
-                                title={item.isUrgent ? 'Urgent query: Receiving manager did not put a remark within 1 hour - counted as Delayed' : undefined}
-                              >
-                                Delayed
-                              </span>
-                            )}
-                          </>
-                        ) : item.isUrgent ? (
-                          managerOnlyChecked ? (
-                            <>
-                              <span className="table-status-pill table-status-pill--urgent-mgr" title="Urgent query checked by manager; awaiting sender verification">
-                                🚨 Urgent - Mgr Checked
-                              </span>
-                              {delayed && (
-                                <span className="table-status-pill table-status-pill--delayed" title="Receiving manager did not provide remark within 1 hour">
-                                  Delayed
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <span className="table-status-pill table-status-pill--urgent" title="Urgent query: Immediate priority, notifying every 10m until done">
-                                🚨 URGENT (Due Now)
-                              </span>
-                              {(() => {
-                                const isOverdue = isUrgentManagerRemarkOverdue(item, nowMs);
-                                const hasRemark = hasManagerRemark(item);
-                                if (isOverdue || delayed) {
-                                  return (
-                                    <>
-                                      <span
-                                        className="table-status-pill table-status-pill--remark-overdue"
-                                        title="Receiving manager has not provided a remark within 1 hour!"
-                                      >
-                                        ⚠️ Remark Overdue (&gt;1h)
-                                      </span>
-                                      <span className="table-status-pill table-status-pill--delayed" title="Overdue on 1-hour remark SLA">
-                                        Delayed
-                                      </span>
-                                    </>
-                                  );
-                                }
-                                if (hasRemark) {
-                                  return (
-                                    <span
-                                      className="table-status-pill table-status-pill--remark-done"
-                                      title="Receiving manager provided remark within 1 hour (On-time track)"
-                                    >
-                                      ✅ Remark Added
-                                    </span>
-                                  );
-                                }
-                                const createdMs = getQueryTimestampMs(item);
-                                const minsLeft = Math.max(1, Math.ceil((60 * 60 * 1000 - (nowMs - createdMs)) / 60000));
-                                return (
-                                  <span
-                                    className="table-status-pill table-status-pill--remark-due"
-                                    title={`Receiving manager must put in a remark within 1 hour (${minsLeft}m left)`}
-                                  >
-                                    ⏱️ Remark Due ({minsLeft}m)
-                                  </span>
-                                );
-                              })()}
-                            </>
-                          )
-                        ) : managerOnlyChecked ? (
-                          <>
-                            <span className="table-status-pill table-status-pill--mgr-done">
-                              Mgr Checked
-                            </span>
-                            {delayed && (
-                              <span className="table-status-pill table-status-pill--delayed">
-                                Delayed
-                              </span>
-                            )}
-                          </>
-                        ) : delayed ? (
-                          <span className="table-status-pill table-status-pill--delayed">
-                            Delayed
-                          </span>
-                        ) : (
-                          <span className="table-status-pill table-status-pill--pending">
-                            Pending
-                          </span>
-                        )}
+                    {/* Status & Extension Action */}
+                    <td className="td-status-cell" data-label="Status">
+                      {renderStatusPills(item, true)}
 
-                        {item.extensionStatus === 'PENDING' && (
-                          <span
-                            className="table-status-pill table-status-pill--ext-pending"
-                            title={`Extension requested until ${formatDateTime(item.extensionProposedDueAt) || 'new date'}: "${item.extensionReason || ''}"`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (isSender || isAdmin || currentUser.role === 'account_manager') {
-                                setExtensionReviewModalQuery(item);
-                              } else {
-                                openExtensionModal(item);
-                              }
-                            }}
-                          >
-                            ⏳ Ext Req
-                          </span>
-                        )}
-                        {item.extensionStatus === 'APPROVED' && (
-                          <span
-                            className="table-status-pill table-status-pill--ext-approved"
-                            title={`Completion deadline extended to ${formatDateTime(item.targetDueAt) || ''}`}
-                          >
-                            ✅ Extended
-                          </span>
-                        )}
-                        {item.extensionStatus === 'DECLINED' && (
-                          <span
-                            className="table-status-pill table-status-pill--ext-declined"
-                            title={`Extension request was declined: ${item.extensionReviewNote || 'Declined by sender'}`}
-                          >
-                            ❌ Ext Declined
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Quick contextual extension actions */}
                       {item.extensionStatus === 'PENDING' ? (
                         isSender || isAdmin || currentUser.role === 'account_manager' ? (
                           <button
@@ -2379,9 +2032,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               e.stopPropagation();
                               setExtensionReviewModalQuery(item);
                             }}
-                            title="Click to review and approve/decline this extension request"
                           >
-                            Review Ext ⏳
+                            Review Ext
                           </button>
                         ) : isAssignedManager ? (
                           <button
@@ -2391,35 +2043,25 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               e.stopPropagation();
                               openExtensionModal(item);
                             }}
-                            title="Click to modify or update your extension request"
                           >
-                            ⏳ Ext Pending (Edit)
+                            Edit Ext
                           </button>
                         ) : null
-                      ) : !completed ? (
-                        isAssignedManager || isAdmin ? (
-                          <button
-                            type="button"
-                            className="table-action-link-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openExtensionModal(item);
-                            }}
-                            title={
-                              item.extensionStatus === 'APPROVED'
-                                ? 'Request further extension of completion date'
-                                : item.extensionStatus === 'DECLINED'
-                                ? 'Submit a new extension request'
-                                : 'Request completion date extension'
-                            }
-                          >
-                            {item.extensionStatus === 'APPROVED'
-                              ? '+ Extend Further'
-                              : item.extensionStatus === 'DECLINED'
-                              ? '+ Re-request Ext'
-                              : '+ Extend'}
-                          </button>
-                        ) : null
+                      ) : !completed && (isAssignedManager || isAdmin) ? (
+                        <button
+                          type="button"
+                          className="table-action-link-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openExtensionModal(item);
+                          }}
+                        >
+                          {item.extensionStatus === 'APPROVED'
+                            ? '+ Extend'
+                            : item.extensionStatus === 'DECLINED'
+                            ? '+ Re-request'
+                            : '+ Extend'}
+                        </button>
                       ) : null}
                     </td>
                   </tr>
@@ -2429,7 +2071,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               {sortedAndFilteredQueries.length === 0 && (
                 <tr>
                   <td colSpan={11} className="empty-queries-cell">
-                    No queries match the selected filters.
+                    No queries match your current filters.
                   </td>
                 </tr>
               )}
@@ -2437,51 +2079,21 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           </table>
 
           {hasMoreQueries && !isAllQueriesLoaded && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.85rem',
-                padding: '0.85rem 1rem',
-                background: '#f8fafc',
-                borderTop: '1px solid #e2e8f0',
-                flexWrap: 'wrap',
-              }}
-            >
-              <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
-                ⚡ Showing the {queries.length} most recent queries to minimize bandwidth & egress usage.
-              </span>
-              <button
-                type="button"
-                onClick={onLoadAllQueries}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  padding: '0.35rem 0.85rem',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  color: '#1d4ed8',
-                  background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                📥 Load Full Archive (All Queries)
+            <div className="archive-load-bar">
+              <span>Showing {queries.length} recent queries.</span>
+              <button type="button" className="archive-load-btn" onClick={onLoadAllQueries}>
+                📥 Load All Queries
               </button>
             </div>
           )}
         </div>
       </section>
 
-      {/* New Query Modal - available to Managers and Account Managers */}
+      {/* ========================================================================
+          CREATE NEW QUERY MODAL
+         ======================================================================== */}
       {showCreateModal && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setShowCreateModal(false)}
-        >
+        <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
           <div
             className="modal-dialog query-modal-unified"
             onClick={(e) => e.stopPropagation()}
@@ -2491,14 +2103,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           >
             <div className="modal-header">
               <div className="modal-header-text">
-                <div className="query-view-title-row">
-                  <h3 id="create-query-modal-title">📝 New Query</h3>
-                  <span className="person-role-tag person-role-tag--sender">
-                    From: {currentUser.name}
-                  </span>
-                </div>
+                <h3 id="create-query-modal-title">New Query</h3>
                 <span className="modal-sender-badge">
-                  Logged in as <strong>{currentUser.name}</strong> ({currentUser.roleLabel}) &bull; Target completion: 24 hours
+                  From <strong>{currentUser.name}</strong> &bull; 24h standard SLA
                 </span>
               </div>
               <button
@@ -2514,7 +2121,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
             <form className="modal-form" onSubmit={handleCreateSubmit}>
               <div className="query-modal-top-grid">
                 <div className="cp-form-group">
-                  <label htmlFor="select-manager">Send Query To (Manager) *</label>
+                  <label htmlFor="select-manager">Assign To (Manager) *</label>
                   <select
                     id="select-manager"
                     value={selectedManagerId}
@@ -2523,20 +2130,20 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   >
                     {targetManagersForCreation.map((mgr) => (
                       <option key={mgr.id} value={mgr.id}>
-                        {mgr.name} ({mgr.email})
+                        {mgr.name}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div className="cp-form-group">
-                  <label htmlFor="select-appointment-link">Link Appointment (Optional)</label>
+                  <label htmlFor="select-appointment-link">Linked Appointment</label>
                   <select
                     id="select-appointment-link"
                     value={selectedAppointmentId}
                     onChange={(e) => setSelectedAppointmentId(e.target.value)}
                   >
-                    <option value="">-- No linked appointment --</option>
+                    <option value="">None</option>
                     {linkableAppointmentsForCreation.map((apt) => (
                       <option key={apt.id} value={apt.id}>
                         [{apt.id}] {apt.title} ({apt.scheduledAt})
@@ -2546,15 +2153,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 </div>
               </div>
 
-              {/* CC Selection Field (Optional) */}
-              <div className="cp-form-group cc-form-group">
-                <div className="cc-selection-label">
-                  <span>👥 CC Other Team Members (Optional)</span>
-                  <span className="cc-selection-subtext">
-                    View-only awareness &bull; they receive notifications
-                  </span>
-                </div>
-
+              {/* CC Selection */}
+              <div className="cp-form-group">
+                <label htmlFor="create-cc-select">CC Team Members (View-Only)</label>
                 {selectedCcUserIds.length > 0 && (
                   <div className="cc-chips-container">
                     {selectedCcUserIds.map((userId) => {
@@ -2562,18 +2163,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       if (!u) return null;
                       return (
                         <span key={userId} className="cc-chip">
-                          <span className="cc-chip-name">{u.name}</span>
-                          <span className="cc-chip-role">
-                            ({u.role === 'manager' ? 'Mgr' : u.role === 'account_manager' ? 'AM' : 'Admin'})
-                          </span>
+                          <span>{u.name}</span>
                           <button
                             type="button"
                             className="cc-chip-remove"
-                            onClick={() =>
-                              setSelectedCcUserIds((prev) => prev.filter((id) => id !== userId))
-                            }
-                            aria-label={`Remove CC ${u.name}`}
-                            title="Remove"
+                            onClick={() => setSelectedCcUserIds((prev) => prev.filter((id) => id !== userId))}
+                            aria-label={`Remove ${u.name}`}
                           >
                             ✕
                           </button>
@@ -2582,8 +2177,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     })}
                   </div>
                 )}
-
                 <select
+                  id="create-cc-select"
                   className="cc-user-select"
                   value=""
                   onChange={(e) => {
@@ -2592,25 +2187,24 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       setSelectedCcUserIds((prev) => [...prev, id]);
                     }
                   }}
-                  aria-label="Add user to CC"
                 >
-                  <option value="">+ Select team member to CC...</option>
+                  <option value="">+ Add CC member...</option>
                   {eligibleCcUsersForCreation
                     .filter((u) => !selectedCcUserIds.includes(u.id))
                     .map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} ({u.role === 'manager' ? 'Manager' : u.role === 'account_manager' ? 'Account Manager' : 'Admin'}) &bull; {u.email}
+                        {u.name} ({u.role === 'manager' ? 'Mgr' : u.role === 'account_manager' ? 'AM' : 'Admin'})
                       </option>
                     ))}
                 </select>
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="query-title-input">Query Title *</label>
+                <label htmlFor="query-title-input">Title *</label>
                 <input
                   id="query-title-input"
                   type="text"
-                  placeholder="Enter a clear title for this query..."
+                  placeholder="Brief summary of the query..."
                   value={queryTitleInput}
                   onChange={(e) => setQueryTitleInput(e.target.value)}
                   required
@@ -2618,31 +2212,26 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="write-query">Query Description *</label>
+                <label htmlFor="write-query">Details *</label>
                 <textarea
                   id="write-query"
                   rows={4}
-                  placeholder="Describe the issue, clarification, or request in detail..."
+                  placeholder="Provide clear context or questions..."
                   value={queryInput}
                   onChange={(e) => setQueryInput(e.target.value)}
                   required
                 />
               </div>
 
-              {/* Attachments Section in Create Query Modal */}
-              <div className="cp-form-group attachment-form-group">
+              {/* Attachments */}
+              <div className="cp-form-group">
                 <div className="attachment-header-row">
                   <label htmlFor="query-attachments-input" className="attachment-label">
-                    <span>📎 Attach Documents</span>
-                    <span className="attachment-subtext">
-                      (Optional &bull; Max {MAX_FILE_SIZE_LABEL}/file, up to {MAX_FILES_PER_UPLOAD} files, {MAX_TOTAL_ATTACHMENTS_LABEL} total)
-                    </span>
+                    📎 Attachments
                   </label>
-                  {attachedFiles.length > 0 && (
-                    <span className="attachment-count-badge">
-                      {attachedFiles.length}/{MAX_FILES_PER_UPLOAD} {attachedFiles.length === 1 ? 'file' : 'files'} attached
-                    </span>
-                  )}
+                  <span className="attachment-subtext">
+                    {attachedFiles.length}/{MAX_FILES_PER_UPLOAD} &bull; Max {MAX_FILE_SIZE_LABEL}/file
+                  </span>
                 </div>
 
                 <div
@@ -2665,7 +2254,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       fileInputRef.current?.click();
                     }
                   }}
-                  aria-label="Click or drag files here to attach documents"
                 >
                   <input
                     ref={fileInputRef}
@@ -2677,15 +2265,13 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   />
                   <div className="attachment-dropzone-inner">
                     <span className="attachment-dropzone-icon">📎</span>
-                    <div className="attachment-dropzone-prompts">
-                      <span className="attachment-dropzone-cta">
-                        {isReadingFiles
-                          ? 'Reading & optimizing document(s)...'
-                          : attachedFiles.length >= MAX_FILES_PER_UPLOAD
-                          ? `Maximum ${MAX_FILES_PER_UPLOAD} files reached (remove a file to add another)`
-                          : `Choose files or drag & drop here (Max ${MAX_FILE_SIZE_LABEL} per file)`}
-                      </span>
-                    </div>
+                    <span className="attachment-dropzone-cta">
+                      {isReadingFiles
+                        ? 'Reading files...'
+                        : attachedFiles.length >= MAX_FILES_PER_UPLOAD
+                        ? `Max ${MAX_FILES_PER_UPLOAD} files reached`
+                        : 'Tap or drop files to attach'}
+                    </span>
                   </div>
                 </div>
 
@@ -2693,16 +2279,10 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   <div className="attached-files-list">
                     {attachedFiles.map((att) => (
                       <div key={att.id} className="attached-file-pill">
-                        <span className="attached-file-icon">
-                          {getFileIcon(att.name, att.type)}
-                        </span>
+                        <span className="attached-file-icon">{getFileIcon(att.name, att.type)}</span>
                         <div className="attached-file-info">
-                          <span className="attached-file-name" title={att.name}>
-                            {att.name}
-                          </span>
-                          <span className="attached-file-size">
-                            {formatFileSize(att.size)}
-                          </span>
+                          <span className="attached-file-name">{att.name}</span>
+                          <span className="attached-file-size">{formatFileSize(att.size)}</span>
                         </div>
                         <button
                           type="button"
@@ -2711,8 +2291,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             e.stopPropagation();
                             handleRemoveAttachedFile(att.id);
                           }}
-                          aria-label={`Remove attachment ${att.name}`}
-                          title="Remove file"
+                          aria-label={`Remove ${att.name}`}
                         >
                           ✕
                         </button>
@@ -2724,9 +2303,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
               {isUrgentDraft && (
                 <div className="urgent-mode-notice">
-                  <span className="urgent-mode-notice-icon">🚨</span>
+                  <span>🚨</span>
                   <span>
-                    <strong>URGENT Query Mode Active:</strong> Immediate priority! Manager must provide a remark within 1 hour. Sender, receiver, and admins will be notified every 10 minutes until finalized. The receiving manager&apos;s KPI drops 50% until completed.
+                    <strong>Urgent Mode:</strong> 1-hour manager remark SLA &bull; 10-minute reminder alerts until resolved.
                   </span>
                 </div>
               )}
@@ -2747,21 +2326,16 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   type="button"
                   className={`btn-urgent-action ${isUrgentDraft ? 'btn-urgent-action--active' : ''}`}
                   onClick={handleUrgentButtonClick}
-                  title="Mark and submit query as URGENT (Immediate priority, no 24h delay threshold)"
                   disabled={isSubmittingNew}
                 >
-                  🚨 URGENT
+                  🚨 Urgent
                 </button>
                 <button
                   type="submit"
                   className={`btn-primary ${isUrgentDraft ? 'btn-primary--urgent' : ''}`}
                   disabled={isSubmittingNew || isReadingFiles}
                 >
-                  {isSubmittingNew
-                    ? 'Submitting...'
-                    : isUrgentDraft
-                    ? 'Submit Urgent Query'
-                    : 'Submit Query'}
+                  {isSubmittingNew ? 'Sending...' : isUrgentDraft ? 'Send Urgent' : 'Submit'}
                 </button>
               </div>
             </form>
@@ -2769,12 +2343,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
       )}
 
-      {/* Mandatory Solution Remark Modal (Director Policy) */}
+      {/* ========================================================================
+          MANDATORY SOLUTION REMARK MODAL
+         ======================================================================== */}
       {remarkModalQuery && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setRemarkModalQuery(null)}
-        >
+        <div className="modal-backdrop" onClick={() => setRemarkModalQuery(null)}>
           <div
             className="modal-dialog"
             onClick={(e) => e.stopPropagation()}
@@ -2786,7 +2359,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               <div className="modal-header-text">
                 <h3 id="mandatory-remark-modal-title">Solution Remark Required</h3>
                 <span className="modal-sender-badge">
-                  Query: <strong>{remarkModalQuery.queryId}</strong> &bull; Assigned to: <strong>{remarkModalQuery.managerName}</strong>
+                  Query <strong>{remarkModalQuery.queryId}</strong>
                 </span>
               </div>
               <button
@@ -2800,26 +2373,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
             </div>
 
             <form className="modal-form" onSubmit={handleConfirmRemarkAndDone}>
-              {/* <div
-                style={{
-                  background: 'rgba(214, 116, 43, 0.08)',
-                  border: '1px solid rgba(214, 116, 43, 0.3)',
-                  borderRadius: '8px',
-                  padding: '0.75rem 1rem',
-                  fontSize: '0.86rem',
-                  color: 'var(--c-russet, #844918)',
-                  lineHeight: '1.45',
-                }}
-              >
-                <strong>Director Policy:</strong> Managers cannot mark queries as Done without explaining the resolution or actions taken.
-              </div> */}
-
               <div className="cp-form-group">
-                <label htmlFor="mandatory-remark-title-input">Remark Title *</label>
+                <label htmlFor="mandatory-remark-title-input">Title *</label>
                 <input
                   id="mandatory-remark-title-input"
                   type="text"
-                  placeholder="Enter a short title for the solution remark..."
+                  placeholder="Short resolution summary..."
                   value={mandatoryRemarkTitleDraft}
                   onChange={(e) => {
                     setMandatoryRemarkTitleDraft(e.target.value);
@@ -2831,11 +2390,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="mandatory-remark-input">Solution / Resolution Description *</label>
+                <label htmlFor="mandatory-remark-input">Resolution Details *</label>
                 <textarea
                   id="mandatory-remark-input"
                   rows={4}
-                  placeholder="Explain what steps were taken to fix this issue or reference ticket details..."
+                  placeholder="Explain the actions taken to resolve this query..."
                   value={mandatoryRemarkDraft}
                   onChange={(e) => {
                     setMandatoryRemarkDraft(e.target.value);
@@ -2843,18 +2402,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   }}
                   required
                 />
-                {remarkError && (
-                  <span style={{ color: '#dc2626', fontSize: '0.82rem', fontWeight: 600 }}>
-                    {remarkError}
-                  </span>
-                )}
+                {remarkError && <span className="form-error-text">{remarkError}</span>}
               </div>
 
               <div className="cp-form-group">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                  <label htmlFor="mandatory-remark-file-btn" style={{ margin: 0 }}>
-                    Resolution Document(s) (Optional &bull; Max {MAX_FILE_SIZE_LABEL}/file, up to {MAX_FILES_PER_UPLOAD} files)
-                  </label>
+                <div className="attachment-header-row">
+                  <label htmlFor="mandatory-remark-file-btn">Attachments (Optional)</label>
                   <input
                     ref={mandatoryFileInputRef}
                     id="mandatory-remark-file-btn"
@@ -2869,14 +2422,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         const { added, errors } = await validateAndReadAttachments(
                           files,
                           mandatoryRemarkAttachmentsDraft,
-                          {
-                            uploadedBy: currentUser.name,
-                            uploaderRole: 'manager',
-                          }
+                          { uploadedBy: currentUser.name, uploaderRole: 'manager' }
                         );
-                        if (errors.length > 0) {
-                          alert(errors.join('\n\n'));
-                        }
+                        if (errors.length > 0) alert(errors.join('\n\n'));
                         if (added.length > 0) {
                           setMandatoryRemarkAttachmentsDraft((prev) => [...prev, ...added]);
                         }
@@ -2892,11 +2440,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     onClick={() => mandatoryFileInputRef.current?.click()}
                     disabled={isReadingMandatoryFiles || mandatoryRemarkAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD}
                   >
-                    {isReadingMandatoryFiles
-                      ? 'Reading...'
-                      : mandatoryRemarkAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD
-                      ? `Max ${MAX_FILES_PER_UPLOAD} Files`
-                      : '📎 Attach Document'}
+                    {isReadingMandatoryFiles ? 'Reading...' : '📎 Attach'}
                   </button>
                 </div>
 
@@ -2904,27 +2448,17 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   <div className="attached-files-list">
                     {mandatoryRemarkAttachmentsDraft.map((att) => (
                       <div key={att.id} className="attached-file-pill">
-                        <span className="attached-file-icon">
-                          {getFileIcon(att.name, att.type)}
-                        </span>
+                        <span className="attached-file-icon">{getFileIcon(att.name, att.type)}</span>
                         <div className="attached-file-info">
-                          <span className="attached-file-name" title={att.name}>
-                            {att.name}
-                          </span>
-                          <span className="attached-file-size">
-                            {formatFileSize(att.size)}
-                          </span>
+                          <span className="attached-file-name">{att.name}</span>
+                          <span className="attached-file-size">{formatFileSize(att.size)}</span>
                         </div>
                         <button
                           type="button"
                           className="attached-file-remove-btn"
-                          onClick={() => {
-                            setMandatoryRemarkAttachmentsDraft((prev) =>
-                              prev.filter((a) => a.id !== att.id)
-                            );
-                          }}
-                          aria-label={`Remove attachment ${att.name}`}
-                          title="Remove file"
+                          onClick={() =>
+                            setMandatoryRemarkAttachmentsDraft((prev) => prev.filter((a) => a.id !== att.id))
+                          }
                         >
                           ✕
                         </button>
@@ -2935,15 +2469,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               </div>
 
               <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setRemarkModalQuery(null)}
-                >
+                <button type="button" className="btn-secondary" onClick={() => setRemarkModalQuery(null)}>
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary">
-                  Save Remark &amp; Mark Done
+                  Save &amp; Mark Done
                 </button>
               </div>
             </form>
@@ -2951,12 +2481,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
       )}
 
-      {/* View Query Details Pop-up Modal (for all users) */}
+      {/* ========================================================================
+          VIEW QUERY DETAILS MODAL
+         ======================================================================== */}
       {activeViewingQuery && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setViewingQuery(null)}
-        >
+        <div className="modal-backdrop" onClick={() => setViewingQuery(null)}>
           <div
             className="modal-dialog query-view-modal"
             onClick={(e) => e.stopPropagation()}
@@ -2967,93 +2496,15 @@ export const QueryPage: React.FC<QueryPageProps> = ({
             <div className="modal-header">
               <div className="modal-header-text">
                 <div className="query-view-title-row">
-                  <h3 id="view-query-modal-title">
-                    Query {activeViewingQuery.queryId}
-                  </h3>
-                  <div className="td-status-pills-wrap">
-                    {isQueryDone(activeViewingQuery) ? (
-                      <>
-                        <span className="table-status-pill table-status-pill--completed">
-                          Completed
-                        </span>
-                        {activeViewingQuery.isUrgent && (
-                          <span className="table-status-pill table-status-pill--urgent-tag" title="Urgent Query (Resolved)">
-                            Urgent
-                          </span>
-                        )}
-                        {isQueryDelayed(activeViewingQuery, nowMs) && (
-                          <span className="table-status-pill table-status-pill--delayed">
-                            Delayed
-                          </span>
-                        )}
-                      </>
-                    ) : activeViewingQuery.isUrgent ? (
-                      activeViewingQuery.managerDone && !activeViewingQuery.accountManagerDone ? (
-                        <span className="table-status-pill table-status-pill--urgent-mgr">
-                          🚨 Urgent - Mgr Checked
-                        </span>
-                      ) : (
-                        <>
-                          <span className="table-status-pill table-status-pill--urgent">
-                            🚨 URGENT (Due Now)
-                          </span>
-                          {isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs) ? (
-                            <span className="table-status-pill table-status-pill--remark-overdue" title="Receiving manager has not provided a remark within 1 hour!">
-                              ⚠️ Remark Overdue (&gt;1h)
-                            </span>
-                          ) : !hasManagerRemark(activeViewingQuery) ? (
-                            <span className="table-status-pill table-status-pill--remark-due" title="Receiving manager must put in a remark within 1 hour">
-                              ⏱️ Remark Due (&lt;1h)
-                            </span>
-                          ) : null}
-                        </>
-                      )
-                    ) : activeViewingQuery.managerDone &&
-                      !activeViewingQuery.accountManagerDone ? (
-                      <>
-                        <span className="table-status-pill table-status-pill--mgr-done">
-                          Mgr Checked
-                        </span>
-                        {isQueryDelayed(activeViewingQuery, nowMs) && (
-                          <span className="table-status-pill table-status-pill--delayed">
-                            Delayed
-                          </span>
-                        )}
-                      </>
-                    ) : isQueryDelayed(activeViewingQuery, nowMs) ? (
-                      <span className="table-status-pill table-status-pill--delayed">
-                        Delayed
-                      </span>
-                    ) : (
-                      <span className="table-status-pill table-status-pill--pending">
-                        Pending
-                      </span>
-                    )}
-
-                    {activeViewingQuery.extensionStatus === 'PENDING' && (
-                      <span className="table-status-pill table-status-pill--ext-pending">
-                        ⏳ Ext Req
-                      </span>
-                    )}
-                    {activeViewingQuery.extensionStatus === 'APPROVED' && (
-                      <span className="table-status-pill table-status-pill--ext-approved">
-                        ✅ Extended
-                      </span>
-                    )}
-                    {activeViewingQuery.extensionStatus === 'DECLINED' && (
-                      <span className="table-status-pill table-status-pill--ext-declined">
-                        ❌ Ext Declined
-                      </span>
-                    )}
-                  </div>
+                  <h3 id="view-query-modal-title">Query {activeViewingQuery.queryId}</h3>
+                  {renderStatusPills(activeViewingQuery, false)}
                 </div>
                 <span className="modal-sender-badge">
-                  Created: <strong>{formatDateTime(activeViewingQuery.createdAt)}</strong>
+                  Sent: <strong>{formatDateTime(activeViewingQuery.createdAt)}</strong>
                   {activeViewingQuery.completedAt && (
                     <>
                       {' '}
-                      &bull; Completed:{' '}
-                      <strong>{formatDateTime(activeViewingQuery.completedAt)}</strong>
+                      &bull; Done: <strong>{formatDateTime(activeViewingQuery.completedAt)}</strong>
                     </>
                   )}
                 </span>
@@ -3069,65 +2520,56 @@ export const QueryPage: React.FC<QueryPageProps> = ({
             </div>
 
             <div className="query-view-body">
-              {/* CC View-Only Awareness Banner */}
+              {/* CC View-Only Notice */}
               {(() => {
                 const isSender = belongsToAccountManager(activeViewingQuery, currentUser);
                 const isAssignedMgr = belongsToManager(activeViewingQuery, currentUser);
                 const isCc = isUserCcOnQuery(activeViewingQuery, currentUser);
-                const isCcOnly = isCc && !isSender && !isAssignedMgr && currentUser.role !== 'admin';
+                if (!(isCc && !isSender && !isAssignedMgr && currentUser.role !== 'admin')) return null;
 
-                if (!isCcOnly) return null;
                 return (
                   <div className="query-view-cc-banner">
-                    <span className="query-view-cc-banner-icon">ℹ️</span>
-                    <div className="query-view-cc-banner-text">
-                      <strong>You are CC'd on this query (View-Only Awareness).</strong>
-                      <span> You can track resolution progress, view remarks, and access attachments. Remarks and status actions are managed by the assigned manager and sender.</span>
+                    <span>ℹ️</span>
+                    <div>
+                      <strong>CC&apos;d (View-Only)</strong> &mdash; You can track updates and open attachments.
                     </div>
                   </div>
                 );
               })()}
 
-              {/* Awaiting Sender Verification Banner */}
-              {activeViewingQuery.managerDone && !activeViewingQuery.accountManagerDone && activeViewingQuery.managerDoneAtMs && (
-                <div className="query-view-grace-banner">
-                  <div className="grace-banner-left">
-                    <span className="grace-banner-icon">🛡️</span>
-                    <div>
-                      <div className="grace-banner-title">
-                        Resolved by Manager &mdash; Awaiting Sender Verification
-                      </div>
-                      <div className="grace-banner-desc">
-                        Manager marked this query as resolved on <strong>{formatDateTime(activeViewingQuery.managerDoneAt, false)}</strong>.
-                        {isSenderDelayed(activeViewingQuery, nowMs) ? (
-                          <>
-                            <br />
-                            <span style={{ color: '#b91c1c', fontWeight: 700 }}>
-                              ⚠️ 24-hour due deadline has passed while waiting for Sender verification.
-                            </span>
-                          </>
-                        ) : null}
+              {/* Awaiting Verification Banner */}
+              {activeViewingQuery.managerDone &&
+                !activeViewingQuery.accountManagerDone &&
+                activeViewingQuery.managerDoneAtMs && (
+                  <div className="query-view-grace-banner">
+                    <div className="grace-banner-left">
+                      <span className="grace-banner-icon">🛡️</span>
+                      <div>
+                        <div className="grace-banner-title">Awaiting Sender Verification</div>
+                        <div className="grace-banner-desc">
+                          Resolved by manager on <strong>{formatDateTime(activeViewingQuery.managerDoneAt, false)}</strong>.
+                          {isSenderDelayed(activeViewingQuery, nowMs) && (
+                            <span className="overdue-inline-alert"> (Due deadline passed)</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Completion Note Audit Banner */}
               {activeViewingQuery.completionNote && (
                 <div className="query-view-completion-note-card">
-                  <span className="completion-note-icon">ℹ️</span>
+                  <span>ℹ️</span>
                   <span>{activeViewingQuery.completionNote}</span>
                 </div>
               )}
 
+              {/* People & CC Metadata */}
               <div className="query-view-meta-grid">
                 <div className="query-view-meta-box">
-                  <span className="query-view-meta-label">From (Sender)</span>
+                  <span className="query-view-meta-label">From</span>
                   <div className="person-cell-wrapper">
-                    <span className="query-view-meta-value">
-                      {activeViewingQuery.accountManagerName}
-                    </span>
+                    <span className="query-view-meta-value">{activeViewingQuery.accountManagerName}</span>
                     {getSenderRoleBadge(activeViewingQuery.accountManagerId) && (
                       <span
                         className={`person-role-tag person-role-tag--${getSenderRoleBadge(
@@ -3142,51 +2584,41 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
                 <div className="query-view-meta-box">
                   <span className="query-view-meta-label">Assigned Manager</span>
-                  <div className="person-cell-wrapper">
-                    <span className="query-view-meta-value">
-                      {activeViewingQuery.managerName}
-                    </span>
-                  </div>
+                  <span className="query-view-meta-value">{activeViewingQuery.managerName}</span>
                 </div>
 
-                <div className="query-view-meta-box query-view-meta-box--cc" style={{ gridColumn: 'span 2' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                    <span className="query-view-meta-label">👥 CC'd Members (View-Only)</span>
-                    {(belongsToAccountManager(activeViewingQuery, currentUser) || currentUser.role === 'admin') && !isEditingModalCc && (
-                      <button
-                        type="button"
-                        className="btn-meta-edit-cc"
-                        onClick={() => {
-                          setModalCcDraftIds((activeViewingQuery.ccUsers || []).map((u) => u.id));
-                          setIsEditingModalCc(true);
-                        }}
-                        title="Add or remove team members CC'd on this query"
-                      >
-                        {activeViewingQuery.ccUsers && activeViewingQuery.ccUsers.length > 0 ? '✏️ Edit CC' : '+ Add CC'}
-                      </button>
-                    )}
+                <div className="query-view-meta-box query-view-meta-box--full">
+                  <div className="meta-box-header-row">
+                    <span className="query-view-meta-label">CC Members</span>
+                    {(belongsToAccountManager(activeViewingQuery, currentUser) || currentUser.role === 'admin') &&
+                      !isEditingModalCc && (
+                        <button
+                          type="button"
+                          className="btn-meta-edit-cc"
+                          onClick={() => {
+                            setModalCcDraftIds((activeViewingQuery.ccUsers || []).map((u) => u.id));
+                            setIsEditingModalCc(true);
+                          }}
+                        >
+                          {activeViewingQuery.ccUsers && activeViewingQuery.ccUsers.length > 0 ? 'Edit' : '+ Add'}
+                        </button>
+                      )}
                   </div>
 
                   {isEditingModalCc ? (
                     <div className="modal-cc-editor">
                       {modalCcDraftIds.length > 0 && (
-                        <div className="cc-chips-container" style={{ marginBottom: '0.45rem' }}>
+                        <div className="cc-chips-container">
                           {modalCcDraftIds.map((userId) => {
                             const u = AUTHORIZED_USERS.find((usr) => usr.id === userId);
                             if (!u) return null;
                             return (
                               <span key={userId} className="cc-chip">
-                                <span className="cc-chip-name">{u.name}</span>
-                                <span className="cc-chip-role">
-                                  ({u.role === 'manager' ? 'Mgr' : u.role === 'account_manager' ? 'AM' : 'Admin'})
-                                </span>
+                                <span>{u.name}</span>
                                 <button
                                   type="button"
                                   className="cc-chip-remove"
-                                  onClick={() =>
-                                    setModalCcDraftIds((prev) => prev.filter((id) => id !== userId))
-                                  }
-                                  title="Remove"
+                                  onClick={() => setModalCcDraftIds((prev) => prev.filter((id) => id !== userId))}
                                 >
                                   ✕
                                 </button>
@@ -3204,78 +2636,61 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             setModalCcDraftIds((prev) => [...prev, id]);
                           }
                         }}
-                        aria-label="Add user to CC"
                       >
-                        <option value="">+ Add team member to CC...</option>
-                        {AUTHORIZED_USERS
-                          .filter(
-                            (u) =>
-                              u.id !== activeViewingQuery.accountManagerId &&
-                              u.id !== activeViewingQuery.managerId &&
-                              !modalCcDraftIds.includes(u.id)
-                          )
-                          .map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.name} ({u.role === 'manager' ? 'Manager' : u.role === 'account_manager' ? 'Account Manager' : 'Admin'}) &bull; {u.email}
-                            </option>
-                          ))}
+                        <option value="">+ Select member...</option>
+                        {AUTHORIZED_USERS.filter(
+                          (u) =>
+                            u.id !== activeViewingQuery.accountManagerId &&
+                            u.id !== activeViewingQuery.managerId &&
+                            !modalCcDraftIds.includes(u.id)
+                        ).map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
                       </select>
-                      <div className="modal-cc-editor-actions" style={{ marginTop: '0.5rem', display: 'flex', gap: '0.45rem' }}>
+                      <div className="inline-edit-actions" style={{ marginTop: '0.5rem' }}>
                         <button
                           type="button"
-                          className="btn-secondary"
-                          style={{ padding: '0.25rem 0.65rem', fontSize: '0.78rem' }}
+                          className="btn-inline-save"
+                          onClick={handleSaveModalCc}
+                          disabled={isSavingModalCc}
+                        >
+                          {isSavingModalCc ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-inline-cancel"
                           onClick={() => setIsEditingModalCc(false)}
                           disabled={isSavingModalCc}
                         >
                           Cancel
                         </button>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          style={{ padding: '0.25rem 0.65rem', fontSize: '0.78rem' }}
-                          onClick={handleSaveModalCc}
-                          disabled={isSavingModalCc}
-                        >
-                          {isSavingModalCc ? 'Saving...' : '💾 Save CC'}
-                        </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="query-view-cc-list">
-                      {activeViewingQuery.ccUsers && activeViewingQuery.ccUsers.length > 0 ? (
-                        <div className="cc-view-pills">
-                          {activeViewingQuery.ccUsers.map((u) => (
-                            <span key={u.id} className="cc-view-pill" title={`${u.name} (${u.email})`}>
-                              👤 {u.name}
-                              <span className="cc-view-pill-role">
-                                {u.role === 'manager' ? 'Mgr' : u.role === 'account_manager' ? 'AM' : 'Admin'}
-                              </span>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="query-view-meta-empty">No one CC'd on this query.</span>
-                      )}
+                  ) : activeViewingQuery.ccUsers && activeViewingQuery.ccUsers.length > 0 ? (
+                    <div className="cc-view-pills">
+                      {activeViewingQuery.ccUsers.map((u) => (
+                        <span key={u.id} className="cc-view-pill">
+                          {u.name}
+                        </span>
+                      ))}
                     </div>
+                  ) : (
+                    <span className="query-view-meta-empty">None</span>
                   )}
 
-                  {modalCcSaveSuccess && (
-                    <div className="query-view-save-toast" style={{ marginTop: '0.4rem' }}>
-                      ✅ CC list updated and alerts sent!
-                    </div>
-                  )}
+                  {modalCcSaveSuccess && <div className="query-view-save-toast">✅ CC updated</div>}
                 </div>
               </div>
 
+              {/* Query Details & Sender Attachments */}
               {(() => {
                 const isSenderOrAdmin =
-                  belongsToAccountManager(activeViewingQuery, currentUser) ||
-                  currentUser.role === 'admin';
+                  belongsToAccountManager(activeViewingQuery, currentUser) || currentUser.role === 'admin';
 
                 return (
                   <>
-                    {/* Query Details Section */}
                     <div className="query-view-section">
                       <div className="query-view-section-header">
                         <span className="query-view-section-label">Query Details</span>
@@ -3285,22 +2700,16 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             className={`btn-query-edit-action ${isEditingDescription ? 'btn-query-edit-action--active' : ''}`}
                             onClick={() => {
                               setIsEditingDescription((prev) => !prev);
-                              if (!isEditingDescription) {
-                                setHasUnsavedDetailChanges(true);
-                              }
+                              if (!isEditingDescription) setHasUnsavedDetailChanges(true);
                             }}
-                            title={isEditingDescription ? 'Close description editor' : 'Edit query title and description'}
                           >
-                            {isEditingDescription ? '✓ Done Editing' : '✏️ Edit Description'}
+                            {isEditingDescription ? 'Done' : '✏️ Edit'}
                           </button>
                         )}
                       </div>
                       <div className="query-view-content-box">
                         {isEditingDescription ? (
                           <div className="query-view-edit-block">
-                            <label htmlFor="detail-title-input" className="query-view-sub-label">
-                              Query Title
-                            </label>
                             <input
                               id="detail-title-input"
                               type="text"
@@ -3310,57 +2719,44 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                 setDetailTitleDraft(e.target.value);
                                 setHasUnsavedDetailChanges(true);
                               }}
-                              placeholder="Enter query title..."
+                              placeholder="Title..."
                             />
-                            <label
-                              htmlFor="detail-desc-input"
-                              className="query-view-sub-label"
-                              style={{ marginTop: '0.65rem' }}
-                            >
-                              Query Description
-                            </label>
                             <textarea
                               id="detail-desc-input"
-                              rows={6}
+                              rows={5}
                               className="inline-edit-desc-textarea"
+                              style={{ marginTop: '0.5rem' }}
                               value={detailDescDraft}
                               onChange={(e) => {
                                 setDetailDescDraft(e.target.value);
                                 setHasUnsavedDetailChanges(true);
                               }}
-                              placeholder="Enter query description..."
+                              placeholder="Description..."
                             />
                           </div>
                         ) : (
                           <>
-                            <div className="query-view-field-block">
-                              <span className="query-view-sub-label">Title</span>
-                              <div className="query-view-item-title">
-                                {activeViewingQuery.queryTitle || activeViewingQuery.queryText}
-                              </div>
+                            <div className="query-view-item-title">
+                              {activeViewingQuery.queryTitle || activeViewingQuery.queryText}
                             </div>
-                            <div className="query-view-field-block query-view-field-block--desc">
-                              <span className="query-view-sub-label">Description</span>
-                              <div className="query-view-item-desc">
-                                {activeViewingQuery.queryText || '—'}
-                              </div>
+                            <div className="query-view-field-block--desc query-view-item-desc">
+                              {activeViewingQuery.queryText || '—'}
                             </div>
                           </>
                         )}
                       </div>
                     </div>
 
-                    {/* Attachments Section */}
+                    {/* Attachments */}
                     <div className="query-view-section">
                       <div className="query-view-section-header">
                         <span className="query-view-section-label">
-                          Attachments ({detailAttachmentsDraft.length}/{MAX_FILES_PER_UPLOAD} &bull; Max {MAX_FILE_SIZE_LABEL}/file)
+                          Attachments ({detailAttachmentsDraft.length}/{MAX_FILES_PER_UPLOAD})
                         </span>
                         {isSenderOrAdmin && (
                           <>
                             <input
                               ref={detailFileInputRef}
-                              id="detail-attachments-file-input"
                               type="file"
                               multiple
                               style={{ display: 'none' }}
@@ -3370,14 +2766,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               type="button"
                               className="btn-query-edit-action"
                               onClick={() => detailFileInputRef.current?.click()}
-                              title={`Select documents from device to attach (Max ${MAX_FILE_SIZE_LABEL} per file, up to ${MAX_FILES_PER_UPLOAD} files)`}
                               disabled={isReadingDetailFiles || detailAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD}
                             >
-                              {isReadingDetailFiles
-                                ? 'Reading files...'
-                                : detailAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD
-                                ? `Max ${MAX_FILES_PER_UPLOAD} Files`
-                                : '📎 Add Attachment'}
+                              {isReadingDetailFiles ? 'Reading...' : '📎 Add'}
                             </button>
                           </>
                         )}
@@ -3385,97 +2776,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
                       {detailAttachmentsDraft.length > 0 ? (
                         <div className="query-view-attachments-grid">
-                          {detailAttachmentsDraft.map((att) => (
-                            <div key={att.id} className="query-attachment-card">
-                              <div className="query-attachment-card-main">
-                                <span className="query-attachment-card-icon">
-                                  {getFileIcon(att.name, att.type)}
-                                </span>
-                                <div className="query-attachment-card-details">
-                                  <div className="query-attachment-card-name" title={att.name}>
-                                    {att.name}
-                                  </div>
-                                  <div className="query-attachment-card-meta">
-                                    <span className="query-attachment-card-size">
-                                      {formatFileSize(att.size)}
-                                    </span>
-                                    {att.uploadedAt && (
-                                      <span className="query-attachment-card-date">
-                                        &bull; {formatDate(att.uploadedAt)}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="query-attachment-card-actions">
-                                <button
-                                  type="button"
-                                  className="btn-attachment-action btn-attachment-action--view"
-                                  onClick={() => openAttachment(att)}
-                                  title="Open or preview document in a new tab"
-                                >
-                                  👁️ Open
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn-attachment-action btn-attachment-action--download"
-                                  onClick={() => downloadAttachment(att)}
-                                  title="Download document to device"
-                                >
-                                  ⬇️ Download
-                                </button>
-                                {isSenderOrAdmin && (
-                                  <button
-                                    type="button"
-                                    className="btn-attachment-action btn-attachment-action--remove"
-                                    onClick={() => handleRemoveDetailAttachment(att.id)}
-                                    title="Remove this attachment"
-                                    aria-label={`Remove ${att.name}`}
-                                  >
-                                    ✕ Remove
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div
-                          className="query-view-content-box query-view-content-box--empty"
-                          style={{
-                            padding: '0.85rem 1rem',
-                            fontSize: '0.84rem',
-                            color: '#786e60',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: '0.6rem',
-                          }}
-                        >
-                          <span>No documents attached to this query yet.</span>
-                          {isSenderOrAdmin && (
-                            <button
-                              type="button"
-                              className="btn-inline-edit"
-                              onClick={() => detailFileInputRef.current?.click()}
-                            >
-                              + Add Attachment from Device
-                            </button>
+                          {detailAttachmentsDraft.map((att) =>
+                            renderAttachmentCard(att, isSenderOrAdmin, handleRemoveDetailAttachment, true)
                           )}
                         </div>
+                      ) : (
+                        <div className="query-view-empty-box">No attachments.</div>
                       )}
                     </div>
 
-                    {/* Save Changes Action Bar (visible when sender/admin has edited description or added/removed attachments) */}
                     {isSenderOrAdmin && (hasUnsavedDetailChanges || isEditingDescription) && (
                       <div className="query-view-save-bar">
-                        <div className="query-view-save-info">
-                          <span className="query-view-save-info-icon">ℹ️</span>
-                          <span>
-                            Original creation timestamp (<strong>{formatDateTime(activeViewingQuery.createdAt)}</strong>) and SLA target deadlines remain strictly preserved.
-                          </span>
-                        </div>
+                        <span className="query-view-save-info">Original creation time &amp; deadline remain unchanged.</span>
                         <div className="query-view-save-actions">
                           <button
                             type="button"
@@ -3487,114 +2799,52 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                           </button>
                           <button
                             type="button"
-                            className="btn-primary btn-save-changes-highlight"
+                            className="btn-save-changes-highlight"
                             onClick={handleSaveDetailChanges}
                             disabled={isSavingDetailChanges || isReadingDetailFiles}
                           >
-                            {isSavingDetailChanges ? 'Saving Changes...' : '💾 Save Changes'}
+                            {isSavingDetailChanges ? 'Saving...' : 'Save Changes'}
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {detailSaveSuccess && (
-                      <div className="query-view-save-toast">
-                        ✅ Query changes and attachments saved successfully!
-                      </div>
-                    )}
+                    {detailSaveSuccess && <div className="query-view-save-toast">✅ Changes saved</div>}
                   </>
                 );
               })()}
 
+              {/* Linked Appointment Card */}
               {(activeViewingLinkedAppointment || activeViewingQuery.linkedAppointmentId) && (
                 <div className="query-view-section">
                   <span className="query-view-section-label">Linked Appointment</span>
-                  <div
-                    className="query-view-content-box"
-                    style={{
-                      background: 'rgba(132, 73, 24, 0.05)',
-                      border: '1px solid rgba(132, 73, 24, 0.22)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.6rem',
-                    }}
-                  >
+                  <div className="linked-apt-card">
                     {activeViewingLinkedAppointment ? (
                       <>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: '0.5rem',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <span className="apt-id-pill">
-                              📅 {activeViewingLinkedAppointment.id}
-                            </span>
-                            <strong style={{ fontSize: '0.94rem', color: '#1c1813' }}>
-                              {activeViewingLinkedAppointment.title}
-                            </strong>
+                        <div className="linked-apt-header">
+                          <div>
+                            <span className="apt-id-pill">📅 {activeViewingLinkedAppointment.id}</span>{' '}
+                            <strong>{activeViewingLinkedAppointment.title}</strong>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                            <span
-                              className={`apt-status-pill apt-status-pill--${activeViewingLinkedAppointment.status.toLowerCase()}`}
-                            >
-                              {activeViewingLinkedAppointment.status === 'CONFIRMED'
-                                ? 'Confirmed'
-                                : activeViewingLinkedAppointment.status === 'PENDING'
-                                ? Array.isArray(activeViewingLinkedAppointment.attendees) &&
-                                  activeViewingLinkedAppointment.attendees.length > 1
-                                  ? `Pending (${
-                                      activeViewingLinkedAppointment.attendees.filter(
-                                        (a) => a.status === 'CONFIRMED'
-                                      ).length
-                                    }/${activeViewingLinkedAppointment.attendees.length} accepted)`
-                                  : 'Pending Acceptance'
-                                : activeViewingLinkedAppointment.status === 'RESCHEDULE_PROPOSED'
-                                ? 'Reschedule Proposed'
-                                : activeViewingLinkedAppointment.status === 'DECLINED'
-                                ? 'Declined'
-                                : activeViewingLinkedAppointment.status === 'CANCELLED'
-                                ? 'Cancelled'
-                                : 'Completed'}
-                            </span>
-                            <button
-                              type="button"
-                              style={{
-                                background: '#ffffff',
-                                border: '1px solid rgba(132, 73, 24, 0.25)',
-                                borderRadius: '4px',
-                                padding: '2px 8px',
-                                fontSize: '0.72rem',
-                                color: '#78350f',
-                                cursor: 'pointer',
-                              }}
-                              title="Unlink this appointment from the query"
-                              onClick={async () => {
-                                if (window.confirm(`Unlink appointment ${activeViewingLinkedAppointment.id} from query ${activeViewingQuery.queryId}?`)) {
-                                  await onUpdateQuery(activeViewingQuery.queryId, { linkedAppointmentId: null });
-                                }
-                              }}
-                            >
-                              Unlink
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            className="btn-inline-cancel"
+                            onClick={async () => {
+                              if (
+                                window.confirm(
+                                  `Unlink appointment ${activeViewingLinkedAppointment.id} from query ${activeViewingQuery.queryId}?`
+                                )
+                              ) {
+                                await onUpdateQuery(activeViewingQuery.queryId, { linkedAppointmentId: null });
+                              }
+                            }}
+                          >
+                            Unlink
+                          </button>
                         </div>
-
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            gap: '0.85rem',
-                            fontSize: '0.82rem',
-                            color: '#4b4339',
-                          }}
-                        >
+                        <div className="linked-apt-meta">
                           <span>
-                            <strong>Scheduled:</strong> {activeViewingLinkedAppointment.scheduledAt}
+                            <strong>When:</strong> {activeViewingLinkedAppointment.scheduledAt}
                           </span>
                           <span>
                             <strong>Type:</strong> {activeViewingLinkedAppointment.meetingType}
@@ -3605,142 +2855,52 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             </span>
                           )}
                         </div>
-
-                        <div style={{ fontSize: '0.82rem', color: '#4b4339' }}>
-                          <strong>Host:</strong> {activeViewingLinkedAppointment.requesterName} &rarr;{' '}
-                          <strong>Attendees:</strong>{' '}
-                          {Array.isArray(activeViewingLinkedAppointment.attendees) &&
-                          activeViewingLinkedAppointment.attendees.length > 0
-                            ? activeViewingLinkedAppointment.attendees
-                                .map(
-                                  (a) =>
-                                    `${a.name}${
-                                      a.status === 'CONFIRMED'
-                                        ? ' (✓ Accepted)'
-                                        : a.status === 'DECLINED'
-                                        ? ' (✕ Declined)'
-                                        : ' (⏳ Pending)'
-                                    }`
-                                )
-                                .join(', ')
-                            : activeViewingLinkedAppointment.receiverName}
-                        </div>
-
-                        {activeViewingLinkedAppointment.agenda && (
-                          <div
-                            style={{
-                              fontSize: '0.82rem',
-                              color: '#3a3228',
-                              background: '#ffffff',
-                              padding: '0.55rem 0.75rem',
-                              borderRadius: '8px',
-                              border: '1px solid rgba(190, 179, 161, 0.35)',
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word',
-                            }}
-                          >
-                            <strong>Agenda:</strong> {activeViewingLinkedAppointment.agenda}
-                          </div>
-                        )}
                       </>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span className="apt-id-pill">
-                          📅 {activeViewingQuery.linkedAppointmentId}
-                        </span>
-                        <span style={{ fontSize: '0.85rem', color: '#4b4339' }}>
-                          Linked to Appointment {activeViewingQuery.linkedAppointmentId}
-                        </span>
-                      </div>
+                      <span>📅 Appointment {activeViewingQuery.linkedAppointmentId}</span>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Target Completion & Extension Management */}
+              {/* Target Completion & Extension Section */}
               <div className="query-view-section query-view-section--extension">
                 <div className="query-view-section-header">
-                  <span className="query-view-section-label">Target Completion</span>
+                  <span className="query-view-section-label">Deadline</span>
                   <span className="query-view-due-text">
                     {activeViewingQuery.extensionStatus === 'APPROVED' && activeViewingQuery.targetDueAt ? (
                       <>
                         <strong>{formatDateTime(activeViewingQuery.targetDueAt)}</strong>{' '}
-                        <span className="pill-extended-badge">Extended ✅</span>
+                        <span className="pill-extended-badge">Extended</span>
                       </>
                     ) : activeViewingQuery.extensionStatus === 'PENDING' && activeViewingQuery.extensionProposedDueAt ? (
                       <>
-                        <span>{formatDateTime(getQueryDeadlineMs(activeViewingQuery))}</span>{' '}
-                        <span style={{ margin: '0 0.35rem', color: '#94a3b8' }}>➔</span>{' '}
-                        <strong style={{ color: '#b45309' }}>{formatDateTime(activeViewingQuery.extensionProposedDueAt)}</strong>{' '}
-                        <span className="pill-extended-badge" style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}>Ext Pending ⏳</span>
+                        <span>{formatDateTime(getQueryDeadlineMs(activeViewingQuery))}</span> &rarr;{' '}
+                        <strong>{formatDateTime(activeViewingQuery.extensionProposedDueAt)}</strong>
                       </>
                     ) : activeViewingQuery.isUrgent ? (
-                      <span className="pill-urgent-badge-strong">
-                        🚨 Immediately Due (10m Alerts &bull; 1h Remark Required)
-                      </span>
+                      <span className="pill-urgent-badge-strong">🚨 Immediate (1h Remark SLA)</span>
                     ) : activeViewingQuery.targetDueAt ? (
-                      <>
-                        <strong>{formatDateTime(activeViewingQuery.targetDueAt)}</strong>{' '}
-                        <span className="pill-extended-badge">Extended</span>
-                      </>
+                      <strong>{formatDateTime(activeViewingQuery.targetDueAt)}</strong>
                     ) : (
-                      <>Standard: 24 hours from creation ({formatDateTime(getQueryDeadlineMs(activeViewingQuery))})</>
+                      <>{formatDateTime(getQueryDeadlineMs(activeViewingQuery))}</>
                     )}
                   </span>
                 </div>
 
-                {activeViewingQuery.isUrgent && !isQueryDone(activeViewingQuery) && (
-                  <div
-                    className={`urgent-view-notice ${
-                      isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs)
-                        ? 'urgent-view-notice--overdue'
-                        : ''
-                    }`}
-                  >
-                    <span className="urgent-view-notice-icon">
-                      {isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs) ? '⚠️' : '🚨'}
-                    </span>
-                    <div className="urgent-view-notice-text">
-                      <div>
-                        <strong>URGENT SLA Rules Active:</strong> Sender, Receiver, and Admins are alerted every 10 minutes until finalized. Manager ({activeViewingQuery.managerName}) KPI is reduced by 50% until completed.
-                      </div>
-                      {isUrgentManagerRemarkOverdue(activeViewingQuery, nowMs) ? (
-                        <div className="urgent-notice-highlight urgent-notice-highlight--alert">
-                          ⚠️ <strong>Action Required:</strong> The 1-hour initial remark window has expired without any manager remark!
-                        </div>
-                      ) : hasManagerRemark(activeViewingQuery) ? (
-                        <div className="urgent-notice-highlight urgent-notice-highlight--ok">
-                          ✅ Manager remark provided. Awaiting completion &amp; sender verification.
-                        </div>
-                      ) : (
-                        <div className="urgent-notice-highlight">
-                          ⏱️ Receiving manager must post a remark regarding this query within 1 hour.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
                 {activeViewingQuery.extensionStatus === 'PENDING' ? (
                   <div className="query-view-ext-banner query-view-ext-banner--pending">
                     <div className="ext-banner-top">
-                      <span className="ext-banner-title">
-                        ⏳ Extension Requested by Manager {activeViewingQuery.managerName}
-                      </span>
+                      <strong>⏳ Extension Requested</strong>
                       <span className="ext-proposed-pill">
-                        Proposed: {formatDateTime(activeViewingQuery.extensionProposedDueAt) || '—'}
+                        New: {formatDateTime(activeViewingQuery.extensionProposedDueAt) || '—'}
                       </span>
                     </div>
-                    <p className="ext-banner-reason">
-                      <strong>Reason:</strong> {activeViewingQuery.extensionReason || '—'}
-                    </p>
-                    {activeViewingQuery.extensionRequestedAt && (
-                      <span style={{ fontSize: '0.75rem', color: '#92400e', opacity: 0.85 }}>
-                        Submitted on: {activeViewingQuery.extensionRequestedAt}
-                      </span>
-                    )}
+                    <p className="ext-banner-reason">{activeViewingQuery.extensionReason || '—'}</p>
                     <div className="ext-banner-actions">
-                      {(belongsToAccountManager(activeViewingQuery, currentUser) || currentUser.role === 'admin' || currentUser.role === 'account_manager') && (
+                      {(belongsToAccountManager(activeViewingQuery, currentUser) ||
+                        currentUser.role === 'admin' ||
+                        currentUser.role === 'account_manager') && (
                         <>
                           <button
                             type="button"
@@ -3748,14 +2908,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             onClick={() => handleApproveExtension(activeViewingQuery)}
                             disabled={isReviewingExtension}
                           >
-                            ✓ Approve Extension
+                            ✓ Approve
                           </button>
                           <button
                             type="button"
                             className="btn-decline-ext"
-                            onClick={() => {
-                              setExtensionReviewModalQuery(activeViewingQuery);
-                            }}
+                            onClick={() => setExtensionReviewModalQuery(activeViewingQuery)}
                             disabled={isReviewingExtension}
                           >
                             ✕ Decline
@@ -3766,77 +2924,47 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         <button
                           type="button"
                           className="btn-request-ext"
-                          style={{ marginLeft: 'auto' }}
                           onClick={() => openExtensionModal(activeViewingQuery)}
                         >
-                          ✏️ Modify Extension Request
+                          Edit Request
                         </button>
                       )}
                     </div>
                   </div>
                 ) : activeViewingQuery.extensionStatus === 'APPROVED' ? (
                   <div className="query-view-ext-banner query-view-ext-banner--approved">
-                    <div className="ext-banner-top">
-                      <span>
-                        ✅ <strong>Extension Approved:</strong> New completion deadline is{' '}
-                        <strong>{formatDateTime(activeViewingQuery.targetDueAt)}</strong>.
-                      </span>
-                    </div>
-                    {activeViewingQuery.extensionReason && (
-                      <p className="ext-banner-reason" style={{ background: 'rgba(255,255,255,0.7)', color: '#166534' }}>
-                        <strong>Manager's Reason:</strong> {activeViewingQuery.extensionReason}
-                      </p>
-                    )}
-                    {activeViewingQuery.extensionReviewedAt && (
-                      <span style={{ fontSize: '0.75rem', color: '#166534', opacity: 0.85 }}>
-                        Approved on: {activeViewingQuery.extensionReviewedAt}
-                      </span>
-                    )}
+                    <span>
+                      ✅ <strong>Approved:</strong> Extended to{' '}
+                      <strong>{formatDateTime(activeViewingQuery.targetDueAt)}</strong>
+                    </span>
                     {!isQueryDone(activeViewingQuery) &&
                       (belongsToManager(activeViewingQuery, currentUser) || currentUser.role === 'admin') && (
-                        <div className="ext-request-btn-row">
-                          <button
-                            type="button"
-                            className="btn-request-ext"
-                            onClick={() => openExtensionModal(activeViewingQuery)}
-                          >
-                            ⏳ Request Further Extension
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          className="btn-request-ext"
+                          onClick={() => openExtensionModal(activeViewingQuery)}
+                        >
+                          Extend Further
+                        </button>
                       )}
                   </div>
                 ) : activeViewingQuery.extensionStatus === 'DECLINED' ? (
                   <div className="query-view-ext-banner query-view-ext-banner--declined">
-                    <div className="ext-banner-top">
-                      <span>
-                        ❌ <strong>Extension Request Declined</strong>.
-                      </span>
-                    </div>
-                    {activeViewingQuery.extensionReviewNote && (
-                      <p className="ext-banner-reason" style={{ background: 'rgba(255,255,255,0.7)', color: '#991b1b' }}>
-                        <strong>Sender Feedback / Note:</strong> {activeViewingQuery.extensionReviewNote}
-                      </p>
-                    )}
-                    {activeViewingQuery.extensionReviewedAt && (
-                      <span style={{ fontSize: '0.75rem', color: '#991b1b', opacity: 0.85 }}>
-                        Reviewed on: {activeViewingQuery.extensionReviewedAt}
-                      </span>
-                    )}
+                    <span>
+                      ❌ <strong>Declined:</strong> {activeViewingQuery.extensionReviewNote || 'No note provided'}
+                    </span>
                     {!isQueryDone(activeViewingQuery) &&
                       (belongsToManager(activeViewingQuery, currentUser) || currentUser.role === 'admin') && (
-                        <div className="ext-request-btn-row">
-                          <button
-                            type="button"
-                            className="btn-request-ext"
-                            onClick={() => openExtensionModal(activeViewingQuery)}
-                          >
-                            ⏳ Submit New Extension Request
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          className="btn-request-ext"
+                          onClick={() => openExtensionModal(activeViewingQuery)}
+                        >
+                          Re-request
+                        </button>
                       )}
                   </div>
                 ) : (
-                  /* When extensionStatus is NONE / null */
                   !isQueryDone(activeViewingQuery) &&
                   (belongsToManager(activeViewingQuery, currentUser) || currentUser.role === 'admin') && (
                     <div className="ext-request-btn-row">
@@ -3845,19 +2973,19 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         className="btn-request-ext"
                         onClick={() => openExtensionModal(activeViewingQuery)}
                       >
-                        ⏳ Request Completion Date Extension
+                        ⏳ Request Extension
                       </button>
                     </div>
                   )
                 )}
               </div>
 
+              {/* Remarks Grid (Manager & Sender) */}
               <div className="query-view-remarks-grid">
-                {/* Manager Remark Card */}
+                {/* Manager Remarks */}
                 {(() => {
                   const isAssignedManagerOrAdmin =
-                    belongsToManager(activeViewingQuery, currentUser) ||
-                    currentUser.role === 'admin';
+                    belongsToManager(activeViewingQuery, currentUser) || currentUser.role === 'admin';
                   const mgrRemarks = [...(activeViewingQuery.remarks || [])]
                     .filter((r) => r.type === 'manager')
                     .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
@@ -3865,13 +2993,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   return (
                     <div className="query-view-section query-view-section--card">
                       <div className="query-view-section-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                          <span className="query-view-section-label">🛠️ Manager Remarks</span>
+                        <div className="person-cell-wrapper">
+                          <span className="query-view-section-label">Manager Remarks</span>
                           {isAssignedManagerOrAdmin && (
                             <>
                               <input
                                 ref={mgrFileInputRef}
-                                id="modal-mgr-attachments-file-input"
                                 type="file"
                                 multiple
                                 style={{ display: 'none' }}
@@ -3881,55 +3008,37 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                                 type="button"
                                 className="btn-query-edit-action"
                                 onClick={() => mgrFileInputRef.current?.click()}
-                                title={`Attach resolution documents from device (Max ${MAX_FILE_SIZE_LABEL} per file, up to ${MAX_FILES_PER_UPLOAD} files)`}
                                 disabled={isReadingMgrFiles || modalMgrAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD}
                               >
-                                {isReadingMgrFiles
-                                  ? 'Reading...'
-                                  : modalMgrAttachmentsDraft.length >= MAX_FILES_PER_UPLOAD
-                                  ? `Max ${MAX_FILES_PER_UPLOAD} Files`
-                                  : `📎 Attach File (Max ${MAX_FILE_SIZE_LABEL})`}
+                                {isReadingMgrFiles ? 'Reading...' : '📎 Attach'}
                               </button>
                             </>
                           )}
                         </div>
                         <span
                           className={`query-view-check-tag ${
-                            activeViewingQuery.managerDone
-                              ? 'query-view-check-tag--done'
-                              : ''
+                            activeViewingQuery.managerDone ? 'query-view-check-tag--done' : ''
                           }`}
                         >
-                          {activeViewingQuery.managerDone ? '✓ Mgr Done' : 'Unchecked'}
+                          {activeViewingQuery.managerDone ? '✓ Done' : 'Pending'}
                         </span>
                       </div>
 
-                      {/* Timeline of Remarks made so far with timestamp */}
                       <div className="remark-timeline">
                         {mgrRemarks.length > 0 ? (
                           mgrRemarks.map((rmk, idx) => {
                             const isLatest = idx === mgrRemarks.length - 1;
                             const displayText = (rmk.text || rmk.title || '—').trim();
                             const displayTitle =
-                              rmk.title && rmk.title.trim() !== displayText
-                                ? rmk.title.trim()
-                                : null;
+                              rmk.title && rmk.title.trim() !== displayText ? rmk.title.trim() : null;
                             return (
                               <div
                                 key={rmk.id || idx}
                                 className={`remark-timeline-item ${isLatest ? 'remark-timeline-item--latest' : ''}`}
                               >
                                 <div className="remark-timeline-header">
-                                  <div className="remark-author-info">
-                                    <span className="remark-author-name">{rmk.authorName}</span>
-                                    <span className={`person-role-tag person-role-tag--${rmk.authorRole}`}>
-                                      {rmk.authorRole === 'manager' ? 'Manager' : rmk.authorRole === 'admin' ? 'Admin' : 'Sender'}
-                                    </span>
-                                  </div>
-                                  <div className="remark-meta-right">
-                                    <span className="remark-timestamp">🕒 {rmk.createdAt}</span>
-                                    {isLatest && <span className="remark-badge-latest">LATEST</span>}
-                                  </div>
+                                  <span className="remark-author-name">{rmk.authorName}</span>
+                                  <span className="remark-timestamp">{rmk.createdAt}</span>
                                 </div>
                                 {displayTitle && <div className="remark-title">{displayTitle}</div>}
                                 <div className="remark-text">{displayText}</div>
@@ -3939,88 +3048,28 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         ) : activeViewingQuery.managerRemarkTitle || activeViewingQuery.managerRemark ? (
                           <div className="remark-timeline-item remark-timeline-item--latest">
                             <div className="remark-timeline-header">
-                              <div className="remark-author-info">
-                                <span className="remark-author-name">{activeViewingQuery.managerName}</span>
-                                <span className="person-role-tag person-role-tag--manager">Manager</span>
-                              </div>
-                              <div className="remark-meta-right">
-                                <span className="remark-timestamp">🕒 {activeViewingQuery.managerDoneAt || activeViewingQuery.createdAt}</span>
-                                <span className="remark-badge-latest">LATEST</span>
-                              </div>
+                              <span className="remark-author-name">{activeViewingQuery.managerName}</span>
+                              <span className="remark-timestamp">
+                                {activeViewingQuery.managerDoneAt || activeViewingQuery.createdAt}
+                              </span>
                             </div>
-                            {activeViewingQuery.managerRemarkTitle &&
-                              activeViewingQuery.managerRemarkTitle.trim() !== (activeViewingQuery.managerRemark || '').trim() && (
-                                <div className="remark-title">{activeViewingQuery.managerRemarkTitle}</div>
-                              )}
                             <div className="remark-text">
-                              {activeViewingQuery.managerRemark || activeViewingQuery.managerRemarkTitle || '—'}
+                              {activeViewingQuery.managerRemark || activeViewingQuery.managerRemarkTitle}
                             </div>
                           </div>
                         ) : (
-                          <div className="remark-timeline-empty">
-                            No manager remarks posted yet.
-                          </div>
+                          <div className="remark-timeline-empty">No remarks yet.</div>
                         )}
                       </div>
 
-                      {/* Display Manager Attachments */}
                       {modalMgrAttachmentsDraft.length > 0 && (
-                        <div className="remark-attachments-wrap">
-                          <span className="query-view-sub-label">
-                            📎 Resolution Attachments ({modalMgrAttachmentsDraft.length}/{MAX_FILES_PER_UPLOAD} &bull; Max {MAX_FILE_SIZE_LABEL}/file)
-                          </span>
-                          <div className="query-view-attachments-grid" style={{ marginTop: '0.35rem' }}>
-                            {modalMgrAttachmentsDraft.map((att) => (
-                              <div key={att.id} className="query-attachment-card">
-                                <div className="query-attachment-card-main">
-                                  <span className="query-attachment-card-icon">
-                                    {getFileIcon(att.name, att.type)}
-                                  </span>
-                                  <div className="query-attachment-card-details">
-                                    <div className="query-attachment-card-name" title={att.name}>
-                                      {att.name}
-                                    </div>
-                                    <span className="query-attachment-card-size">
-                                      {formatFileSize(att.size)}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="query-attachment-card-actions">
-                                  <button
-                                    type="button"
-                                    className="btn-attachment-action btn-attachment-action--view"
-                                    onClick={() => openAttachment(att)}
-                                    title="Open document"
-                                  >
-                                    👁️ Open
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn-attachment-action btn-attachment-action--download"
-                                    onClick={() => downloadAttachment(att)}
-                                    title="Download document"
-                                  >
-                                    ⬇️ Download
-                                  </button>
-                                  {isAssignedManagerOrAdmin && (
-                                    <button
-                                      type="button"
-                                      className="btn-attachment-action btn-attachment-action--remove"
-                                      onClick={() => handleRemoveMgrAttachment(att.id)}
-                                      title="Remove this attachment"
-                                      aria-label={`Remove ${att.name}`}
-                                    >
-                                      ✕ Remove
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                        <div className="query-view-attachments-grid" style={{ marginTop: '0.5rem' }}>
+                          {modalMgrAttachmentsDraft.map((att) =>
+                            renderAttachmentCard(att, isAssignedManagerOrAdmin, handleRemoveMgrAttachment, false)
+                          )}
                         </div>
                       )}
 
-                      {/* Add New Manager Remark Area */}
                       {isAssignedManagerOrAdmin && (
                         <div className="remark-add-box">
                           <input
@@ -4028,42 +3077,37 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             className="remark-add-title-input"
                             value={newMgrRemarkTitle}
                             onChange={(e) => setNewMgrRemarkTitle(e.target.value)}
-                            placeholder="Remark Title (Optional)..."
+                            placeholder="Title (optional)..."
                           />
                           <textarea
                             className="remark-add-textarea"
-                            rows={3}
+                            rows={2}
                             value={newMgrRemarkText}
                             onChange={(e) => setNewMgrRemarkText(e.target.value)}
-                            placeholder="Type a new manager remark or solution..."
+                            placeholder="Write a manager remark..."
                           />
                           <div className="remark-add-footer">
                             <button
                               type="button"
-                              className="btn-primary btn-post-remark"
+                              className="btn-post-remark"
                               onClick={handlePostManagerRemark}
                               disabled={isPostingMgrRemark || !newMgrRemarkText.trim()}
                             >
-                              {isPostingMgrRemark ? 'Posting...' : '+ Post Remark'}
+                              {isPostingMgrRemark ? 'Posting...' : 'Post Remark'}
                             </button>
                           </div>
                         </div>
                       )}
 
-                      {modalMgrRemarkSaveSuccess && (
-                        <div className="query-view-save-toast">
-                          ✅ Manager remark added with timestamp!
-                        </div>
-                      )}
+                      {modalMgrRemarkSaveSuccess && <div className="query-view-save-toast">✅ Remark posted</div>}
                     </div>
                   );
                 })()}
 
-                {/* Sender Remark Card */}
+                {/* Sender Remarks */}
                 {(() => {
                   const isSenderOrAdmin =
-                    belongsToAccountManager(activeViewingQuery, currentUser) ||
-                    currentUser.role === 'admin';
+                    belongsToAccountManager(activeViewingQuery, currentUser) || currentUser.role === 'admin';
                   const senderRemarks = [...(activeViewingQuery.remarks || [])]
                     .filter((r) => r.type === 'sender')
                     .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
@@ -4071,46 +3115,31 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   return (
                     <div className="query-view-section query-view-section--card">
                       <div className="query-view-section-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                          <span className="query-view-section-label">👤 Sender Remarks</span>
-                        </div>
+                        <span className="query-view-section-label">Sender Remarks</span>
                         <span
                           className={`query-view-check-tag ${
-                            activeViewingQuery.accountManagerDone
-                              ? 'query-view-check-tag--done'
-                              : ''
+                            activeViewingQuery.accountManagerDone ? 'query-view-check-tag--done' : ''
                           }`}
                         >
-                          {activeViewingQuery.accountManagerDone ? '✓ Sender Done' : 'Unchecked'}
+                          {activeViewingQuery.accountManagerDone ? '✓ Verified' : 'Pending'}
                         </span>
                       </div>
 
-                      {/* Timeline of Remarks made so far with timestamp */}
                       <div className="remark-timeline">
                         {senderRemarks.length > 0 ? (
                           senderRemarks.map((rmk, idx) => {
                             const isLatest = idx === senderRemarks.length - 1;
                             const displayText = (rmk.text || rmk.title || '—').trim();
                             const displayTitle =
-                              rmk.title && rmk.title.trim() !== displayText
-                                ? rmk.title.trim()
-                                : null;
+                              rmk.title && rmk.title.trim() !== displayText ? rmk.title.trim() : null;
                             return (
                               <div
                                 key={rmk.id || idx}
                                 className={`remark-timeline-item ${isLatest ? 'remark-timeline-item--latest' : ''}`}
                               >
                                 <div className="remark-timeline-header">
-                                  <div className="remark-author-info">
-                                    <span className="remark-author-name">{rmk.authorName}</span>
-                                    <span className={`person-role-tag person-role-tag--${rmk.authorRole}`}>
-                                      {rmk.authorRole === 'admin' ? 'Admin' : 'Sender'}
-                                    </span>
-                                  </div>
-                                  <div className="remark-meta-right">
-                                    <span className="remark-timestamp">🕒 {rmk.createdAt}</span>
-                                    {isLatest && <span className="remark-badge-latest">LATEST</span>}
-                                  </div>
+                                  <span className="remark-author-name">{rmk.authorName}</span>
+                                  <span className="remark-timestamp">{rmk.createdAt}</span>
                                 </div>
                                 {displayTitle && <div className="remark-title">{displayTitle}</div>}
                                 <div className="remark-text">{displayText}</div>
@@ -4120,31 +3149,20 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                         ) : activeViewingQuery.accountManagerRemarkTitle || activeViewingQuery.accountManagerRemark ? (
                           <div className="remark-timeline-item remark-timeline-item--latest">
                             <div className="remark-timeline-header">
-                              <div className="remark-author-info">
-                                <span className="remark-author-name">{activeViewingQuery.accountManagerName}</span>
-                                <span className="person-role-tag person-role-tag--sender">Sender</span>
-                              </div>
-                              <div className="remark-meta-right">
-                                <span className="remark-timestamp">🕒 {activeViewingQuery.completedAt || activeViewingQuery.createdAt}</span>
-                                <span className="remark-badge-latest">LATEST</span>
-                              </div>
+                              <span className="remark-author-name">{activeViewingQuery.accountManagerName}</span>
+                              <span className="remark-timestamp">
+                                {activeViewingQuery.completedAt || activeViewingQuery.createdAt}
+                              </span>
                             </div>
-                            {activeViewingQuery.accountManagerRemarkTitle &&
-                              activeViewingQuery.accountManagerRemarkTitle.trim() !== (activeViewingQuery.accountManagerRemark || '').trim() && (
-                                <div className="remark-title">{activeViewingQuery.accountManagerRemarkTitle}</div>
-                              )}
                             <div className="remark-text">
-                              {activeViewingQuery.accountManagerRemark || activeViewingQuery.accountManagerRemarkTitle || '—'}
+                              {activeViewingQuery.accountManagerRemark || activeViewingQuery.accountManagerRemarkTitle}
                             </div>
                           </div>
                         ) : (
-                          <div className="remark-timeline-empty">
-                            No sender remarks posted yet.
-                          </div>
+                          <div className="remark-timeline-empty">No remarks yet.</div>
                         )}
                       </div>
 
-                      {/* Add New Sender Remark Area */}
                       {isSenderOrAdmin && (
                         <div className="remark-add-box">
                           <input
@@ -4152,334 +3170,228 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                             className="remark-add-title-input"
                             value={newSenderRemarkTitle}
                             onChange={(e) => setNewSenderRemarkTitle(e.target.value)}
-                            placeholder="Remark Title (Optional)..."
+                            placeholder="Title (optional)..."
                           />
                           <textarea
                             className="remark-add-textarea"
-                            rows={3}
+                            rows={2}
                             value={newSenderRemarkText}
                             onChange={(e) => setNewSenderRemarkText(e.target.value)}
-                            placeholder="Type a new sender feedback or verification remark..."
+                            placeholder="Write feedback or follow-up..."
                           />
                           <div className="remark-add-footer">
                             <button
                               type="button"
-                              className="btn-primary btn-post-remark"
+                              className="btn-post-remark"
                               onClick={handlePostSenderRemark}
                               disabled={isPostingSenderRemark || !newSenderRemarkText.trim()}
                             >
-                              {isPostingSenderRemark ? 'Posting...' : '+ Post Remark'}
+                              {isPostingSenderRemark ? 'Posting...' : 'Post Remark'}
                             </button>
                           </div>
                         </div>
                       )}
 
-                      {modalSenderRemarkSaveSuccess && (
-                        <div className="query-view-save-toast">
-                          ✅ Sender remark added with timestamp!
-                        </div>
-                      )}
+                      {modalSenderRemarkSaveSuccess && <div className="query-view-save-toast">✅ Remark posted</div>}
                     </div>
                   );
                 })()}
               </div>
 
-              {/* Rating Section: strictly visible ONLY to Admin and the Sender (Hidden from Receiving Manager) */}
-              {(currentUser.role === 'admin' ||
-                currentUser.id === activeViewingQuery.accountManagerId) && (
-                <div className="query-view-section query-view-section--rating">
-                  <div className="query-view-section-header">
-                    <span className="query-view-section-label">
-                      {currentUser.role === 'admin'
-                        ? `Sender Rating (for Manager: ${activeViewingQuery.managerName})`
-                        : `Your Rating (for Manager: ${activeViewingQuery.managerName})`}
-                    </span>
-                  </div>
-                  <div className="query-view-rating-card">
-                    {activeViewingQuery.senderReceiverRating || activeViewingQuery.rating ? (
-                      <div className="query-view-rating-display">
-                        <span className="rating-stars-gold">
+              {/* Ratings Section */}
+              {(currentUser.role === 'admin' || currentUser.id === activeViewingQuery.accountManagerId) && (
+                <div className="query-view-rating-card">
+                  <div className="query-view-rating-prompt">
+                    <div>
+                      <span className="query-view-meta-label">
+                        Manager Rating ({activeViewingQuery.managerName})
+                      </span>
+                      {activeViewingQuery.senderReceiverRating || activeViewingQuery.rating ? (
+                        <div className="query-view-rating-value">
                           ⭐{' '}
                           {activeViewingQuery.senderReceiverRating ||
                             (activeViewingQuery.rating
                               ? activeViewingQuery.rating <= 5
                                 ? activeViewingQuery.rating * 2
                                 : activeViewingQuery.rating
-                              : 10)}{' '}
-                          / 10 Stars
-                        </span>
-                        {activeViewingQuery.senderReceiverRemark && (
-                          <div style={{ fontSize: '0.82rem', color: '#634a36', marginTop: '0.3rem', fontStyle: 'italic' }}>
-                            &ldquo;{activeViewingQuery.senderReceiverRemark}&rdquo;
-                          </div>
-                        )}
-                        {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && (
-                          <div className="query-view-rating-actions" style={{ marginTop: '0.5rem' }}>
-                            <button
-                              type="button"
-                              className="btn-inline-edit"
-                              onClick={() => {
-                                const currentRating =
-                                  activeViewingQuery.senderReceiverRating ||
-                                  (activeViewingQuery.rating
-                                    ? activeViewingQuery.rating <= 5
-                                      ? activeViewingQuery.rating * 2
-                                      : activeViewingQuery.rating
-                                    : 10);
-                                setRatingModalQuery(activeViewingQuery);
-                                setRatingInput(currentRating);
-                                setRatingHover(0);
-                                setRatingRemarkInput(activeViewingQuery.senderReceiverRemark || '');
-                                setRatingRemarkError('');
-                                setRatingModalCompleteOnSubmit(false);
-                              }}
-                            >
-                              Update Rating
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : currentUser.id === activeViewingQuery.accountManagerId ? (
-                      <div className="query-view-rating-prompt">
-                        <span className="rating-pending-text">
-                          You haven&apos;t rated this manager yet:
-                        </span>
-                        <button
-                          type="button"
-                          className="btn-rate-prompt"
-                          onClick={() => {
-                            setRatingModalQuery(activeViewingQuery);
-                            setRatingInput(10);
-                            setRatingHover(0);
-                            setRatingRemarkInput('');
-                            setRatingRemarkError('');
-                            setRatingModalCompleteOnSubmit(false);
-                          }}
-                        >
-                          ★ Rate Manager (1-10 Stars)
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="rating-placeholder">Not rated by sender yet (Default 10★).</span>
+                              : 10)}
+                          /10
+                          {activeViewingQuery.senderReceiverRemark && (
+                            <span className="rating-quote"> &mdash; &ldquo;{activeViewingQuery.senderReceiverRemark}&rdquo;</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="rating-pending-text">Not rated yet</div>
+                      )}
+                    </div>
+                    {(currentUser.id === activeViewingQuery.accountManagerId || currentUser.role === 'admin') && (
+                      <button
+                        type="button"
+                        className="btn-rate-prompt"
+                        onClick={() => {
+                          const currentRating =
+                            activeViewingQuery.senderReceiverRating ||
+                            (activeViewingQuery.rating
+                              ? activeViewingQuery.rating <= 5
+                                ? activeViewingQuery.rating * 2
+                                : activeViewingQuery.rating
+                              : 10);
+                          setRatingModalQuery(activeViewingQuery);
+                          setRatingInput(currentRating);
+                          setRatingHover(0);
+                          setRatingRemarkInput(activeViewingQuery.senderReceiverRemark || '');
+                          setRatingRemarkError('');
+                          setRatingModalCompleteOnSubmit(false);
+                        }}
+                      >
+                        {activeViewingQuery.senderReceiverRating || activeViewingQuery.rating ? 'Update' : '★ Rate'}
+                      </button>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Receiver Rating Section: visible to Receiver to rate the Sender */}
-              {(currentUser.role === 'admin' || currentUser.id === activeViewingQuery.managerId) && (
+              {(currentUser.role === 'admin' || currentUser.id === activeViewingQuery.managerId) &&
                 (() => {
                   const isPostCutoff = Boolean(
                     (activeViewingQuery.createdAtMs && activeViewingQuery.createdAtMs > RECEIVER_RATING_FEATURE_START_MS) ||
-                    (activeViewingQuery.receiverSenderRating !== undefined && activeViewingQuery.receiverSenderRating !== null)
+                      (activeViewingQuery.receiverSenderRating !== undefined &&
+                        activeViewingQuery.receiverSenderRating !== null)
                   );
                   if (!isPostCutoff && currentUser.role !== 'admin') return null;
 
                   return (
-                    <div className="query-view-section query-view-section--rating">
-                      <div className="query-view-section-header">
-                        <span className="query-view-section-label">
-                          {currentUser.role === 'admin'
-                            ? `Receiver Rating (for Sender: ${activeViewingQuery.accountManagerName})`
-                            : `Your Rating (for Sender: ${activeViewingQuery.accountManagerName})`}
-                        </span>
-                      </div>
-                      <div className="query-view-rating-card">
-                        {activeViewingQuery.receiverSenderRating ? (
-                          <div className="query-view-rating-display">
-                            <span className="rating-stars-gold">
-                              ⭐ {activeViewingQuery.receiverSenderRating} / 10 Stars
-                            </span>
-                            {activeViewingQuery.receiverSenderRemark && (
-                              <div style={{ fontSize: '0.82rem', color: '#634a36', marginTop: '0.3rem', fontStyle: 'italic' }}>
-                                &ldquo;{activeViewingQuery.receiverSenderRemark}&rdquo;
-                              </div>
-                            )}
-                            {(currentUser.id === activeViewingQuery.managerId || currentUser.role === 'admin') && (
-                              <div className="query-view-rating-actions" style={{ marginTop: '0.5rem' }}>
-                                <button
-                                  type="button"
-                                  className="btn-inline-edit"
-                                  onClick={() => {
-                                    setReceiverRatingModalQuery(activeViewingQuery);
-                                    setReceiverRatingInput(activeViewingQuery.receiverSenderRating || 10);
-                                    setReceiverRatingHover(0);
-                                    setReceiverRatingRemarkInput(activeViewingQuery.receiverSenderRemark || '');
-                                    setReceiverRatingRemarkError('');
-                                  }}
-                                >
-                                  Update Rating
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : currentUser.id === activeViewingQuery.managerId ? (
-                          <div className="query-view-rating-prompt">
-                            <span className="rating-pending-text">
-                              You haven&apos;t rated the sender yet:
-                            </span>
-                            <button
-                              type="button"
-                              className="btn-rate-prompt"
-                              onClick={() => {
-                                setReceiverRatingModalQuery(activeViewingQuery);
-                                setReceiverRatingInput(10);
-                                setReceiverRatingHover(0);
-                                setReceiverRatingRemarkInput('');
-                                setReceiverRatingRemarkError('');
-                              }}
-                            >
-                              ★ Rate Sender (1-10 Stars)
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="rating-placeholder">Not rated by receiver yet (Default 10★).</span>
+                    <div className="query-view-rating-card">
+                      <div className="query-view-rating-prompt">
+                        <div>
+                          <span className="query-view-meta-label">
+                            Sender Rating ({activeViewingQuery.accountManagerName})
+                          </span>
+                          {activeViewingQuery.receiverSenderRating ? (
+                            <div className="query-view-rating-value">
+                              ⭐ {activeViewingQuery.receiverSenderRating}/10
+                              {activeViewingQuery.receiverSenderRemark && (
+                                <span className="rating-quote">
+                                  {' '}
+                                  &mdash; &ldquo;{activeViewingQuery.receiverSenderRemark}&rdquo;
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="rating-pending-text">Not rated yet</div>
+                          )}
+                        </div>
+                        {(currentUser.id === activeViewingQuery.managerId || currentUser.role === 'admin') && (
+                          <button
+                            type="button"
+                            className="btn-rate-prompt"
+                            onClick={() => {
+                              setReceiverRatingModalQuery(activeViewingQuery);
+                              setReceiverRatingInput(activeViewingQuery.receiverSenderRating || 10);
+                              setReceiverRatingHover(0);
+                              setReceiverRatingRemarkInput(activeViewingQuery.receiverSenderRemark || '');
+                              setReceiverRatingRemarkError('');
+                            }}
+                          >
+                            {activeViewingQuery.receiverSenderRating ? 'Update' : '★ Rate'}
+                          </button>
                         )}
                       </div>
                     </div>
                   );
-                })()
-              )}
+                })()}
 
-              {/* Requirement 1: Link Existing Appointment in Query List (Query Details Modal) */}
+              {/* Link Existing Appointment Inline Panel */}
               {!activeViewingLinkedAppointment &&
                 !activeViewingQuery.linkedAppointmentId &&
                 isLinkingExistingApt && (
-                  <div className="query-view-section">
-                    <span className="query-view-section-label">Link Existing Appointment</span>
-                    <div
-                      className="query-view-content-box"
-                      style={{
-                        background: '#fefce8',
-                        border: '1px solid #fef08a',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.65rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.82rem', color: '#854d0e', fontWeight: 600 }}>
-                          Select an existing appointment where Manager <strong>{activeViewingQuery.managerName}</strong> is an attendee:
-                        </span>
-                        <button
-                          type="button"
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '1.1rem',
-                            color: '#854d0e',
-                            lineHeight: 1,
-                          }}
-                          onClick={() => {
-                            setIsLinkingExistingApt(false);
+                  <div className="link-apt-inline-box">
+                    <div className="meta-box-header-row">
+                      <span className="query-view-section-label">
+                        Link Appointment with {activeViewingQuery.managerName}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-inline-cancel"
+                        onClick={() => {
+                          setIsLinkingExistingApt(false);
+                          setLinkExistingError(null);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {linkableAppointmentsForActiveQuery.length === 0 ? (
+                      <div className="form-error-text">No eligible appointments found.</div>
+                    ) : (
+                      <div className="link-apt-controls">
+                        <select
+                          className="cc-user-select"
+                          value={chosenExistingAptId}
+                          onChange={(e) => {
+                            setChosenExistingAptId(e.target.value);
                             setLinkExistingError(null);
                           }}
-                          aria-label="Close"
                         >
-                          ✕
+                          <option value="">-- Select appointment --</option>
+                          {linkableAppointmentsForActiveQuery.map((apt) => (
+                            <option key={apt.id} value={apt.id}>
+                              [{apt.id}] {apt.title} ({apt.scheduledAt})
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          disabled={isSubmittingLinkApt || !chosenExistingAptId}
+                          onClick={async () => {
+                            if (!chosenExistingAptId) {
+                              setLinkExistingError('Please select an appointment.');
+                              return;
+                            }
+                            const targetApt = appointments.find((a) => a.id === chosenExistingAptId);
+                            if (
+                              !targetApt ||
+                              !isUserParticipantInAppointment(targetApt, {
+                                id: activeViewingQuery.managerId,
+                                email: activeViewingQuery.managerEmail,
+                                name: activeViewingQuery.managerName,
+                              })
+                            ) {
+                              setLinkExistingError('Selected appointment must include the assigned manager.');
+                              return;
+                            }
+                            setIsSubmittingLinkApt(true);
+                            try {
+                              await onUpdateQuery(activeViewingQuery.queryId, {
+                                linkedAppointmentId: chosenExistingAptId,
+                              });
+                              setIsLinkingExistingApt(false);
+                              setChosenExistingAptId('');
+                              setLinkExistingError(null);
+                            } finally {
+                              setIsSubmittingLinkApt(false);
+                            }
+                          }}
+                        >
+                          {isSubmittingLinkApt ? 'Linking...' : 'Link'}
                         </button>
                       </div>
-
-                      {linkableAppointmentsForActiveQuery.length === 0 ? (
-                        <div style={{ fontSize: '0.82rem', color: '#b91c1c', fontStyle: 'italic' }}>
-                          No eligible appointments found where Manager {activeViewingQuery.managerName} is an attendee.
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                          <select
-                            style={{
-                              flex: 1,
-                              minWidth: '220px',
-                              padding: '0.4rem 0.6rem',
-                              borderRadius: '6px',
-                              border: '1px solid #d4cbbd',
-                              fontSize: '0.82rem',
-                              background: '#ffffff',
-                            }}
-                            value={chosenExistingAptId}
-                            onChange={(e) => {
-                              setChosenExistingAptId(e.target.value);
-                              setLinkExistingError(null);
-                            }}
-                          >
-                            <option value="">-- Select an appointment --</option>
-                            {linkableAppointmentsForActiveQuery.map((apt) => (
-                              <option key={apt.id} value={apt.id}>
-                                [{apt.id}] {apt.title} ({apt.scheduledAt})
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="btn-primary"
-                            style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}
-                            disabled={isSubmittingLinkApt || !chosenExistingAptId}
-                            onClick={async () => {
-                              if (!chosenExistingAptId) {
-                                setLinkExistingError('Please select an appointment.');
-                                return;
-                              }
-                              const targetApt = appointments.find((a) => a.id === chosenExistingAptId);
-                              if (
-                                !targetApt ||
-                                !isUserParticipantInAppointment(targetApt, {
-                                  id: activeViewingQuery.managerId,
-                                  email: activeViewingQuery.managerEmail,
-                                  name: activeViewingQuery.managerName,
-                                })
-                              ) {
-                                setLinkExistingError(
-                                  `The receiving manager (${activeViewingQuery.managerName}) must be one of the attendees in this appointment.`
-                                );
-                                return;
-                              }
-                              setIsSubmittingLinkApt(true);
-                              try {
-                                await onUpdateQuery(activeViewingQuery.queryId, {
-                                  linkedAppointmentId: chosenExistingAptId,
-                                });
-                                setIsLinkingExistingApt(false);
-                                setChosenExistingAptId('');
-                                setLinkExistingError(null);
-                              } finally {
-                                setIsSubmittingLinkApt(false);
-                              }
-                            }}
-                          >
-                            {isSubmittingLinkApt ? 'Linking...' : 'Confirm Link'}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
-                            onClick={() => {
-                              setIsLinkingExistingApt(false);
-                              setLinkExistingError(null);
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-
-                      {linkExistingError && (
-                        <div style={{ color: '#b91c1c', fontSize: '0.76rem', fontWeight: 600 }}>
-                          {linkExistingError}
-                        </div>
-                      )}
-                    </div>
+                    )}
+                    {linkExistingError && <div className="form-error-text">{linkExistingError}</div>}
                   </div>
                 )}
 
-              <div className="modal-actions" style={{ display: 'flex', gap: '0.65rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              {/* Modal Footer Actions */}
+              <div className="modal-actions">
                 {(() => {
-                  const isSenderOrMgrOrAdmin =
+                  const isParticipant =
                     currentUser.id === activeViewingQuery.accountManagerId ||
                     currentUser.id === activeViewingQuery.managerId ||
                     currentUser.role === 'admin';
 
-                  if (!isSenderOrMgrOrAdmin) return null;
+                  if (!isParticipant) return null;
 
                   return (
                     <>
@@ -4497,7 +3409,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               }
                             }}
                           >
-                            🔗 Link Existing Appointment
+                            🔗 Link Appointment
                           </button>
                         )}
                       {!activeViewingLinkedAppointment &&
@@ -4510,23 +3422,17 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                               const q = activeViewingQuery;
                               setViewingQuery(null);
                               const targetUserId =
-                                currentUser.id === q.accountManagerId
-                                  ? q.managerId
-                                  : q.accountManagerId;
+                                currentUser.id === q.accountManagerId ? q.managerId : q.accountManagerId;
                               onOpenBookAppointment(q.queryId, targetUserId);
                             }}
                           >
-                            📅 Book Appointment for this Query
+                            📅 Book Meeting
                           </button>
                         )}
                     </>
                   );
                 })()}
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => setViewingQuery(null)}
-                >
+                <button type="button" className="btn-primary" onClick={() => setViewingQuery(null)}>
                   Close
                 </button>
               </div>
@@ -4535,12 +3441,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
       )}
 
-      {/* Rating Modal: allows sender to rate anytime and enforce mandatory rating before completion */}
+      {/* ========================================================================
+          SENDER RATING MODAL
+         ======================================================================== */}
       {ratingModalQuery && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setRatingModalQuery(null)}
-        >
+        <div className="modal-backdrop" onClick={() => setRatingModalQuery(null)}>
           <div
             className="modal-dialog rating-prompt-modal"
             onClick={(e) => e.stopPropagation()}
@@ -4550,14 +3455,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           >
             <div className="modal-header">
               <div className="modal-header-text">
-                <h3 id="rating-modal-title">
-                  Rate Manager: {ratingModalQuery.managerName}
-                </h3>
-                <span className="modal-subtitle">
-                  Query {ratingModalQuery.queryId} &bull;{' '}
-                  {ratingModalQuery.queryTitle ||
-                    ratingModalQuery.queryText.slice(0, 35)}
-                </span>
+                <h3 id="rating-modal-title">Rate {ratingModalQuery.managerName}</h3>
+                <span className="modal-sender-badge">Query {ratingModalQuery.queryId}</span>
               </div>
               <button
                 type="button"
@@ -4565,25 +3464,15 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 onClick={() => setRatingModalQuery(null)}
                 aria-label="Close"
               >
-                &times;
+                ✕
               </button>
             </div>
 
             <div className="rating-modal-body">
               <p className="rating-modal-desc">
-                {ratingModalCompleteOnSubmit ? (
-                  <>
-                    Please rate <strong>{ratingModalQuery.managerName}</strong>&apos;s
-                    resolution to complete this query. Ratings are <em>anonymous</em> to the
-                    manager and contribute to their overall KPI score.
-                  </>
-                ) : (
-                  <>
-                    Rate <strong>{ratingModalQuery.managerName}</strong> for this query.
-                    You can update this rating at any time. Ratings are <em>anonymous</em> to
-                    the manager and contribute to their overall KPI score.
-                  </>
-                )}
+                {ratingModalCompleteOnSubmit
+                  ? 'Rate the manager’s resolution to complete this query (anonymous to manager).'
+                  : 'Rate the manager’s response quality (anonymous to manager).'}
               </p>
 
               <div className="star-rating-picker-10" role="radiogroup" aria-label="Rating from 1 to 10 stars">
@@ -4591,16 +3480,10 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   <button
                     key={star}
                     type="button"
-                    className={`star-pick-btn-10 ${
-                      (ratingHover || ratingInput) >= star
-                        ? 'star-pick-btn-10--active'
-                        : ''
-                    }`}
+                    className={`star-pick-btn-10 ${(ratingHover || ratingInput) >= star ? 'star-pick-btn-10--active' : ''}`}
                     onMouseEnter={() => setRatingHover(star)}
                     onMouseLeave={() => setRatingHover(0)}
                     onClick={() => setRatingInput(star)}
-                    title={`${star} Star${star > 1 ? 's' : ''}`}
-                    aria-label={`${star} Star${star > 1 ? 's' : ''}`}
                   >
                     ★
                   </button>
@@ -4609,60 +3492,28 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
               <div className="rating-score-label">
                 {ratingInput > 0 ? (
-                  <span className="rating-score-active">
-                    ⭐ {ratingInput} of 10 Stars Selected
-                  </span>
+                  <span className="rating-score-active">⭐ {ratingInput} / 10</span>
                 ) : (
-                  <span className="rating-score-hint">
-                    Select 1 to 10 stars to proceed
-                  </span>
+                  <span className="rating-score-hint">Tap a star (1–10)</span>
                 )}
               </div>
 
-              <div style={{ marginTop: '1rem', textAlign: 'left' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: '#715b49',
-                    marginBottom: '0.4rem',
-                  }}
-                >
-                  Feedback Remark <span style={{ color: '#dc2626' }}>* (Mandatory)</span>
-                </label>
+              <div className="cp-form-group">
+                <label>Feedback Remark *</label>
                 <textarea
-                  style={{
-                    width: '100%',
-                    minHeight: '75px',
-                    padding: '0.65rem',
-                    fontSize: '0.85rem',
-                    border: '1.5px solid rgba(193, 128, 54, 0.4)',
-                    borderRadius: '8px',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit',
-                  }}
-                  placeholder="Explain how the manager handled this query..."
+                  rows={3}
+                  placeholder="Share brief feedback on resolution..."
                   value={ratingRemarkInput}
                   onChange={(e) => {
                     setRatingRemarkInput(e.target.value);
                     if (ratingRemarkError) setRatingRemarkError('');
                   }}
                 />
-                {ratingRemarkError && (
-                  <span style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.25rem', display: 'block' }}>
-                    {ratingRemarkError}
-                  </span>
-                )}
+                {ratingRemarkError && <span className="form-error-text">{ratingRemarkError}</span>}
               </div>
 
               <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setRatingModalQuery(null)}
-                >
+                <button type="button" className="btn-secondary" onClick={() => setRatingModalQuery(null)}>
                   Cancel
                 </button>
                 <button
@@ -4672,19 +3523,19 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   onClick={async () => {
                     if (ratingInput < 1) return;
                     if (!ratingRemarkInput.trim()) {
-                      setRatingRemarkError('Remark is mandatory when rating');
+                      setRatingRemarkError('Please enter a feedback remark.');
                       return;
                     }
 
                     const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
-                    const nowMs = Date.now();
+                    const nowMsVal = Date.now();
 
-                    const updatesToSave: any = {
+                    const updatesToSave: Record<string, unknown> = {
                       senderReceiverRating: ratingInput,
                       senderReceiverRemark: ratingRemarkInput.trim(),
                       senderReceiverRatedAt: nowIso,
-                      senderReceiverRatedAtMs: nowMs,
-                      rating: ratingInput, // backwards compatibility
+                      senderReceiverRatedAtMs: nowMsVal,
+                      rating: ratingInput,
                     };
 
                     if (ratingModalCompleteOnSubmit) {
@@ -4695,9 +3546,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     setRatingModalQuery(null);
                   }}
                 >
-                  {ratingModalCompleteOnSubmit
-                    ? 'Submit Rating & Complete'
-                    : 'Save Rating'}
+                  {ratingModalCompleteOnSubmit ? 'Submit & Complete' : 'Save Rating'}
                 </button>
               </div>
             </div>
@@ -4705,12 +3554,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
       )}
 
-      {/* Receiver Rating Modal (Receiving Manager rating the Sender) */}
+      {/* ========================================================================
+          RECEIVER RATING MODAL
+         ======================================================================== */}
       {receiverRatingModalQuery && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setReceiverRatingModalQuery(null)}
-        >
+        <div className="modal-backdrop" onClick={() => setReceiverRatingModalQuery(null)}>
           <div
             className="modal-dialog rating-prompt-modal"
             onClick={(e) => e.stopPropagation()}
@@ -4720,14 +3568,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           >
             <div className="modal-header">
               <div className="modal-header-text">
-                <h3 id="receiver-rating-modal-title">
-                  Rate Sender: {receiverRatingModalQuery.accountManagerName}
-                </h3>
-                <span className="modal-subtitle">
-                  Query {receiverRatingModalQuery.queryId} &bull;{' '}
-                  {receiverRatingModalQuery.queryTitle ||
-                    receiverRatingModalQuery.queryText.slice(0, 35)}
-                </span>
+                <h3 id="receiver-rating-modal-title">Rate {receiverRatingModalQuery.accountManagerName}</h3>
+                <span className="modal-sender-badge">Query {receiverRatingModalQuery.queryId}</span>
               </div>
               <button
                 type="button"
@@ -4735,14 +3577,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 onClick={() => setReceiverRatingModalQuery(null)}
                 aria-label="Close"
               >
-                &times;
+                ✕
               </button>
             </div>
 
             <div className="rating-modal-body">
-              <p className="rating-modal-desc">
-                Rate how well and promptly <strong>{receiverRatingModalQuery.accountManagerName}</strong> provided requirements and communication on this query. Receiver rating contributes <strong>20%</strong> to sender&apos;s overall performance score.
-              </p>
+              <p className="rating-modal-desc">Rate the clarity and responsiveness of the sender.</p>
 
               <div className="star-rating-picker-10" role="radiogroup" aria-label="Rating from 1 to 10 stars">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
@@ -4750,15 +3590,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     key={star}
                     type="button"
                     className={`star-pick-btn-10 ${
-                      (receiverRatingHover || receiverRatingInput) >= star
-                        ? 'star-pick-btn-10--active'
-                        : ''
+                      (receiverRatingHover || receiverRatingInput) >= star ? 'star-pick-btn-10--active' : ''
                     }`}
                     onMouseEnter={() => setReceiverRatingHover(star)}
                     onMouseLeave={() => setReceiverRatingHover(0)}
                     onClick={() => setReceiverRatingInput(star)}
-                    title={`${star} Star${star > 1 ? 's' : ''}`}
-                    aria-label={`${star} Star${star > 1 ? 's' : ''}`}
                   >
                     ★
                   </button>
@@ -4767,60 +3603,28 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
               <div className="rating-score-label">
                 {receiverRatingInput > 0 ? (
-                  <span className="rating-score-active">
-                    ⭐ {receiverRatingInput} of 10 Stars Selected
-                  </span>
+                  <span className="rating-score-active">⭐ {receiverRatingInput} / 10</span>
                 ) : (
-                  <span className="rating-score-hint">
-                    Select 1 to 10 stars to proceed
-                  </span>
+                  <span className="rating-score-hint">Tap a star (1–10)</span>
                 )}
               </div>
 
-              <div style={{ marginTop: '1rem', textAlign: 'left' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: '#715b49',
-                    marginBottom: '0.4rem',
-                  }}
-                >
-                  Feedback Remark <span style={{ color: '#dc2626' }}>* (Mandatory)</span>
-                </label>
+              <div className="cp-form-group">
+                <label>Feedback Remark *</label>
                 <textarea
-                  style={{
-                    width: '100%',
-                    minHeight: '75px',
-                    padding: '0.65rem',
-                    fontSize: '0.85rem',
-                    border: '1.5px solid rgba(193, 128, 54, 0.4)',
-                    borderRadius: '8px',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit',
-                  }}
-                  placeholder="Explain your rating for the sender's clarity, responsiveness or requirements..."
+                  rows={3}
+                  placeholder="Share brief feedback on communication..."
                   value={receiverRatingRemarkInput}
                   onChange={(e) => {
                     setReceiverRatingRemarkInput(e.target.value);
                     if (receiverRatingRemarkError) setReceiverRatingRemarkError('');
                   }}
                 />
-                {receiverRatingRemarkError && (
-                  <span style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.25rem', display: 'block' }}>
-                    {receiverRatingRemarkError}
-                  </span>
-                )}
+                {receiverRatingRemarkError && <span className="form-error-text">{receiverRatingRemarkError}</span>}
               </div>
 
               <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setReceiverRatingModalQuery(null)}
-                >
+                <button type="button" className="btn-secondary" onClick={() => setReceiverRatingModalQuery(null)}>
                   Cancel
                 </button>
                 <button
@@ -4830,18 +3634,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   onClick={async () => {
                     if (receiverRatingInput < 1) return;
                     if (!receiverRatingRemarkInput.trim()) {
-                      setReceiverRatingRemarkError('Remark is mandatory when rating');
+                      setReceiverRatingRemarkError('Please enter a feedback remark.');
                       return;
                     }
 
                     const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
-                    const nowMs = Date.now();
+                    const nowMsVal = Date.now();
 
                     await onUpdateQuery(receiverRatingModalQuery.queryId, {
                       receiverSenderRating: receiverRatingInput,
                       receiverSenderRemark: receiverRatingRemarkInput.trim(),
                       receiverSenderRatedAt: nowIso,
-                      receiverSenderRatedAtMs: nowMs,
+                      receiverSenderRatedAtMs: nowMsVal,
                     });
                     setReceiverRatingModalQuery(null);
                   }}
@@ -4854,26 +3658,19 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
       )}
 
-      {/* Admin Rating Editor Modal (Mr. Mani) */}
+      {/* ========================================================================
+          ADMIN RATING MODAL
+         ======================================================================== */}
       {adminRatingQuery && (
         <div className="modal-backdrop" onClick={() => setAdminRatingQuery(null)}>
-          <div
-            className="modal-dialog"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            style={{ maxWidth: '540px' }}
-          >
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="modal-header">
-              <div className="modal-title-group">
-                <span className="modal-badge">Admin Performance Rating</span>
-                <h3 className="modal-heading">
-                  Query {adminRatingQuery.queryId} Rating
-                </h3>
+              <div className="modal-header-text">
+                <h3>Admin Rating &bull; {adminRatingQuery.queryId}</h3>
               </div>
               <button
                 type="button"
-                className="btn-modal-close"
+                className="modal-close-btn"
                 onClick={() => setAdminRatingQuery(null)}
                 aria-label="Close"
               >
@@ -4881,21 +3678,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               </button>
             </div>
 
-            <div className="modal-body">
-              {/* Tab Selector between Receiver and Sender */}
-              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+            <div className="modal-form">
+              <div className="admin-role-tabs">
                 <button
                   type="button"
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    borderRadius: '8px',
-                    border: '1px solid #c18036',
-                    background: adminRatingTargetRole === 'receiver' ? '#844918' : '#faf8f5',
-                    color: adminRatingTargetRole === 'receiver' ? '#fff' : '#844918',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
+                  className={`admin-role-tab ${adminRatingTargetRole === 'receiver' ? 'admin-role-tab--active' : ''}`}
                   onClick={() => {
                     setAdminRatingTargetRole('receiver');
                     setAdminRatingInput(adminRatingQuery.adminReceiverRating ?? 10);
@@ -4903,20 +3690,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     setAdminRemarkError('');
                   }}
                 >
-                  Rate Receiver ({adminRatingQuery.managerName})
+                  Manager ({adminRatingQuery.managerName})
                 </button>
                 <button
                   type="button"
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    borderRadius: '8px',
-                    border: '1px solid #c18036',
-                    background: adminRatingTargetRole === 'sender' ? '#844918' : '#faf8f5',
-                    color: adminRatingTargetRole === 'sender' ? '#fff' : '#844918',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
+                  className={`admin-role-tab ${adminRatingTargetRole === 'sender' ? 'admin-role-tab--active' : ''}`}
                   onClick={() => {
                     setAdminRatingTargetRole('sender');
                     setAdminRatingInput(adminRatingQuery.adminSenderRating ?? 10);
@@ -4924,166 +3702,105 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     setAdminRemarkError('');
                   }}
                 >
-                  Rate Sender ({adminRatingQuery.accountManagerName})
+                  Sender ({adminRatingQuery.accountManagerName})
                 </button>
               </div>
 
-              {/* Live System Rating display */}
-              <div
-                style={{
-                  background: '#fbf9f4',
-                  border: '1px solid rgba(239, 237, 206, 0.9)',
-                  borderRadius: '8px',
-                  padding: '0.75rem',
-                  marginBottom: '1rem',
-                  fontSize: '0.82rem',
-                }}
-              >
-                {adminRatingTargetRole === 'receiver' ? (() => {
-                  const breakdown = calculateReceiverOverallRating(adminRatingQuery);
-                  return (
-                    <div>
-                      <strong>Automated System Score:</strong> ⭐ {breakdown.systemRating} / 10 (30% weight)
-                      <div style={{ color: '#715b49', marginTop: '0.2rem' }}>{breakdown.systemReason}</div>
-                    </div>
-                  );
-                })() : (() => {
-                  const breakdown = calculateSenderOverallRating(adminRatingQuery);
-                  return (
-                    <div>
-                      <strong>Automated System Score:</strong> ⭐ {breakdown.systemRating} / 10 (30% weight)
-                      <div style={{ color: '#715b49', marginTop: '0.2rem' }}>{breakdown.systemReason}</div>
-                    </div>
-                  );
-                })()}
+              <div className="admin-sys-score-box">
+                {adminRatingTargetRole === 'receiver' ? (
+                  <>
+                    <strong>System Score:</strong> ⭐ {calculateReceiverOverallRating(adminRatingQuery).systemRating}/10 (
+                    {calculateReceiverOverallRating(adminRatingQuery).systemReason})
+                  </>
+                ) : (
+                  <>
+                    <strong>System Score:</strong> ⭐ {calculateSenderOverallRating(adminRatingQuery).systemRating}/10 (
+                    {calculateSenderOverallRating(adminRatingQuery).systemReason})
+                  </>
+                )}
               </div>
 
-              {/* 10 Star picker */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: '#715b49',
-                    marginBottom: '0.4rem',
-                  }}
-                >
-                  Admin Score (1 to 10 Stars) &bull; 50% Weight
-                </label>
+              <div>
                 <div className="star-rating-picker-10">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
                     <button
                       key={star}
                       type="button"
-                      className={`star-pick-btn-10 ${
-                        adminRatingInput >= star ? 'star-pick-btn-10--active' : ''
-                      }`}
+                      className={`star-pick-btn-10 ${adminRatingInput >= star ? 'star-pick-btn-10--active' : ''}`}
                       onClick={() => setAdminRatingInput(star)}
                     >
                       ★
                     </button>
                   ))}
                 </div>
-                <div style={{ textAlign: 'center', marginTop: '0.4rem', fontWeight: 700, color: '#844918' }}>
-                  ⭐ {adminRatingInput} of 10 Stars Selected
+                <div className="rating-score-label">
+                  <span className="rating-score-active">⭐ {adminRatingInput} / 10</span>
                 </div>
               </div>
 
-              {/* Mandatory Remark */}
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    color: '#715b49',
-                    marginBottom: '0.4rem',
-                  }}
-                >
-                  Admin Remark <span style={{ color: '#dc2626' }}>* (Mandatory)</span>
-                </label>
+              <div className="cp-form-group">
+                <label>Admin Remark *</label>
                 <textarea
-                  style={{
-                    width: '100%',
-                    minHeight: '75px',
-                    padding: '0.65rem',
-                    fontSize: '0.85rem',
-                    border: '1.5px solid rgba(193, 128, 54, 0.4)',
-                    borderRadius: '8px',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit',
-                  }}
-                  placeholder="Provide admin feedback or reason for this rating..."
+                  rows={3}
+                  placeholder="Enter admin evaluation note..."
                   value={adminRemarkInput}
                   onChange={(e) => {
                     setAdminRemarkInput(e.target.value);
                     if (adminRemarkError) setAdminRemarkError('');
                   }}
                 />
-                {adminRemarkError && (
-                  <span style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '0.25rem', display: 'block' }}>
-                    {adminRemarkError}
-                  </span>
-                )}
+                {adminRemarkError && <span className="form-error-text">{adminRemarkError}</span>}
               </div>
-            </div>
 
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setAdminRatingQuery(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={savingQueryId === adminRatingQuery.queryId}
-                onClick={async () => {
-                  if (!adminRemarkInput.trim()) {
-                    setAdminRemarkError('Remark is mandatory for Admin ratings');
-                    return;
-                  }
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={() => setAdminRatingQuery(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={savingQueryId === adminRatingQuery.queryId}
+                  onClick={async () => {
+                    if (!adminRemarkInput.trim()) {
+                      setAdminRemarkError('Please enter an admin remark.');
+                      return;
+                    }
 
-                  const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
-                  const nowMs = Date.now();
+                    const nowIso = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                    const nowMsVal = Date.now();
 
-                  if (adminRatingTargetRole === 'receiver') {
-                    await onUpdateQuery(adminRatingQuery.queryId, {
-                      adminReceiverRating: adminRatingInput,
-                      adminReceiverRemark: adminRemarkInput.trim(),
-                      adminReceiverRatedAt: nowIso,
-                      adminReceiverRatedAtMs: nowMs,
-                    });
-                  } else {
-                    await onUpdateQuery(adminRatingQuery.queryId, {
-                      adminSenderRating: adminRatingInput,
-                      adminSenderRemark: adminRemarkInput.trim(),
-                      adminSenderRatedAt: nowIso,
-                      adminSenderRatedAtMs: nowMs,
-                    });
-                  }
+                    if (adminRatingTargetRole === 'receiver') {
+                      await onUpdateQuery(adminRatingQuery.queryId, {
+                        adminReceiverRating: adminRatingInput,
+                        adminReceiverRemark: adminRemarkInput.trim(),
+                        adminReceiverRatedAt: nowIso,
+                        adminReceiverRatedAtMs: nowMsVal,
+                      });
+                    } else {
+                      await onUpdateQuery(adminRatingQuery.queryId, {
+                        adminSenderRating: adminRatingInput,
+                        adminSenderRemark: adminRemarkInput.trim(),
+                        adminSenderRatedAt: nowIso,
+                        adminSenderRatedAtMs: nowMsVal,
+                      });
+                    }
 
-                  setAdminRatingQuery(null);
-                }}
-              >
-                {savingQueryId === adminRatingQuery.queryId ? 'Saving...' : 'Save Admin Rating'}
-              </button>
+                    setAdminRatingQuery(null);
+                  }}
+                >
+                  {savingQueryId === adminRatingQuery.queryId ? 'Saving...' : 'Save Rating'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Extension Request Modal (for assigned manager) */}
+      {/* ========================================================================
+          EXTENSION REQUEST MODAL
+         ======================================================================== */}
       {extensionModalQuery && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setExtensionModalQuery(null)}
-        >
+        <div className="modal-backdrop" onClick={() => setExtensionModalQuery(null)}>
           <div
             className="modal-dialog extension-modal-dialog"
             onClick={(e) => e.stopPropagation()}
@@ -5093,9 +3810,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           >
             <div className="modal-header">
               <div className="modal-header-text">
-                <h3 id="extension-modal-title">Request Completion Date Extension</h3>
+                <h3 id="extension-modal-title">Request Extension</h3>
                 <span className="modal-sender-badge">
-                  Query: <strong>{extensionModalQuery.queryId}</strong> &bull; Sender:{' '}
+                  Query <strong>{extensionModalQuery.queryId}</strong> &bull; To{' '}
                   <strong>{extensionModalQuery.accountManagerName}</strong>
                 </span>
               </div>
@@ -5110,13 +3827,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
             </div>
 
             <form className="modal-form" onSubmit={handleSubmitExtensionRequest}>
-              <div className="extension-modal-note">
-                <strong>Peer Accountability:</strong> Your extension request will be sent to{' '}
-                <strong>{extensionModalQuery.accountManagerName}</strong> for approval. If approved, the query&apos;s completion deadline will be extended and your completion rate will stay on-time!
-              </div>
-
               <div className="cp-form-group">
-                <label htmlFor="ext-proposed-date">Proposed New Completion Date &amp; Time *</label>
+                <label htmlFor="ext-proposed-date">New Target Date &amp; Time *</label>
                 <input
                   id="ext-proposed-date"
                   type="datetime-local"
@@ -5130,11 +3842,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="ext-reason">Reason for Extension *</label>
+                <label htmlFor="ext-reason">Reason *</label>
                 <textarea
                   id="ext-reason"
-                  rows={4}
-                  placeholder="Explain why extra time is needed (e.g. Waiting on bank statement, external vendor update, etc.)..."
+                  rows={3}
+                  placeholder="Briefly explain why extra time is needed..."
                   value={extensionReasonInput}
                   onChange={(e) => {
                     setExtensionReasonInput(e.target.value);
@@ -5142,27 +3854,15 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   }}
                   required
                 />
-                {extensionError && (
-                  <span style={{ color: '#dc2626', fontSize: '0.82rem', fontWeight: 600 }}>
-                    {extensionError}
-                  </span>
-                )}
+                {extensionError && <span className="form-error-text">{extensionError}</span>}
               </div>
 
               <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setExtensionModalQuery(null)}
-                >
+                <button type="button" className="btn-secondary" onClick={() => setExtensionModalQuery(null)}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={isSubmittingExtension}
-                >
-                  {isSubmittingExtension ? 'Submitting...' : 'Send Request to Sender'}
+                <button type="submit" className="btn-primary" disabled={isSubmittingExtension}>
+                  {isSubmittingExtension ? 'Sending...' : 'Send Request'}
                 </button>
               </div>
             </form>
@@ -5170,12 +3870,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
         </div>
       )}
 
-      {/* Extension Review Modal (when sender or admin wants to decline or review) */}
+      {/* ========================================================================
+          EXTENSION REVIEW MODAL
+         ======================================================================== */}
       {extensionReviewModalQuery && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setExtensionReviewModalQuery(null)}
-        >
+        <div className="modal-backdrop" onClick={() => setExtensionReviewModalQuery(null)}>
           <div
             className="modal-dialog extension-review-modal"
             onClick={(e) => e.stopPropagation()}
@@ -5185,9 +3884,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           >
             <div className="modal-header">
               <div className="modal-header-text">
-                <h3 id="review-ext-modal-title">Review Extension Request</h3>
+                <h3 id="review-ext-modal-title">Review Extension</h3>
                 <span className="modal-sender-badge">
-                  Query: <strong>{extensionReviewModalQuery.queryId}</strong> &bull; From Manager:{' '}
+                  Query <strong>{extensionReviewModalQuery.queryId}</strong> &bull; By{' '}
                   <strong>{extensionReviewModalQuery.managerName}</strong>
                 </span>
               </div>
@@ -5203,25 +3902,25 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
             <div className="extension-review-body">
               <div className="review-meta-item">
-                <span className="review-meta-label">Proposed New Deadline:</span>
+                <span className="review-meta-label">Proposed Deadline</span>
                 <span className="review-meta-val highlight">
                   {extensionReviewModalQuery.extensionProposedDueAt || '—'}
                 </span>
               </div>
 
               <div className="review-meta-item">
-                <span className="review-meta-label">Manager's Reason:</span>
+                <span className="review-meta-label">Reason</span>
                 <p className="review-reason-box">
-                  "{extensionReviewModalQuery.extensionReason || 'No reason provided'}"
+                  &ldquo;{extensionReviewModalQuery.extensionReason || 'No reason provided'}&rdquo;
                 </p>
               </div>
 
               <div className="cp-form-group">
-                <label htmlFor="ext-decline-note">Note / Feedback (Optional if declining)</label>
+                <label htmlFor="ext-decline-note">Note (Optional if declining)</label>
                 <input
                   id="ext-decline-note"
                   type="text"
-                  placeholder="e.g. Please expedite by tomorrow instead..."
+                  placeholder="Add a note for the manager..."
                   value={extensionReviewNoteInput}
                   onChange={(e) => setExtensionReviewNoteInput(e.target.value)}
                 />
@@ -5234,7 +3933,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   disabled={isReviewingExtension}
                   onClick={() => handleDeclineExtension(extensionReviewModalQuery)}
                 >
-                  ✕ Decline Request
+                  ✕ Decline
                 </button>
                 <button
                   type="button"
@@ -5242,7 +3941,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   disabled={isReviewingExtension}
                   onClick={() => handleApproveExtension(extensionReviewModalQuery)}
                 >
-                  {isReviewingExtension ? 'Processing...' : '✓ Approve Extension'}
+                  {isReviewingExtension ? 'Saving...' : '✓ Approve'}
                 </button>
               </div>
             </div>
