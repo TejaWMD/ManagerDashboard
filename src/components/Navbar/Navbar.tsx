@@ -169,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          <button
+          {/* <button
             type="button"
             className="mobile-header-logo"
             onClick={() => {
@@ -180,7 +180,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-label="Back to WMD Hub"
           >
             <img src={wmdLogo} alt="WMD" className="mobile-header-logo-img" />
-          </button>
+          </button> */}
         </div>
       </header>
 
