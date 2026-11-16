@@ -260,7 +260,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!hasSeededUsersRef.current) {
       hasSeededUsersRef.current = true;
-      ensureUsersSeededInDb().catch(() => {});
+      ensureUsersSeededInDb(currentUser).catch(() => {});
     }
   }, []);
 
@@ -541,9 +541,21 @@ export const App: React.FC = () => {
             }
 
             setQueries((prev) => {
-              const next = prev.map((c) =>
-                c.queryId.toUpperCase() === updated.queryId.toUpperCase() ? updated : c
-              );
+              const next = prev.map((c) => {
+                if (c.queryId.toUpperCase() !== updated.queryId.toUpperCase()) return c;
+                return {
+                  ...c,
+                  ...updated,
+                  attachments:
+                    updated.attachments && updated.attachments.length > 0
+                      ? updated.attachments
+                      : c.attachments || [],
+                  managerAttachments:
+                    updated.managerAttachments && updated.managerAttachments.length > 0
+                      ? updated.managerAttachments
+                      : c.managerAttachments || [],
+                };
+              });
               persistQueriesCache(next);
               return next;
             });
@@ -1055,7 +1067,7 @@ export const App: React.FC = () => {
     if (!ssoUser || !initialSsoRef.current?.isFreshSso) return;
 
     if (ssoUser.role === 'admin') {
-      ensureUsersSeededInDb().catch(() => {});
+      ensureUsersSeededInDb(currentUser).catch(() => {});
     }
     setAllUsers((prev) => {
       if (prev.some((u) => u.email.toLowerCase() === ssoUser.email.toLowerCase())) {
@@ -1295,9 +1307,13 @@ export const App: React.FC = () => {
     >
   ) => {
     if (!currentUser) return;
-    const existing = queries.find(
-      (c) => c.queryId.trim().toUpperCase() === queryId.trim().toUpperCase()
-    );
+    const existing =
+      queriesRef.current.find(
+        (c) => c.queryId.trim().toUpperCase() === queryId.trim().toUpperCase()
+      ) ||
+      queries.find(
+        (c) => c.queryId.trim().toUpperCase() === queryId.trim().toUpperCase()
+      );
     if (!existing) return;
 
     const now = new Date();
@@ -1411,44 +1427,52 @@ export const App: React.FC = () => {
       unmarkUrgentQueryFinished(queryId);
     }
 
-    const nextManagerRemarkTitle =
-      updates.managerRemarkTitle !== undefined
-        ? updates.managerRemarkTitle
-        : existing.managerRemarkTitle;
     const nextManagerRemark =
       updates.managerRemark !== undefined
         ? updates.managerRemark
         : existing.managerRemark;
+    const nextManagerRemarkTitle =
+      updates.managerRemarkTitle !== undefined
+        ? updates.managerRemarkTitle
+        : updates.managerRemark !== undefined
+        ? updates.managerRemark
+        : existing.managerRemarkTitle;
 
-    const nextAccountManagerRemarkTitle =
-      updates.accountManagerRemarkTitle !== undefined
-        ? updates.accountManagerRemarkTitle
-        : existing.accountManagerRemarkTitle;
     const nextAccountManagerRemark =
       updates.accountManagerRemark !== undefined
         ? updates.accountManagerRemark
         : existing.accountManagerRemark;
+    const nextAccountManagerRemarkTitle =
+      updates.accountManagerRemarkTitle !== undefined
+        ? updates.accountManagerRemarkTitle
+        : updates.accountManagerRemark !== undefined
+        ? updates.accountManagerRemark
+        : existing.accountManagerRemarkTitle;
 
     // Synchronize remarks array so the details modal timeline and Supabase remarks_log are always in sync
-    let nextRemarks = updates.remarks !== undefined ? updates.remarks : existing.remarks ? [...existing.remarks] : [];
-    if (updates.remarks === undefined) {
+    let nextRemarks: Query['remarks'] = existing.remarks ? [...existing.remarks] : [];
+    if (updates.remarks !== undefined && Array.isArray(updates.remarks)) {
+      const mergedMap = new Map<string, NonNullable<Query['remarks']>[number]>();
+      for (const r of nextRemarks) {
+        if (r && r.id) mergedMap.set(r.id, r);
+      }
+      for (const r of updates.remarks) {
+        if (r && r.id) mergedMap.set(r.id, r);
+      }
+      nextRemarks = Array.from(mergedMap.values()).sort(
+        (a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0)
+      );
+    } else {
       if (updates.accountManagerRemarkTitle !== undefined || updates.accountManagerRemark !== undefined) {
         const text = (nextAccountManagerRemark || nextAccountManagerRemarkTitle || '').trim();
         const title = (nextAccountManagerRemarkTitle || '').trim();
         if (text) {
           const finalTitle = title && title !== text ? title : undefined;
-          const lastSenderIdx = [...nextRemarks].reverse().findIndex((r) => r.type === 'sender');
-          const nowFormatted = formatDateTime(now, false);
-          if (lastSenderIdx !== -1) {
-            const actualIdx = nextRemarks.length - 1 - lastSenderIdx;
-            nextRemarks[actualIdx] = {
-              ...nextRemarks[actualIdx],
-              title: finalTitle,
-              text,
-              createdAt: nowFormatted,
-              createdAtMs: nowMs,
-            };
-          } else {
+          const alreadyExists = nextRemarks.some(
+            (r) => r.type === 'sender' && r.text.trim() === text
+          );
+          if (!alreadyExists) {
+            const nowFormatted = formatDateTime(now, false);
             nextRemarks.push({
               id: `rmk-sender-${nowMs}-${Math.random().toString(36).substring(2, 6)}`,
               authorId: currentUser.id,
@@ -1469,18 +1493,11 @@ export const App: React.FC = () => {
         const title = (nextManagerRemarkTitle || '').trim();
         if (text) {
           const finalTitle = title && title !== text ? title : undefined;
-          const lastMgrIdx = [...nextRemarks].reverse().findIndex((r) => r.type === 'manager');
-          const nowFormatted = formatDateTime(now, false);
-          if (lastMgrIdx !== -1) {
-            const actualIdx = nextRemarks.length - 1 - lastMgrIdx;
-            nextRemarks[actualIdx] = {
-              ...nextRemarks[actualIdx],
-              title: finalTitle,
-              text,
-              createdAt: nowFormatted,
-              createdAtMs: nowMs,
-            };
-          } else {
+          const alreadyExists = nextRemarks.some(
+            (r) => r.type === 'manager' && r.text.trim() === text
+          );
+          if (!alreadyExists) {
+            const nowFormatted = formatDateTime(now, false);
             nextRemarks.push({
               id: `rmk-mgr-${nowMs}-${Math.random().toString(36).substring(2, 6)}`,
               authorId: currentUser.id,
@@ -1583,6 +1600,11 @@ export const App: React.FC = () => {
 
     const dbPayload: Parameters<typeof updateQueryInDb>[1] = {
       ...updates,
+      remarks: nextRemarks,
+      managerRemark: nextManagerRemark,
+      managerRemarkTitle: nextManagerRemarkTitle,
+      accountManagerRemark: nextAccountManagerRemark,
+      accountManagerRemarkTitle: nextAccountManagerRemarkTitle,
       managerDone: nextManagerDone,
       managerDoneAt: nextManagerDoneAt,
       managerDoneAtMs: nextManagerDoneAtMs,
@@ -1591,25 +1613,23 @@ export const App: React.FC = () => {
       completedAt: nextCompletedAt,
       completedAtMs: nextCompletedAtMs,
       isDelayed: nextIsDelayed,
-      firstManagerRemarkAtMs: nextFirstManagerRemarkAtMs,
+      targetDueAt: optimisticItem.targetDueAt,
+      targetDueAtMs: optimisticItem.targetDueAtMs,
+      extensionStatus: optimisticItem.extensionStatus,
+      extensionRequestedAt: optimisticItem.extensionRequestedAt,
+      extensionProposedDueAt: optimisticItem.extensionProposedDueAt,
+      extensionProposedDueAtMs: optimisticItem.extensionProposedDueAtMs,
+      extensionReason: optimisticItem.extensionReason,
+      extensionReviewNote: optimisticItem.extensionReviewNote,
+      extensionReviewedAt: optimisticItem.extensionReviewedAt,
+      ...(nextFirstManagerRemarkAtMs !== null &&
+      nextFirstManagerRemarkAtMs !== existing.firstManagerRemarkAtMs
+        ? { firstManagerRemarkAtMs: nextFirstManagerRemarkAtMs }
+        : {}),
       ...(isCompletedForUrgent && isUrgentQuery
         ? { lastUrgentReminderAtMs: 9999999999999 }
         : {}),
     };
-
-    if (
-      updates.remarks !== undefined ||
-      updates.managerRemark !== undefined ||
-      updates.managerRemarkTitle !== undefined ||
-      updates.accountManagerRemark !== undefined ||
-      updates.accountManagerRemarkTitle !== undefined
-    ) {
-      dbPayload.remarks = nextRemarks;
-      dbPayload.managerRemark = nextManagerRemark;
-      dbPayload.managerRemarkTitle = nextManagerRemarkTitle;
-      dbPayload.accountManagerRemark = nextAccountManagerRemark;
-      dbPayload.accountManagerRemarkTitle = nextAccountManagerRemarkTitle;
-    }
 
     const { data, error } = await updateQueryInDb(queryId, dbPayload);
 
@@ -1627,9 +1647,25 @@ export const App: React.FC = () => {
       });
     } else if (data) {
       setDbError(null);
+      const mergedFinal: Query = {
+        ...optimisticItem,
+        ...data,
+        remarks:
+          data.remarks && data.remarks.length >= (optimisticItem.remarks?.length || 0)
+            ? data.remarks
+            : optimisticItem.remarks,
+        attachments:
+          data.attachments && data.attachments.length > 0
+            ? data.attachments
+            : optimisticItem.attachments || [],
+        managerAttachments:
+          data.managerAttachments && data.managerAttachments.length > 0
+            ? data.managerAttachments
+            : optimisticItem.managerAttachments || [],
+      };
       setQueries((prev) => {
         const next = prev.map((item) =>
-          item.queryId.toUpperCase() === queryId.toUpperCase() ? data : item
+          item.queryId.toUpperCase() === queryId.toUpperCase() ? mergedFinal : item
         );
         persistQueriesCache(next);
         return next;
@@ -1639,19 +1675,19 @@ export const App: React.FC = () => {
         try {
           bus.postMessage({
             type: 'QUERY_UPDATED',
-            query: data,
-            data: { type: 'QUERY_UPDATED', query: data },
+            query: mergedFinal,
+            data: { type: 'QUERY_UPDATED', query: mergedFinal },
           });
-          if ((isUrgentQueryCompleted(data) || isQueryDone(data)) && data.isUrgent) {
+          if ((isUrgentQueryCompleted(mergedFinal) || isQueryDone(mergedFinal)) && mergedFinal.isUrgent) {
             bus.postMessage({
               type: 'URGENT_QUERY_COMPLETED',
-              queryId: data.queryId,
-              data: { type: 'URGENT_QUERY_COMPLETED', queryId: data.queryId },
+              queryId: mergedFinal.queryId,
+              data: { type: 'URGENT_QUERY_COMPLETED', queryId: mergedFinal.queryId },
             });
           }
         } catch {}
       }
-      broadcastQueryUpdate(data);
+      broadcastQueryUpdate(mergedFinal);
 
       // Synchronize appointment's queryId if linkedAppointmentId changed
       if (updates.linkedAppointmentId !== undefined) {

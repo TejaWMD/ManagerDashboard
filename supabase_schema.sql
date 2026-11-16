@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS public.queries (
   completed_at_ms BIGINT DEFAULT NULL,
   is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
   delay_notified BOOLEAN NOT NULL DEFAULT FALSE,
-  rating INTEGER DEFAULT NULL CHECK (rating >= 1 AND rating <= 5),
+  rating INTEGER DEFAULT NULL CHECK (rating >= 1 AND rating <= 10),
   target_due_at TEXT DEFAULT NULL,
   target_due_at_ms BIGINT DEFAULT NULL,
   extension_status TEXT DEFAULT 'NONE',
@@ -89,8 +89,10 @@ CREATE TABLE IF NOT EXISTS public.queries (
   extension_reviewed_at TEXT DEFAULT NULL,
   is_urgent BOOLEAN NOT NULL DEFAULT FALSE,
   last_urgent_reminder_at_ms BIGINT DEFAULT NULL,
+  first_manager_remark_at_ms BIGINT DEFAULT NULL,
   attachments TEXT DEFAULT NULL,
   manager_attachments TEXT DEFAULT NULL,
+  remarks_log TEXT DEFAULT NULL,
   cc_users TEXT DEFAULT NULL
 );
 
@@ -118,6 +120,7 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS linked_appointment_id TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS is_urgent BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS last_urgent_reminder_at_ms BIGINT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS first_manager_remark_at_ms BIGINT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS attachments TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS manager_attachments TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS remarks_log TEXT DEFAULT NULL,
@@ -144,6 +147,10 @@ ALTER TABLE public.queries
   ADD COLUMN IF NOT EXISTS receiver_sender_remark TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS receiver_sender_rated_at TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS receiver_sender_rated_at_ms BIGINT DEFAULT NULL;
+
+-- Drop legacy 1..5 rating check constraint so 1..10 ratings never fail with 23514
+ALTER TABLE public.queries DROP CONSTRAINT IF EXISTS queries_rating_check;
+ALTER TABLE public.queries ADD CONSTRAINT queries_rating_check CHECK (rating IS NULL OR (rating >= 1 AND rating <= 10));
 
 -- Backfill receiver rating for senders to 10 stars for queries up till now (cutoff 1794298058000)
 UPDATE public.queries
@@ -292,8 +299,8 @@ CREATE POLICY "Allow full access to queries"
   USING (true)
   WITH CHECK (true);
 
--- 5. Enable Realtime for queries table
-ALTER TABLE public.queries REPLICA IDENTITY FULL;
+-- 5. Enable Realtime for queries table (DEFAULT replica identity uses primary key and avoids copying multi-MB TOAST attachments into WAL on every update)
+ALTER TABLE public.queries REPLICA IDENTITY DEFAULT;
 
 DO $$
 BEGIN
@@ -355,12 +362,15 @@ CREATE TABLE IF NOT EXISTS public.appointments (
 -- Upgrade appointments table if columns exist
 ALTER TABLE public.appointments
   ADD COLUMN IF NOT EXISTS agenda TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS attendees_json TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS meeting_location TEXT DEFAULT '',
   ADD COLUMN IF NOT EXISTS query_id TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS reschedule_proposed_by TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS proposed_scheduled_at TEXT DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS proposed_scheduled_at_ms BIGINT DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS reschedule_reason TEXT DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS reschedule_reason TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS cancellation_remark TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS cancelled_at TEXT DEFAULT NULL;
 
 -- Indexes for fast filtering
 CREATE INDEX IF NOT EXISTS idx_appointments_requester_id ON public.appointments(requester_id);
@@ -378,7 +388,7 @@ CREATE POLICY "Allow full access to appointments"
   USING (true)
   WITH CHECK (true);
 
-ALTER TABLE public.appointments REPLICA IDENTITY FULL;
+ALTER TABLE public.appointments REPLICA IDENTITY DEFAULT;
 
 DO $$
 BEGIN
@@ -447,8 +457,8 @@ CREATE POLICY "Allow full access to user_presence"
   WITH CHECK (true);
 
 -- Enable Realtime for activities and presence
-ALTER TABLE public.user_activities REPLICA IDENTITY FULL;
-ALTER TABLE public.user_presence REPLICA IDENTITY FULL;
+ALTER TABLE public.user_activities REPLICA IDENTITY DEFAULT;
+ALTER TABLE public.user_presence REPLICA IDENTITY DEFAULT;
 
 DO $$
 BEGIN

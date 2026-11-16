@@ -447,8 +447,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       const updatedRemarks = [...(activeViewingQuery.remarks || []), newRmk];
       await onUpdateQuery(activeViewingQuery.queryId, {
         remarks: updatedRemarks,
+        managerRemarkTitle: finalDesc,
         managerRemark: finalDesc,
-        managerAttachments: modalMgrAttachmentsDraft,
       });
 
       setViewingQuery((prev) =>
@@ -456,8 +456,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           ? {
               ...prev,
               remarks: updatedRemarks,
+              managerRemarkTitle: finalDesc,
               managerRemark: finalDesc,
-              managerAttachments: modalMgrAttachmentsDraft,
             }
           : null
       );
@@ -490,6 +490,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
       const updatedRemarks = [...(activeViewingQuery.remarks || []), newRmk];
       await onUpdateQuery(activeViewingQuery.queryId, {
         remarks: updatedRemarks,
+        accountManagerRemarkTitle: finalDesc,
         accountManagerRemark: finalDesc,
       });
 
@@ -498,6 +499,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
           ? {
               ...prev,
               remarks: updatedRemarks,
+              accountManagerRemarkTitle: finalDesc,
               accountManagerRemark: finalDesc,
             }
           : null
@@ -2151,7 +2153,8 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 <div className="query-view-ext-banner query-view-ext-banner--pending">
                   <div className="ext-banner-top">
                     <span>
-                      ⏳ Extension to <strong>{formatDateTime(activeViewingQuery.extensionProposedDueAt)}</strong>
+                      ⏳ Extension requested to{' '}
+                      <strong>{formatDateTime(activeViewingQuery.extensionProposedDueAt)}</strong>
                     </span>
                     <div className="ext-banner-actions">
                       {(belongsToAccountManager(activeViewingQuery, currentUser) ||
@@ -2179,7 +2182,47 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     </div>
                   </div>
                   {activeViewingQuery.extensionReason && (
-                    <p className="ext-banner-reason">{activeViewingQuery.extensionReason}</p>
+                    <p className="ext-banner-reason">
+                      <strong>Reason:</strong> {activeViewingQuery.extensionReason}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {activeViewingQuery.extensionStatus === 'APPROVED' && (
+                <div className="query-view-ext-banner query-view-ext-banner--approved">
+                  <div className="ext-banner-top">
+                    <span>
+                      ✅ Extension Approved &bull; New Due:{' '}
+                      <strong>
+                        {formatDateTime(
+                          activeViewingQuery.targetDueAt || activeViewingQuery.extensionProposedDueAt
+                        )}
+                      </strong>
+                    </span>
+                  </div>
+                  {activeViewingQuery.extensionReason && (
+                    <p className="ext-banner-reason">
+                      <strong>Reason:</strong> {activeViewingQuery.extensionReason}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {activeViewingQuery.extensionStatus === 'DECLINED' && (
+                <div className="query-view-ext-banner query-view-ext-banner--declined">
+                  <div className="ext-banner-top">
+                    <span>❌ Extension Request Declined</span>
+                  </div>
+                  {activeViewingQuery.extensionReason && (
+                    <p className="ext-banner-reason">
+                      <strong>Requested Reason:</strong> {activeViewingQuery.extensionReason}
+                    </p>
+                  )}
+                  {activeViewingQuery.extensionReviewNote && (
+                    <p className="ext-banner-reason">
+                      <strong>Decline Note:</strong> {activeViewingQuery.extensionReviewNote}
+                    </p>
                   )}
                 </div>
               )}

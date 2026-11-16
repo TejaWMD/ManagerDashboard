@@ -53,11 +53,23 @@ export function redirectToMainApp(restricted = false): void {
   window.location.replace(`${baseUrl}${separator}restricted=true`);
 }
 
+const LEGACY_EMAIL_TO_USER_ID: Record<string, string> = {
+  'wmdklmuugaa@gmail.com': 'mgr-1',
+  'cs4@malayanfood.com': 'mgr-1',
+  'wmdklawi@gmail.com': 'mgr-2',
+  'cs3@malayanfood.com': 'mgr-2',
+  'wmdkljay@gmail.com': 'mgr-3',
+  'wmgjay09@gmail.com': 'mgr-3',
+  'wmgtamil@gmail.com': 'mgr-4',
+  'info@malayanfood.com': 'mgr-4',
+};
+
 function buildUserFromPayload(payload: SsoPayload): UserAccount | null {
   if (!payload || typeof payload !== 'object') return null;
 
   const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
   const id = typeof payload.id === 'string' ? payload.id.trim() : '';
+  const rawName = typeof payload.name === 'string' ? payload.name.trim() : '';
   const role = payload.role as UserRole;
 
   if (!email || !id || !VALID_ROLES.includes(role)) {
@@ -72,9 +84,19 @@ function buildUserFromPayload(payload: SsoPayload): UserAccount | null {
     return null;
   }
 
-  const matched = AUTHORIZED_USERS.find(
-    (u) => u.email.toLowerCase() === email || u.id === id
-  );
+  const mappedLegacyId = LEGACY_EMAIL_TO_USER_ID[email];
+  const matched =
+    AUTHORIZED_USERS.find(
+      (u) =>
+        u.id.toLowerCase() === id.toLowerCase() ||
+        u.email.toLowerCase() === email ||
+        (mappedLegacyId && u.id === mappedLegacyId)
+    ) ||
+    (rawName
+      ? AUTHORIZED_USERS.find(
+          (u) => u.name.trim().toLowerCase() === rawName.toLowerCase() && u.role === role
+        )
+      : undefined);
 
   const fallbackName = email.split('@')[0] || 'User';
   const name =

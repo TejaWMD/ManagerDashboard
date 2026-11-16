@@ -1411,6 +1411,26 @@
   color: #92400e;
 }
 
+.query-view-ext-banner--approved {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.query-view-ext-banner--approved .ext-banner-reason {
+  color: #14532d;
+}
+
+.query-view-ext-banner--declined {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.query-view-ext-banner--declined .ext-banner-reason {
+  color: #7f1d1d;
+}
+
 .ext-banner-top,
 .ext-banner-actions {
   display: flex;

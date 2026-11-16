@@ -1102,34 +1102,72 @@ export const HomePage: React.FC<HomePageProps> = ({
                     </span>
                   </div>
                   <div
-                    className={`query-view-remark-box ${!activeViewingQuery.managerRemarkTitle &&
-                        !activeViewingQuery.managerRemark
+                    className={`query-view-remark-box ${
+                      (!activeViewingQuery.remarks ||
+                        !activeViewingQuery.remarks.some((r) => r.type === 'manager')) &&
+                      !activeViewingQuery.managerRemarkTitle &&
+                      !activeViewingQuery.managerRemark
                         ? 'query-view-remark-box--empty'
                         : ''
-                      }`}
+                    }`}
                   >
-                    {activeViewingQuery.managerRemarkTitle ||
-                      activeViewingQuery.managerRemark ? (
-                      <>
-                        {activeViewingQuery.managerRemarkTitle &&
-                          activeViewingQuery.managerRemarkTitle.trim() !== (activeViewingQuery.managerRemark || '').trim() && (
-                            <div className="query-view-field-block">
-                              <span className="query-view-sub-label">Title</span>
-                              <div className="query-view-item-title">
-                                {activeViewingQuery.managerRemarkTitle}
+                    {(() => {
+                      const mgrRemarks = (activeViewingQuery.remarks || [])
+                        .filter((r) => r.type === 'manager')
+                        .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+                      if (mgrRemarks.length > 0) {
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                            {mgrRemarks.map((rmk, idx) => (
+                              <div
+                                key={rmk.id || idx}
+                                className="query-view-field-block query-view-field-block--desc"
+                                style={{
+                                  paddingBottom: idx < mgrRemarks.length - 1 ? '0.4rem' : 0,
+                                  borderBottom:
+                                    idx < mgrRemarks.length - 1
+                                      ? '1px dashed rgba(193, 128, 54, 0.22)'
+                                      : 'none',
+                                }}
+                              >
+                                <span className="query-view-sub-label">
+                                  {rmk.authorName || activeViewingQuery.managerName}{' '}
+                                  {rmk.createdAt ? `• ${rmk.createdAt}` : ''}
+                                </span>
+                                <div className="query-view-item-desc">
+                                  {(rmk.text || rmk.title || '—').trim()}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      if (activeViewingQuery.managerRemarkTitle || activeViewingQuery.managerRemark) {
+                        return (
+                          <>
+                            {activeViewingQuery.managerRemarkTitle &&
+                              activeViewingQuery.managerRemarkTitle.trim() !==
+                                (activeViewingQuery.managerRemark || '').trim() && (
+                                <div className="query-view-field-block">
+                                  <span className="query-view-sub-label">Title</span>
+                                  <div className="query-view-item-title">
+                                    {activeViewingQuery.managerRemarkTitle}
+                                  </div>
+                                </div>
+                              )}
+                            <div className="query-view-field-block query-view-field-block--desc">
+                              <span className="query-view-sub-label">Remark</span>
+                              <div className="query-view-item-desc">
+                                {activeViewingQuery.managerRemark ||
+                                  activeViewingQuery.managerRemarkTitle ||
+                                  '—'}
                               </div>
                             </div>
-                          )}
-                        <div className="query-view-field-block query-view-field-block--desc">
-                          <span className="query-view-sub-label">Remark</span>
-                          <div className="query-view-item-desc">
-                            {activeViewingQuery.managerRemark || activeViewingQuery.managerRemarkTitle || '—'}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      'No manager remark yet.'
-                    )}
+                          </>
+                        );
+                      }
+                      return 'No manager remark yet.';
+                    })()}
                   </div>
                 </div>
 
@@ -1137,10 +1175,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                   <div className="query-view-section-header">
                     <span className="query-view-section-label">Sender Remark</span>
                     <span
-                      className={`query-view-check-tag ${activeViewingQuery.accountManagerDone
+                      className={`query-view-check-tag ${
+                        activeViewingQuery.accountManagerDone
                           ? 'query-view-check-tag--done'
                           : ''
-                        }`}
+                      }`}
                     >
                       {activeViewingQuery.accountManagerDone
                         ? '✓ Sender Done'
@@ -1148,34 +1187,75 @@ export const HomePage: React.FC<HomePageProps> = ({
                     </span>
                   </div>
                   <div
-                    className={`query-view-remark-box ${!activeViewingQuery.accountManagerRemarkTitle &&
-                        !activeViewingQuery.accountManagerRemark
+                    className={`query-view-remark-box ${
+                      (!activeViewingQuery.remarks ||
+                        !activeViewingQuery.remarks.some((r) => r.type === 'sender')) &&
+                      !activeViewingQuery.accountManagerRemarkTitle &&
+                      !activeViewingQuery.accountManagerRemark
                         ? 'query-view-remark-box--empty'
                         : ''
-                      }`}
+                    }`}
                   >
-                    {activeViewingQuery.accountManagerRemarkTitle ||
-                      activeViewingQuery.accountManagerRemark ? (
-                      <>
-                        {activeViewingQuery.accountManagerRemarkTitle &&
-                          activeViewingQuery.accountManagerRemarkTitle.trim() !== (activeViewingQuery.accountManagerRemark || '').trim() && (
-                            <div className="query-view-field-block">
-                              <span className="query-view-sub-label">Title</span>
-                              <div className="query-view-item-title">
-                                {activeViewingQuery.accountManagerRemarkTitle}
+                    {(() => {
+                      const senderRemarks = (activeViewingQuery.remarks || [])
+                        .filter((r) => r.type === 'sender')
+                        .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+                      if (senderRemarks.length > 0) {
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                            {senderRemarks.map((rmk, idx) => (
+                              <div
+                                key={rmk.id || idx}
+                                className="query-view-field-block query-view-field-block--desc"
+                                style={{
+                                  paddingBottom: idx < senderRemarks.length - 1 ? '0.4rem' : 0,
+                                  borderBottom:
+                                    idx < senderRemarks.length - 1
+                                      ? '1px dashed rgba(193, 128, 54, 0.22)'
+                                      : 'none',
+                                }}
+                              >
+                                <span className="query-view-sub-label">
+                                  {rmk.authorName || activeViewingQuery.accountManagerName}{' '}
+                                  {rmk.createdAt ? `• ${rmk.createdAt}` : ''}
+                                </span>
+                                <div className="query-view-item-desc">
+                                  {(rmk.text || rmk.title || '—').trim()}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      if (
+                        activeViewingQuery.accountManagerRemarkTitle ||
+                        activeViewingQuery.accountManagerRemark
+                      ) {
+                        return (
+                          <>
+                            {activeViewingQuery.accountManagerRemarkTitle &&
+                              activeViewingQuery.accountManagerRemarkTitle.trim() !==
+                                (activeViewingQuery.accountManagerRemark || '').trim() && (
+                                <div className="query-view-field-block">
+                                  <span className="query-view-sub-label">Title</span>
+                                  <div className="query-view-item-title">
+                                    {activeViewingQuery.accountManagerRemarkTitle}
+                                  </div>
+                                </div>
+                              )}
+                            <div className="query-view-field-block query-view-field-block--desc">
+                              <span className="query-view-sub-label">Remark</span>
+                              <div className="query-view-item-desc">
+                                {activeViewingQuery.accountManagerRemark ||
+                                  activeViewingQuery.accountManagerRemarkTitle ||
+                                  '—'}
                               </div>
                             </div>
-                          )}
-                        <div className="query-view-field-block query-view-field-block--desc">
-                          <span className="query-view-sub-label">Remark</span>
-                          <div className="query-view-item-desc">
-                            {activeViewingQuery.accountManagerRemark || activeViewingQuery.accountManagerRemarkTitle || '—'}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      'No sender remark yet.'
-                    )}
+                          </>
+                        );
+                      }
+                      return 'No sender remark yet.';
+                    })()}
                   </div>
                 </div>
               </div>

@@ -187,6 +187,42 @@ export interface QueryRow {
 
 const TITLE_DESC_SEPARATOR = '\n<<<WMD_DESC>>>\n';
 const QUERY_ATTACHMENTS_SEPARATOR = '\n<<<WMD_ATTACHMENTS>>>\n';
+const QUERY_META_SEPARATOR = '\n<<<WMD_QRY_META>>>\n';
+
+export function packQueryMeta(
+  cleanText: string,
+  meta?: LocalCompletionMeta | null
+): string {
+  const baseText = (cleanText ?? '').split(QUERY_META_SEPARATOR)[0];
+  if (!meta) return baseText;
+  const { attachments, managerAttachments, ...lightMeta } = meta;
+  const hasKeys = Object.values(lightMeta).some(
+    (v) => v !== undefined && v !== null && (!Array.isArray(v) || v.length > 0)
+  );
+  if (!hasKeys) return baseText;
+  return `${baseText}${QUERY_META_SEPARATOR}${JSON.stringify(lightMeta)}`;
+}
+
+export function unpackQueryMeta(rawText?: string | null): {
+  cleanText: string;
+  meta: LocalCompletionMeta;
+} {
+  const raw = rawText ?? '';
+  if (raw.includes(QUERY_META_SEPARATOR)) {
+    const [cleanText, ...rest] = raw.split(QUERY_META_SEPARATOR);
+    const metaJson = rest.join(QUERY_META_SEPARATOR);
+    try {
+      const parsed = JSON.parse(metaJson) as LocalCompletionMeta;
+      return {
+        cleanText,
+        meta: parsed && typeof parsed === 'object' ? parsed : {},
+      };
+    } catch {
+      return { cleanText, meta: {} };
+    }
+  }
+  return { cleanText: raw, meta: {} };
+}
 
 export function packAttachments(attachments?: QueryAttachment[] | null): string {
   if (!attachments || attachments.length === 0) return '';
@@ -229,7 +265,8 @@ export function unpackTitleAndDescription(
   rawText?: string | null,
   explicitTitle?: string | null
 ): { title: string; description: string } {
-  const raw = rawText ?? '';
+  const { cleanText: rawWithoutMeta } = unpackQueryMeta(rawText);
+  const raw = rawWithoutMeta ?? '';
   const hasExplicitTitle =
     explicitTitle !== undefined &&
     explicitTitle !== null &&
@@ -294,7 +331,15 @@ export function mapRowToQuery(row: QueryRow): Query {
 
   const normalizedQueryId = (row.query_id || '').trim().toUpperCase();
   const metaMap = readLocalCompletionMetaMap();
-  const localMeta = metaMap[normalizedQueryId] || metaMap[row.query_id];
+  const { meta: packedQueryMeta } = unpackQueryMeta(row.account_manager_remark);
+  const storedLocalMeta = metaMap[normalizedQueryId] || metaMap[row.query_id];
+  const localMeta: LocalCompletionMeta | undefined =
+    storedLocalMeta || Object.keys(packedQueryMeta).length > 0
+      ? {
+          ...(storedLocalMeta || {}),
+          ...packedQueryMeta,
+        }
+      : undefined;
 
   const dbManagerDoneAtMs =
     row.manager_done_at_ms !== null && row.manager_done_at_ms !== undefined
@@ -469,8 +514,18 @@ export function mapRowToQuery(row: QueryRow): Query {
       }
     } catch {}
   }
-  if (resolvedRemarks.length === 0 && localMeta?.remarks && localMeta.remarks.length > 0) {
-    resolvedRemarks = localMeta.remarks;
+  if (localMeta?.remarks && localMeta.remarks.length > 0) {
+    if (resolvedRemarks.length === 0) {
+      resolvedRemarks = [...localMeta.remarks];
+    } else {
+      const existingIds = new Set(resolvedRemarks.map((r) => r.id));
+      for (const rmk of localMeta.remarks) {
+        if (rmk && rmk.id && !existingIds.has(rmk.id)) {
+          resolvedRemarks.push(rmk);
+          existingIds.add(rmk.id);
+        }
+      }
+    }
   }
   // Ensure Manager & Sender remarks are independently preserved and synthesized
   // (Prevents one party's remark from hiding or dropping the other party's remark)
@@ -497,13 +552,20 @@ export function mapRowToQuery(row: QueryRow): Query {
       createdAtMs: managerDoneAtMs || createdAtMs,
     });
   } else if (hasManagerRemarkInLog && mgrRemarkText) {
-    // If remarks_log exists but column has newer or distinct content not in the log, merge it
+    // If remarks_log exists but column has newer or distinct content not in the log, merge it deterministically
     const matchesAny = resolvedRemarks.some(
-      (r) => r.type === 'manager' && r.text.trim() === mgrRemarkText
+      (r) =>
+        r.type === 'manager' &&
+        (r.text.trim() === mgrRemarkText || (r.title && r.title.trim() === mgrRemarkText))
     );
     if (!matchesAny) {
+      const latestMgrMs = Math.max(
+        ...resolvedRemarks.filter((r) => r.type === 'manager').map((r) => r.createdAtMs || 0),
+        managerDoneAtMs || 0,
+        createdAtMs
+      );
       resolvedRemarks.push({
-        id: `rmk-sync-mgr-${row.query_id}-${managerDoneAtMs || Date.now()}`,
+        id: `rmk-sync-mgr-${row.query_id}`,
         authorId: row.manager_id,
         authorName: row.manager_name,
         authorRole: 'manager',
@@ -511,7 +573,7 @@ export function mapRowToQuery(row: QueryRow): Query {
         title: mgrRemarkTitle,
         text: mgrRemarkText,
         createdAt: formatDateTime(managerDoneAt || row.created_at, false),
-        createdAtMs: managerDoneAtMs || Date.now(),
+        createdAtMs: latestMgrMs + 1,
       });
     }
   }
@@ -536,13 +598,20 @@ export function mapRowToQuery(row: QueryRow): Query {
       createdAtMs: completedAtMs || createdAtMs,
     });
   } else if (hasSenderRemarkInLog && amRemarkText) {
-    // If remarks_log exists but column has newer or distinct content not in the log, merge it
+    // If remarks_log exists but column has newer or distinct content not in the log, merge it deterministically
     const matchesAny = resolvedRemarks.some(
-      (r) => r.type === 'sender' && r.text.trim() === amRemarkText
+      (r) =>
+        r.type === 'sender' &&
+        (r.text.trim() === amRemarkText || (r.title && r.title.trim() === amRemarkText))
     );
     if (!matchesAny) {
+      const latestSenderMs = Math.max(
+        ...resolvedRemarks.filter((r) => r.type === 'sender').map((r) => r.createdAtMs || 0),
+        completedAtMs || 0,
+        createdAtMs
+      );
       resolvedRemarks.push({
-        id: `rmk-sync-am-${row.query_id}-${completedAtMs || Date.now()}`,
+        id: `rmk-sync-am-${row.query_id}`,
         authorId: row.account_manager_id,
         authorName: row.account_manager_name,
         authorRole: 'account_manager',
@@ -550,7 +619,7 @@ export function mapRowToQuery(row: QueryRow): Query {
         title: amRemarkTitle,
         text: amRemarkText,
         createdAt: formatDateTime(completedAt || row.created_at, false),
-        createdAtMs: completedAtMs || Date.now(),
+        createdAtMs: latestSenderMs + 1,
       });
     }
   }
@@ -741,17 +810,31 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
 
 let hasSeededUsersInSession = false;
 
-export async function ensureUsersSeededInDb(): Promise<void> {
-  if (hasSeededUsersInSession) return;
-  try {
-    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('wmd_users_seeded_v1') === 'true') {
-      hasSeededUsersInSession = true;
-      return;
-    }
-  } catch {}
+export async function ensureUsersSeededInDb(extraUser?: UserAccount | null): Promise<void> {
+  if (hasSeededUsersInSession && !extraUser) return;
+  if (!extraUser) {
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('wmd_users_seeded_v1') === 'true') {
+        hasSeededUsersInSession = true;
+        return;
+      }
+    } catch {}
+  }
 
   try {
-    const userRows = AUTHORIZED_USERS.map((u) => ({
+    const mergedUsers = [...AUTHORIZED_USERS];
+    if (
+      extraUser &&
+      extraUser.id &&
+      extraUser.email &&
+      !mergedUsers.some(
+        (u) => u.id === extraUser.id || u.email.toLowerCase() === extraUser.email.toLowerCase()
+      )
+    ) {
+      mergedUsers.push(extraUser);
+    }
+
+    const userRows = mergedUsers.map((u) => ({
       id: u.id,
       name: u.name,
       email: u.email,
@@ -762,7 +845,7 @@ export async function ensureUsersSeededInDb(): Promise<void> {
     }));
     const { error } = await supabase.from('users').upsert(userRows, { onConflict: 'id' });
     if (error && error.message.includes('phone')) {
-      const fallbackRows = AUTHORIZED_USERS.map((u) => ({
+      const fallbackRows = mergedUsers.map((u) => ({
         id: u.id,
         name: u.name,
         email: u.email,
@@ -826,9 +909,9 @@ export interface FetchQueriesOptions {
   includeAttachments?: boolean;
 }
 
-// Exclude heavy TOAST columns ('attachments', 'manager_attachments') for table list queries.
-// This prevents reading hundreds of megabytes of Base64 chunks from disk on every sync/refresh.
-export const QUERY_LIST_COLUMNS = [
+// Exclude heavy TOAST columns ('attachments', 'manager_attachments') for table list queries and updates.
+// This prevents reading hundreds of megabytes of Base64 chunks from disk on every sync/refresh/click.
+export const QUERY_LIST_COLUMNS_ARRAY = [
   'query_id',
   'account_manager_id',
   'account_manager_name',
@@ -866,6 +949,7 @@ export const QUERY_LIST_COLUMNS = [
   'linked_appointment_id',
   'is_urgent',
   'last_urgent_reminder_at_ms',
+  'first_manager_remark_at_ms',
   'remarks_log',
   'admin_completed_by',
   'admin_completed_at',
@@ -874,7 +958,86 @@ export const QUERY_LIST_COLUMNS = [
   'auto_completed_at_ms',
   'completion_note',
   'cc_users',
+  'admin_receiver_rating',
+  'admin_receiver_remark',
+  'admin_receiver_rated_at',
+  'admin_receiver_rated_at_ms',
+  'sender_receiver_rating',
+  'sender_receiver_remark',
+  'sender_receiver_rated_at',
+  'sender_receiver_rated_at_ms',
+  'admin_sender_rating',
+  'admin_sender_remark',
+  'admin_sender_rated_at',
+  'admin_sender_rated_at_ms',
+  'receiver_sender_rating',
+  'receiver_sender_remark',
+  'receiver_sender_rated_at',
+  'receiver_sender_rated_at_ms',
+];
+
+export const QUERY_LIST_COLUMNS = QUERY_LIST_COLUMNS_ARRAY.join(',');
+
+const BASE_SAFE_QUERY_COLUMNS = [
+  'query_id',
+  'account_manager_id',
+  'account_manager_name',
+  'account_manager_email',
+  'manager_id',
+  'manager_name',
+  'manager_email',
+  'query_text',
+  'manager_remark',
+  'manager_done',
+  'account_manager_remark',
+  'account_manager_done',
+  'status',
+  'created_at',
+  'created_at_ms',
+  'rating',
+  'is_urgent',
 ].join(',');
+
+const UNSUPPORTED_COLS_STORAGE_KEY = 'wmd_unsupported_query_cols_v2';
+
+// Cache of columns discovered to be missing from the live public.queries table
+const unsupportedQueryColumns: Set<string> = (() => {
+  try {
+    const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(UNSUPPORTED_COLS_STORAGE_KEY) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set<string>(parsed);
+    }
+  } catch {}
+  return new Set<string>();
+})();
+
+function markQueryColumnUnsupported(col: string): void {
+  if (!col) return;
+  unsupportedQueryColumns.add(col);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(
+        UNSUPPORTED_COLS_STORAGE_KEY,
+        JSON.stringify(Array.from(unsupportedQueryColumns))
+      );
+    }
+  } catch {}
+}
+
+function getActiveQuerySelectColumns(): string {
+  const cols = QUERY_LIST_COLUMNS_ARRAY.filter((col) => {
+    if (unsupportedQueryColumns.has(col)) return false;
+    if (
+      titleColumnsSupported === false &&
+      (col === 'query_title' || col === 'manager_remark_title' || col === 'account_manager_remark_title')
+    ) {
+      return false;
+    }
+    return true;
+  });
+  return cols.length > 0 ? cols.join(',') : BASE_SAFE_QUERY_COLUMNS;
+}
 
 const queryAttachmentsCache = new Map<
   string,
@@ -956,7 +1119,7 @@ export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise
 }> {
   const shouldLimit = !options?.loadAll;
   const queryLimit = options?.limit || 150;
-  const selectCols = options?.includeAttachments ? '*' : QUERY_LIST_COLUMNS;
+  const selectCols = options?.includeAttachments ? '*' : getActiveQuerySelectColumns();
 
   let queryBuilder = supabase
     .from('queries')
@@ -969,16 +1132,38 @@ export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise
 
   let { data, error } = await queryBuilder;
 
-  // Fallback to select('*') only if custom column list failed due to missing columns in DB schema
-  if (error && (error.code === '42703' || error.message?.includes('does not exist'))) {
-    let fallbackBuilder = supabase
-      .from('queries')
-      .select('*')
-      .order('created_at_ms', { ascending: false });
-    if (shouldLimit) fallbackBuilder = fallbackBuilder.limit(queryLimit);
-    const fallbackRes = await fallbackBuilder;
-    data = fallbackRes.data;
-    error = fallbackRes.error;
+  // Strip any missing columns without ever falling back to select('*') (which would read multi-MB Base64 attachments from TOAST disk!)
+  let selectAttempts = 0;
+  while (
+    error &&
+    !options?.includeAttachments &&
+    selectAttempts < 15 &&
+    (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('does not exist') || Boolean(extractMissingColumnFromError(error.message)))
+  ) {
+    selectAttempts++;
+    const missingCol = extractMissingColumnFromError(error.message);
+    if (missingCol) {
+      markQueryColumnUnsupported(missingCol);
+      const nextCols = getActiveQuerySelectColumns();
+      let retryBuilder = supabase
+        .from('queries')
+        .select(nextCols)
+        .order('created_at_ms', { ascending: false });
+      if (shouldLimit) retryBuilder = retryBuilder.limit(queryLimit);
+      const retryRes = await retryBuilder;
+      data = retryRes.data;
+      error = retryRes.error;
+    } else {
+      let safeBuilder = supabase
+        .from('queries')
+        .select(BASE_SAFE_QUERY_COLUMNS)
+        .order('created_at_ms', { ascending: false });
+      if (shouldLimit) safeBuilder = safeBuilder.limit(queryLimit);
+      const safeRes = await safeBuilder;
+      data = safeRes.data;
+      error = safeRes.error;
+      break;
+    }
   }
 
   if (error) {
@@ -1007,9 +1192,6 @@ export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise
     hasMore: shouldLimit && rows.length >= queryLimit,
   };
 }
-
-// Cache of columns discovered to be missing from the live public.queries table
-const unsupportedQueryColumns = new Set<string>();
 
 function extractMissingColumnFromError(message?: string): string | null {
   if (!message) return null;
@@ -1188,7 +1370,7 @@ export async function insertQueryInDb(query: Query): Promise<{
   let { data, error } = await supabase
     .from('queries')
     .insert([payloadToInsert])
-    .select('*')
+    .select(getActiveQuerySelectColumns())
     .single();
 
   let insertAttempts = 0;
@@ -1199,12 +1381,12 @@ export async function insertQueryInDb(query: Query): Promise<{
       console.error(
         `[Supabase] Schema mismatch: column "${missingCol}" is missing in "queries" table and was omitted from insert.`
       );
-      unsupportedQueryColumns.add(missingCol);
+      markQueryColumnUnsupported(missingCol);
       delete payloadToInsert[missingCol];
       const retryRes = await supabase
         .from('queries')
         .insert([payloadToInsert])
-        .select('*')
+        .select(getActiveQuerySelectColumns())
         .single();
       data = retryRes.data;
       error = retryRes.error;
@@ -1219,17 +1401,35 @@ export async function insertQueryInDb(query: Query): Promise<{
       const retryRes = await supabase
         .from('queries')
         .insert([payloadToInsert])
-        .select('*')
+        .select(getActiveQuerySelectColumns())
         .single();
       data = retryRes.data;
       error = retryRes.error;
+    } else if (error.code === '23503') {
+      // Foreign key constraint on account_manager_id or manager_id: seed users and retry
+      await ensureUsersSeededInDb({
+        id: query.accountManagerId,
+        name: query.accountManagerName,
+        email: query.accountManagerEmail,
+        password: '',
+        role: 'account_manager',
+        roleLabel: 'Account Manager',
+        avatarInitials: (query.accountManagerName || 'AM').slice(0, 2).toUpperCase(),
+      });
+      const retryFk = await supabase
+        .from('queries')
+        .insert([payloadToInsert])
+        .select(getActiveQuerySelectColumns())
+        .single();
+      data = retryFk.data;
+      error = retryFk.error;
     } else if (error.code === '23505' || error.message?.includes('duplicate key')) {
       const nextId = await fetchNextQueryIdFromRpcOrDb();
       payloadToInsert.query_id = nextId;
       const retryDuplicate = await supabase
         .from('queries')
         .insert([payloadToInsert])
-        .select('*')
+        .select(getActiveQuerySelectColumns())
         .single();
       data = retryDuplicate.data;
       error = retryDuplicate.error;
@@ -1241,7 +1441,7 @@ export async function insertQueryInDb(query: Query): Promise<{
       const retryBase = await supabase
         .from('queries')
         .insert([baseRow])
-        .select('*')
+        .select(BASE_SAFE_QUERY_COLUMNS)
         .single();
       data = retryBase.data;
       error = retryBase.error;
@@ -1255,8 +1455,25 @@ export async function insertQueryInDb(query: Query): Promise<{
     return { data: null, error: error.message };
   }
 
+  const mappedInserted = mapRowToQuery(data as unknown as QueryRow);
+  if (query.attachments && query.attachments.length > 0) {
+    mappedInserted.attachments = query.attachments;
+  }
+  if (query.managerAttachments && query.managerAttachments.length > 0) {
+    mappedInserted.managerAttachments = query.managerAttachments;
+  }
+  if (
+    (mappedInserted.attachments && mappedInserted.attachments.length > 0) ||
+    (mappedInserted.managerAttachments && mappedInserted.managerAttachments.length > 0)
+  ) {
+    queryAttachmentsCache.set(mappedInserted.queryId.toUpperCase(), {
+      attachments: mappedInserted.attachments || [],
+      managerAttachments: mappedInserted.managerAttachments || [],
+    });
+  }
+
   return {
-    data: mapRowToQuery(data as QueryRow),
+    data: mappedInserted,
     error: null,
   };
 }
@@ -1391,7 +1608,12 @@ export async function updateQueryInDb(
     extendedUpdates.is_delayed = updates.isDelayed;
   }
   if (updates.rating !== undefined) {
-    extendedUpdates.rating = updates.rating;
+    // Clamp legacy rating column to 1..5 so databases with legacy CHECK (rating >= 1 AND rating <= 5) never fail with 23514,
+    // while sender_receiver_rating stores the full 1..10 score.
+    extendedUpdates.rating =
+      typeof updates.rating === 'number' && updates.rating > 5
+        ? Math.max(1, Math.min(5, Math.round(updates.rating / 2)))
+        : updates.rating;
   }
   if (updates.targetDueAt !== undefined) {
     extendedUpdates.target_due_at = updates.targetDueAt;
@@ -1523,6 +1745,20 @@ export async function updateQueryInDb(
     extendedUpdates.receiver_sender_rated_at_ms = updates.receiverSenderRatedAtMs;
   }
 
+  const resolvedMgrTitleForDb =
+    updates.managerRemarkTitle !== undefined
+      ? updates.managerRemarkTitle.trim()
+      : updates.managerRemark !== undefined
+      ? updates.managerRemark.trim()
+      : undefined;
+
+  const resolvedAmTitleForDb =
+    updates.accountManagerRemarkTitle !== undefined
+      ? updates.accountManagerRemarkTitle.trim()
+      : updates.accountManagerRemark !== undefined
+      ? updates.accountManagerRemark.trim()
+      : undefined;
+
   const updatesWithTitles: Record<string, unknown> =
     titleColumnsSupported !== false
       ? {
@@ -1530,14 +1766,11 @@ export async function updateQueryInDb(
           ...(updates.queryTitle !== undefined && updates.queryTitle.trim() !== ''
             ? { query_title: updates.queryTitle.trim() }
             : {}),
-          ...(updates.managerRemarkTitle !== undefined
-            ? { manager_remark_title: updates.managerRemarkTitle.trim() }
+          ...(resolvedMgrTitleForDb !== undefined
+            ? { manager_remark_title: resolvedMgrTitleForDb }
             : {}),
-          ...(updates.accountManagerRemarkTitle !== undefined
-            ? {
-                account_manager_remark_title:
-                  updates.accountManagerRemarkTitle.trim(),
-              }
+          ...(resolvedAmTitleForDb !== undefined
+            ? { account_manager_remark_title: resolvedAmTitleForDb }
             : {}),
         }
       : extendedUpdates;
@@ -1639,6 +1872,19 @@ export async function updateQueryInDb(
     invalidateQueryAttachmentsCache(normalizedQueryId);
   }
 
+  // Embed lightweight metadata backup inside account_manager_remark so remarks & extensions
+  // sync across all devices even if extended columns have not been migrated yet
+  const latestMetaForQuery = readLocalCompletionMetaMap()[normalizedQueryId];
+  if (latestMetaForQuery && typeof baseUpdates.account_manager_remark === 'string') {
+    const packedAmWithMeta = packQueryMeta(
+      baseUpdates.account_manager_remark,
+      latestMetaForQuery
+    );
+    baseUpdates.account_manager_remark = packedAmWithMeta;
+    extendedUpdates.account_manager_remark = packedAmWithMeta;
+    updatesWithTitles.account_manager_remark = packedAmWithMeta;
+  }
+
   // Note: created_at and created_at_ms are intentionally NEVER included in updates
   // so the original creation timestamp is strictly preserved.
   const payloadToUpdate: Record<string, unknown> = {
@@ -1652,7 +1898,7 @@ export async function updateQueryInDb(
     .from('queries')
     .update(payloadToUpdate)
     .eq('query_id', normalizedQueryId)
-    .select('*')
+    .select(getActiveQuerySelectColumns())
     .maybeSingle();
 
   let updateAttempts = 0;
@@ -1663,7 +1909,7 @@ export async function updateQueryInDb(
       console.warn(
         `[Supabase] Stripping unsupported column '${missingCol}' from update on ${normalizedQueryId}`
       );
-      unsupportedQueryColumns.add(missingCol);
+      markQueryColumnUnsupported(missingCol);
       delete payloadToUpdate[missingCol];
       if (Object.keys(payloadToUpdate).length === 0) {
         error = null;
@@ -1673,7 +1919,18 @@ export async function updateQueryInDb(
         .from('queries')
         .update(payloadToUpdate)
         .eq('query_id', normalizedQueryId)
-        .select('*')
+        .select(getActiveQuerySelectColumns())
+        .maybeSingle();
+      data = retryRes.data;
+      error = retryRes.error;
+    } else if (error.code === '23514' && 'rating' in payloadToUpdate) {
+      // Check constraint violation on rating column
+      delete payloadToUpdate.rating;
+      const retryRes = await supabase
+        .from('queries')
+        .update(payloadToUpdate)
+        .eq('query_id', normalizedQueryId)
+        .select(getActiveQuerySelectColumns())
         .maybeSingle();
       data = retryRes.data;
       error = retryRes.error;
@@ -1686,7 +1943,7 @@ export async function updateQueryInDb(
         .from('queries')
         .update(payloadToUpdate)
         .eq('query_id', normalizedQueryId)
-        .select('*')
+        .select(getActiveQuerySelectColumns())
         .maybeSingle();
       data = retryRes.data;
       error = retryRes.error;
@@ -1697,11 +1954,11 @@ export async function updateQueryInDb(
               .from('queries')
               .update(baseUpdates)
               .eq('query_id', normalizedQueryId)
-              .select('*')
+              .select(BASE_SAFE_QUERY_COLUMNS)
               .maybeSingle()
           : await supabase
               .from('queries')
-              .select('*')
+              .select(BASE_SAFE_QUERY_COLUMNS)
               .eq('query_id', normalizedQueryId)
               .maybeSingle();
       data = retryBase.data;
@@ -1717,17 +1974,44 @@ export async function updateQueryInDb(
   }
 
   if (!data) {
-    // If update returned no row (e.g. RLS or temporary mismatch), try fetching the row directly
+    // If update returned no row (e.g. RLS or temporary mismatch), try fetching the row directly without heavy attachments
     const fetchRes = await supabase
       .from('queries')
-      .select('*')
+      .select(getActiveQuerySelectColumns())
       .eq('query_id', normalizedQueryId)
       .maybeSingle();
     data = fetchRes.data;
   }
 
+  const mappedUpdated = data ? mapRowToQuery(data as unknown as QueryRow) : null;
+  if (mappedUpdated) {
+    const cachedAtt = queryAttachmentsCache.get(normalizedQueryId);
+    if (updates.attachments !== undefined) {
+      mappedUpdated.attachments = updates.attachments || [];
+    } else if (
+      (!mappedUpdated.attachments || mappedUpdated.attachments.length === 0) &&
+      cachedAtt?.attachments?.length
+    ) {
+      mappedUpdated.attachments = cachedAtt.attachments;
+    }
+    if (updates.managerAttachments !== undefined) {
+      mappedUpdated.managerAttachments = updates.managerAttachments || [];
+    } else if (
+      (!mappedUpdated.managerAttachments || mappedUpdated.managerAttachments.length === 0) &&
+      cachedAtt?.managerAttachments?.length
+    ) {
+      mappedUpdated.managerAttachments = cachedAtt.managerAttachments;
+    }
+    if (updates.attachments !== undefined || updates.managerAttachments !== undefined) {
+      queryAttachmentsCache.set(normalizedQueryId, {
+        attachments: mappedUpdated.attachments || [],
+        managerAttachments: mappedUpdated.managerAttachments || [],
+      });
+    }
+  }
+
   return {
-    data: data ? mapRowToQuery(data as QueryRow) : null,
+    data: mappedUpdated,
     error: null,
   };
 }
