@@ -1,5 +1,5 @@
 .admin-trello-container {
-  padding: 1.5rem 2rem;
+  padding: 0.5rem 0.5rem 2rem;
   max-width: 1400px;
   margin: 0 auto;
   font-family: inherit;
@@ -10,11 +10,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.15rem;
   flex-wrap: wrap;
-  gap: 1.25rem;
+  gap: 1rem;
   border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 1.25rem;
+  padding-bottom: 0.95rem;
 }
 
 .admin-trello-title-group {

@@ -453,9 +453,9 @@ export const AdminTrello: React.FC<AdminTrelloProps> = ({
             </svg>
           </div>
           <div>
-            <h1 className="admin-trello-heading">Trello Team Management & Reports</h1>
+            <h1 className="admin-trello-heading">Team Trello</h1>
             <p className="admin-trello-subheading">
-              View and manage Account Managers, Managers, and Admins Trello boards, read/write updates, and compile reports
+              Manage team boards, updates, and activity reports
             </p>
           </div>
         </div>
@@ -546,7 +546,7 @@ export const AdminTrello: React.FC<AdminTrelloProps> = ({
                   className="trello-btn trello-btn--secondary"
                   onClick={handleOpenReportModal}
                 >
-                  📊 Generate Report for {selectedUser.name}
+                  📊 Report
                 </button>
 
                 <button
@@ -554,7 +554,7 @@ export const AdminTrello: React.FC<AdminTrelloProps> = ({
                   className="trello-btn trello-btn--outline"
                   onClick={handleDisconnectMember}
                 >
-                  Unlink Trello
+                  Unlink
                 </button>
               </div>
             ) : (

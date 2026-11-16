@@ -383,12 +383,12 @@ export const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({
           </div>
           <div className="apt-modal-header-text">
             <h3 className="apt-modal-title">
-              {isEditMode ? 'Edit Appointment Details' : 'Book an Appointment'}
+              {isEditMode ? 'Edit Appointment' : 'Book Appointment'}
             </h3>
             <p className="apt-modal-subtitle">
               {isEditMode
-                ? 'Update meeting attendees, timing, or agenda notes.'
-                : 'Schedule a discussion with one or multiple team members. All will be notified.'}
+                ? 'Update attendees, timing, or agenda.'
+                : 'Schedule a team sync.'}
             </p>
           </div>
           <button

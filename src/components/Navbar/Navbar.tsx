@@ -200,9 +200,21 @@ export const Navbar: React.FC<NavbarProps> = ({
       >
         <div className="sidebar-top">
           <div className="sidebar-brand">
+            {/* <button
+              type="button"
+              className="sidebar-logo"
+              onClick={() => {
+                setIsMobileOpen(false);
+                onGoToMainApp();
+              }}
+              title="Back to WMD Hub"
+              aria-label="Back to WMD Hub"
+            >
+              <img src={wmdLogo} alt="WMD" className="sidebar-logo-img" />
+            </button> */}
             {(!isCollapsed || isMobileOpen) && (
               <div className="sidebar-brand-text">
-                <span className="sidebar-app-name">WMD Query Portal</span>
+                <span className="sidebar-app-name">WMD Portal</span>
                 <span className="sidebar-role-pill">{currentUser.roleLabel}</span>
               </div>
             )}
@@ -429,7 +441,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <path d="M19.5 2h-15A2.5 2.5 0 0 0 2 4.5v15A2.5 2.5 0 0 0 4.5 22h15a2.5 2.5 0 0 0 2.5-2.5v-15A2.5 2.5 0 0 0 19.5 2zm-9 14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v10zm8-5a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v5z" />
               </svg>
               {(!isCollapsed || isMobileOpen) && (
-                <span className="sidebar-link-text">Trello (Team)</span>
+                <span className="sidebar-link-text">Team Trello</span>
               )}
             </button>
           )}
@@ -454,7 +466,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
               {(!isCollapsed || isMobileOpen) && (
-                <span className="sidebar-link-text">Notifications</span>
+                <span className="sidebar-link-text">Alerts</span>
               )}
             </button>
           )}
@@ -493,7 +505,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </svg>
               {(!isCollapsed || isMobileOpen) && (
                 <span className="sidebar-link-text">
-                  {isRefreshing ? 'Syncing...' : 'Sync & Refresh'}
+                  {isRefreshing ? 'Syncing...' : 'Sync'}
                 </span>
               )}
             </button>

@@ -269,15 +269,15 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
         <div className="track-hero-left">
           <div className="track-brand-dot" />
           <div className="track-text-stack">
-            <span className="track-role-tag">ADMIN EXECUTIVE MONITOR</span>
-            <h1 className="track-title">Live Team Tracking</h1>
+            <span className="track-role-tag">ADMIN MONITOR</span>
+            <h1 className="track-title">Team Tracking</h1>
           </div>
         </div>
 
         <div className="track-hero-actions">
           <div className="track-live-pill" title="Real-Time WebSocket Sync Active Across All Devices">
             <span className="track-live-pulse-dot" />
-            <span className="track-live-pill-text">LIVE SYNC ACTIVE</span>
+            <span className="track-live-pill-text">LIVE</span>
           </div>
 
           {onRefresh && (
@@ -301,7 +301,7 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
                 <polyline points="1 20 1 14 7 14" />
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
               </svg>
-              <span>{isRefreshing ? 'Syncing...' : 'Sync & Refresh'}</span>
+              <span>{isRefreshing ? 'Syncing...' : 'Sync'}</span>
             </button>
           )}
 
@@ -322,14 +322,14 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
       <section className="track-kpi-grid">
         <div className="track-kpi-card track-kpi-card--green">
           <div className="track-kpi-header">
-            <span className="track-kpi-label">Active Users Online</span>
+            <span className="track-kpi-label">Users Online</span>
             <div className="track-kpi-icon-bubble track-kpi-icon-bubble--green">🟢</div>
           </div>
           <div className="track-kpi-body">
             <span className="track-kpi-number">{onlineCount}</span>
-            <span className="track-kpi-total">/ {users.length} Total</span>
+            <span className="track-kpi-total">/ {users.length}</span>
           </div>
-          <span className="track-kpi-subtext">Connected across portal right now</span>
+          <span className="track-kpi-subtext">Currently active</span>
         </div>
 
         <div className="track-kpi-card track-kpi-card--gold">
@@ -340,18 +340,18 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
           <div className="track-kpi-body">
             <span className="track-kpi-number">{todayActivitiesCount}</span>
           </div>
-          <span className="track-kpi-subtext">Events logged since midnight</span>
+          <span className="track-kpi-subtext">Logged since midnight</span>
         </div>
 
         <div className="track-kpi-card track-kpi-card--orange">
           <div className="track-kpi-header">
-            <span className="track-kpi-label">Queries In Motion</span>
+            <span className="track-kpi-label">Open Queries</span>
             <div className="track-kpi-icon-bubble track-kpi-icon-bubble--orange">📋</div>
           </div>
           <div className="track-kpi-body">
             <span className="track-kpi-number">{pendingQueriesCount}</span>
           </div>
-          <span className="track-kpi-subtext">Pending manager action or AM close</span>
+          <span className="track-kpi-subtext">Pending resolution</span>
         </div>
 
         <div className="track-kpi-card track-kpi-card--russet">
@@ -362,7 +362,7 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
           <div className="track-kpi-body">
             <span className="track-kpi-number">{appointments.length}</span>
           </div>
-          <span className="track-kpi-subtext">Scheduled, confirmed & completed</span>
+          <span className="track-kpi-subtext">Total syncs</span>
         </div>
       </section>
 
@@ -372,9 +372,9 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
           <div className="track-panel-title-wrap">
             <div className="track-panel-badge-icon">👥</div>
             <div>
-              <h2 className="track-panel-title">Team Live Presence</h2>
+              <h2 className="track-panel-title">Team Presence</h2>
               <p className="track-panel-desc">
-                Real-time online status, active screen, and device. Click any team member to filter their activity timeline.
+                Click a member to filter their activity.
               </p>
             </div>
           </div>
@@ -385,7 +385,7 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
               className="track-clear-user-pill"
               onClick={() => setSelectedUserId('all')}
             >
-              Showing Specific User • Click to Show All
+              Show All Users
             </button>
           )}
         </div>
@@ -458,15 +458,15 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
           <div className="track-panel-title-wrap">
             <div className="track-panel-badge-icon">⚡</div>
             <div>
-              <h2 className="track-panel-title">Real-Time Activity Audit Feed</h2>
+              <h2 className="track-panel-title">Activity Feed</h2>
               <p className="track-panel-desc">
-                Live chronological audit of all user actions across queries, meetings, and team interactions.
+                Live log of queries, meetings, and team actions.
               </p>
             </div>
           </div>
 
           <span className="track-activity-count-badge">
-            {filteredActivities.length} {filteredActivities.length === 1 ? 'Activity' : 'Activities'}
+            {filteredActivities.length} {filteredActivities.length === 1 ? 'Event' : 'Events'}
           </span>
         </div>
 
@@ -551,7 +551,7 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
                 onClick={handleResetFilters}
                 title="Clear all active filters"
               >
-                Reset Filters
+                Reset
               </button>
             )}
           </div>
@@ -562,14 +562,14 @@ export const TrackingPage: React.FC<TrackingPageProps> = ({
           <div className="track-empty-feed">
             <div className="track-empty-icon">🔍</div>
             <h3>No Activities Found</h3>
-            <p>No recent user actions matched your search or active filter criteria.</p>
+            <p>No recent actions matched your filter.</p>
             {hasActiveFilters && (
               <button
                 type="button"
                 className="track-empty-reset-btn"
                 onClick={handleResetFilters}
               >
-                Clear All Filters
+                Reset Filters
               </button>
             )}
           </div>

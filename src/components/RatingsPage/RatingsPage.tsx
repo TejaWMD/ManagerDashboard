@@ -210,12 +210,10 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
       <div className="ratings-header-card">
         <div className="ratings-header-info">
           <h1>
-            <span>⭐</span> Team Ratings & Performance Management
+            <span>⭐</span> Team Ratings
           </h1>
-          
         </div>
       </div>
-
 
       {/* Filter and Search Bar */}
       <div className="ratings-controls-bar">
@@ -233,7 +231,7 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
           <input
             type="text"
             className="ratings-search-input"
-            placeholder="Search by name, email or role..."
+            placeholder="Search name, email, or role..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -247,7 +245,7 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
             }`}
             onClick={() => setRoleFilter('all')}
           >
-            All Members ({userStats.length})
+            All ({userStats.length})
           </button>
           <button
             type="button"
@@ -265,7 +263,7 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
             }`}
             onClick={() => setRoleFilter('account_manager')}
           >
-            Account Managers
+            Account Mgrs
           </button>
           <button
             type="button"
@@ -285,11 +283,11 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
           <table className="ratings-table">
             <thead>
               <tr>
-                <th>Names</th>
-                <th>Roles</th>
-                <th className="th-center">Total Rating As Sender</th>
-                <th className="th-center">Total Rating As Receiving Manager</th>
-                <th className="th-center">Average Rating</th>
+                <th>Member</th>
+                <th>Role</th>
+                <th className="th-center">Sender Rating</th>
+                <th className="th-center">Receiver Rating</th>
+                <th className="th-center">Overall Avg</th>
                 <th className="th-center">Actions</th>
               </tr>
             </thead>
@@ -297,14 +295,14 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
               {filteredStats.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '2.5rem', color: '#8c7562' }}>
-                    No team members found matching your search criteria.
+                    No team members found.
                   </td>
                 </tr>
               ) : (
                 filteredStats.map((stat) => (
                   <tr key={stat.user.id}>
                     {/* Names */}
-                    <td>
+                    <td data-label="Member">
                       <div className="ratings-user-cell">
                         <div className="ratings-user-avatar">
                           {stat.user.avatarInitials || stat.user.name.substring(0, 2).toUpperCase()}
@@ -317,21 +315,21 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                     </td>
 
                     {/* Roles */}
-                    <td>
+                    <td data-label="Role">
                       <span className={`ratings-role-badge ratings-role-badge--${stat.user.role}`}>
                         {stat.user.roleLabel || stat.user.role.replace('_', ' ')}
                       </span>
                     </td>
 
                     {/* Total Rating As Sender */}
-                    <td className="td-center">
+                    <td className="td-center" data-label="Sender Rating">
                       {stat.avgSenderRating !== null ? (
                         <div>
                           <span className={`ratings-score-pill ${getScoreBadgeClass(stat.avgSenderRating)}`}>
                             ⭐ {stat.avgSenderRating} / 10
                           </span>
                           <div className="ratings-score-sub">
-                            {stat.senderQueriesCount} {stat.senderQueriesCount === 1 ? 'query' : 'queries'} sent
+                            {stat.senderQueriesCount} sent
                           </div>
                         </div>
                       ) : (
@@ -340,14 +338,14 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                     </td>
 
                     {/* Total Rating As Receiving Manager */}
-                    <td className="td-center">
+                    <td className="td-center" data-label="Receiver Rating">
                       {stat.avgReceiverRating !== null ? (
                         <div>
                           <span className={`ratings-score-pill ${getScoreBadgeClass(stat.avgReceiverRating)}`}>
                             ⭐ {stat.avgReceiverRating} / 10
                           </span>
                           <div className="ratings-score-sub">
-                            {stat.receiverQueriesCount} {stat.receiverQueriesCount === 1 ? 'query' : 'queries'} received
+                            {stat.receiverQueriesCount} received
                           </div>
                         </div>
                       ) : (
@@ -356,7 +354,7 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                     </td>
 
                     {/* Average Rating */}
-                    <td className="td-center">
+                    <td className="td-center" data-label="Overall Avg">
                       {stat.combinedAverageRating !== null ? (
                         <div>
                           <span
@@ -366,7 +364,7 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                             ⭐ {stat.combinedAverageRating} / 10
                           </span>
                           <div className="ratings-score-sub">
-                            {stat.totalQueriesInvolved} total queries
+                            {stat.totalQueriesInvolved} total
                           </div>
                         </div>
                       ) : (
@@ -375,14 +373,14 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
                     </td>
 
                     {/* Actions */}
-                    <td className="td-center">
+                    <td className="td-center" data-label="Action">
                       <button
                         type="button"
                         className="ratings-btn-breakdown"
                         onClick={() => setSelectedUserStats(stat)}
                         title="View individual query ratings & remarks"
                       >
-                        🔍 View Breakdown
+                        Breakdown
                       </button>
                     </td>
                   </tr>

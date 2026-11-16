@@ -12,12 +12,13 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 480px;
+  min-height: 440px;
+  max-height: 580px;
   background: #ffffff;
   border-radius: var(--radius-lg, 16px);
   border: 1.5px solid rgba(193, 128, 54, 0.22);
   box-shadow: 0 4px 18px rgba(117, 72, 38, 0.06);
-  padding: 0.95rem 1.15rem;
+  padding: 0.9rem 1.1rem;
   box-sizing: border-box;
   overflow: hidden;
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
@@ -1022,14 +1023,16 @@
   }
 
   .apt-card-actions {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
   }
 
   .apt-card-actions .apt-btn {
-    width: 100%;
-    padding: 0.55rem;
-    font-size: 0.8rem;
+    flex: 1 1 auto;
+    padding: 0.48rem 0.65rem;
+    font-size: 0.78rem;
   }
 
   .apt-form-row--2col {
@@ -1037,7 +1040,8 @@
   }
 
   .apt-type-selector {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
   }
 
   .apt-modal-container {

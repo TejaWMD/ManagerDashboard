@@ -156,7 +156,7 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
               <line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
-            <h2 className="chart-card-title">Appointments &amp; Syncs</h2>
+            <h2 className="chart-card-title">Appointments</h2>
           </div>
 
           <div className="apt-filter-tabs">
@@ -178,7 +178,7 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
               }`}
               onClick={() => setFilterTab('action_needed')}
             >
-              Action Needed
+              Action
               {actionNeededCount > 0 && (
                 <span className="apt-filter-tab-count apt-filter-tab-count--alert">
                   {actionNeededCount}
@@ -209,7 +209,7 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          <span>Book Appointment</span>
+          <span>Book</span>
         </button>
       </div>
 
@@ -228,13 +228,13 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
             </div>
             <p className="apt-empty-title">
               {filterTab === 'action_needed'
-                ? 'No pending actions right now'
+                ? 'No pending actions'
                 : filterTab === 'upcoming'
-                ? 'No upcoming appointments scheduled'
-                : 'No appointments on record'}
+                ? 'No upcoming appointments'
+                : 'No appointments found'}
             </p>
             <p className="apt-empty-subtitle">
-              Click <strong>&ldquo;+ Book Appointment&rdquo;</strong> to schedule a discussion with any manager or team member.
+              Tap <strong>+ Book</strong> to schedule a team sync.
             </p>
           </div>
         ) : (
@@ -286,9 +286,9 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                         : apt.status === 'PENDING'
                         ? hasMultipleAttendees
                           ? `Pending (${acceptedCount}/${totalAttendees})`
-                          : 'Pending Acceptance'
+                          : 'Pending'
                         : apt.status === 'RESCHEDULE_PROPOSED'
-                        ? 'Reschedule Proposed'
+                        ? 'Reschedule'
                         : apt.status === 'DECLINED'
                         ? 'Declined'
                         : apt.status === 'CANCELLED'
@@ -434,86 +434,40 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                   </div>
                 )}
 
-                {/* Actions Footer */}
-                <div className="apt-card-actions">
-                  {/* Receiver pending response actions */}
-                  {apt.status === 'PENDING' && isAttendee && (
-                    <>
-                      {hasCurrentAttendeeAccepted ? (
-                        <div className="apt-badge-accepted">
-                          <span className="apt-badge-accepted-icon">✓</span>
-                          <span>
-                            You Accepted
-                            {hasMultipleAttendees && !allAccepted
-                              ? ` (${acceptedCount}/${totalAttendees})`
-                              : ''}
-                          </span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="apt-btn apt-btn--success apt-btn--sm"
-                          disabled={isBusy}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAction(apt.id, onAcceptAppointment);
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>Accept</span>
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        className="apt-btn apt-btn--gold apt-btn--sm"
-                        disabled={isBusy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRescheduleClick(apt);
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="23 4 23 10 17 10" />
-                          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                        </svg>
-                        <span>Reschedule</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="apt-btn apt-btn--danger-ghost apt-btn--sm"
-                        disabled={isBusy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAction(apt.id, onDeclineAppointment);
-                        }}
-                      >
-                        <span>Decline</span>
-                      </button>
-                    </>
-                  )}
-
-                  {/* Reschedule proposed response actions */}
-                  {apt.status === 'RESCHEDULE_PROPOSED' &&
-                    apt.rescheduleProposedBy !== currentUser.id && (
+                {/* Actions Footer (only rendered when actionable buttons exist) */}
+                {((apt.status === 'PENDING' && isAttendee) ||
+                  (apt.status === 'RESCHEDULE_PROPOSED' && apt.rescheduleProposedBy !== currentUser.id) ||
+                  (apt.status === 'CONFIRMED' && !linkedQueryId && onOpenCreateQueryForAppointment)) && (
+                  <div className="apt-card-actions">
+                    {/* Receiver pending response actions */}
+                    {apt.status === 'PENDING' && isAttendee && (
                       <>
-                        <button
-                          type="button"
-                          className="apt-btn apt-btn--success apt-btn--sm"
-                          disabled={isBusy}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAction(apt.id, onAcceptReschedule);
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>Accept New Time</span>
-                        </button>
+                        {hasCurrentAttendeeAccepted ? (
+                          <div className="apt-badge-accepted">
+                            <span className="apt-badge-accepted-icon">✓</span>
+                            <span>
+                              Accepted
+                              {hasMultipleAttendees && !allAccepted
+                                ? ` (${acceptedCount}/${totalAttendees})`
+                                : ''}
+                            </span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="apt-btn apt-btn--success apt-btn--sm"
+                            disabled={isBusy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAction(apt.id, onAcceptAppointment);
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span>Accept</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -528,45 +482,82 @@ export const AppointmentsSection: React.FC<AppointmentsSectionProps> = ({
                             <polyline points="23 4 23 10 17 10" />
                             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
                           </svg>
-                          <span>Counter Time</span>
+                          <span>Reschedule</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="apt-btn apt-btn--danger-ghost apt-btn--sm"
+                          disabled={isBusy}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAction(apt.id, onDeclineAppointment);
+                          }}
+                        >
+                          <span>Decline</span>
                         </button>
                       </>
                     )}
 
-                  {/* Confirmed actions: Follow-up query (only if not already linked to a query) */}
-                  {apt.status === 'CONFIRMED' && !linkedQueryId && onOpenCreateQueryForAppointment && (
-                    <button
-                      type="button"
-                      className="apt-btn apt-btn--query-followup apt-btn--sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenCreateQueryForAppointment(apt);
-                      }}
-                      title="Raise a new query resulting from this discussion"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="12" y1="18" x2="12" y2="12" />
-                        <line x1="9" y1="15" x2="15" y2="15" />
-                      </svg>
-                      <span>+ New Query for this Sync</span>
-                    </button>
-                  )}
+                    {/* Reschedule proposed response actions */}
+                    {apt.status === 'RESCHEDULE_PROPOSED' &&
+                      apt.rescheduleProposedBy !== currentUser.id && (
+                        <>
+                          <button
+                            type="button"
+                            className="apt-btn apt-btn--success apt-btn--sm"
+                            disabled={isBusy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAction(apt.id, onAcceptReschedule);
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span>Accept Time</span>
+                          </button>
 
-                  {/* Clickable details shortcut pill */}
-                  <button
-                    type="button"
-                    className="apt-btn apt-btn--secondary apt-btn--sm apt-card-details-trigger"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedAptForDetails(apt);
-                    }}
-                    title="View details, full agenda, attendees, or edit"
-                  >
-                    <span>Details &amp; Agenda &rarr;</span>
-                  </button>
-                </div>
+                          <button
+                            type="button"
+                            className="apt-btn apt-btn--gold apt-btn--sm"
+                            disabled={isBusy}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRescheduleClick(apt);
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="23 4 23 10 17 10" />
+                              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                            </svg>
+                            <span>Counter</span>
+                          </button>
+                        </>
+                      )}
+
+                    {/* Confirmed actions: Follow-up query (only if not already linked to a query) */}
+                    {apt.status === 'CONFIRMED' && !linkedQueryId && onOpenCreateQueryForAppointment && (
+                      <button
+                        type="button"
+                        className="apt-btn apt-btn--query-followup apt-btn--sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenCreateQueryForAppointment(apt);
+                        }}
+                        title="Raise a new query resulting from this discussion"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="12" y1="18" x2="12" y2="12" />
+                          <line x1="9" y1="15" x2="15" y2="15" />
+                        </svg>
+                        <span>+ Follow-up Query</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })

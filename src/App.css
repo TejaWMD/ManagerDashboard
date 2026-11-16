@@ -57,36 +57,40 @@
 }
 
 .app-body-column--home,
-.app-body-column--queries,
-.app-body-column--kpi {
-  overflow: hidden;
+.app-body-column--kpi,
+.app-body-column--tracking,
+.app-body-column--ratings,
+.app-body-column--my-trello,
+.app-body-column--admin-trello {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+}
+
+.app-body-column--queries {
+  overflow-y: auto;
+  overflow-x: hidden;
   height: 100%;
 }
 
 .app-main-content--home,
-.app-main-content--queries,
-.app-main-content--kpi {
-  height: 100%;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
+.app-main-content--kpi,
+.app-main-content--tracking,
+.app-main-content--ratings,
+.app-main-content--my-trello,
+.app-main-content--admin-trello {
+  flex: 1 0 auto;
+  min-height: auto;
+  height: auto;
+  overflow: visible;
+  padding-bottom: 2rem;
 }
 
-/* Tracking Page (PC & Desktop): Enable full vertical scrolling with dynamic height */
-.app-body-column--tracking {
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  height: 100% !important;
-  min-height: 0 !important;
-  -webkit-overflow-scrolling: touch;
-}
-
-.app-main-content--tracking {
-  flex: none !important;
-  min-height: auto !important;
-  height: auto !important;
-  overflow: visible !important;
-  padding-bottom: 3.5rem !important;
+.app-main-content--queries {
+  flex: 1 0 auto;
+  min-height: 100%;
+  height: auto;
+  overflow: visible;
 }
 
 .db-setup-banner,
@@ -144,16 +148,17 @@
 }
 
 .app-main-content {
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 0;
-  height: 100%;
+  height: auto;
   width: 100%;
-  max-width: 1780px;
+  max-width: 1720px;
   margin: 0 auto;
-  padding: 0.75rem 1.25rem;
+  padding: 0.85rem 1.25rem 1.75rem;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  overflow: visible;
 }
 
 /* TV Wall Mode */
@@ -176,14 +181,14 @@
 
 @media (min-width: 1800px) {
   .app-main-content {
-    max-width: 2350px;
-    padding: 1.4rem 2.2rem;
+    max-width: 2250px;
+    padding: 1.25rem 2rem;
   }
 }
 
 @media (max-width: 1200px) {
   .app-main-content {
-    padding: 0.85rem 1rem;
+    padding: 0.75rem 0.9rem 1.5rem;
   }
 }
 
@@ -196,7 +201,14 @@
     overflow: hidden;
   }
 
-  .app-body-column {
+  .app-body-column,
+  .app-body-column--home,
+  .app-body-column--queries,
+  .app-body-column--kpi,
+  .app-body-column--tracking,
+  .app-body-column--ratings,
+  .app-body-column--my-trello,
+  .app-body-column--admin-trello {
     flex: 1;
     min-height: 0;
     height: 100%;
@@ -205,41 +217,18 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  .app-main-content {
+  .app-main-content,
+  .app-main-content--home,
+  .app-main-content--queries,
+  .app-main-content--kpi,
+  .app-main-content--tracking,
+  .app-main-content--ratings,
+  .app-main-content--my-trello,
+  .app-main-content--admin-trello {
     flex: none;
     min-height: auto;
     height: auto;
     max-width: 100%;
-    padding: 0.65rem 0.65rem 1.85rem;
-    overflow: visible;
-  }
-
-  .app-body-column--queries {
-    overflow: hidden;
-    height: 100%;
-    min-height: 0;
-  }
-
-  .app-main-content--queries {
-    flex: 1;
-    min-height: 0;
-    height: 100%;
-    padding: 0.65rem 0.65rem 0.75rem;
-    overflow: hidden;
-  }
-
-  .app-body-column--kpi {
-    overflow-y: auto;
-    overflow-x: hidden;
-    height: 100%;
-    min-height: 0;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .app-main-content--kpi {
-    flex: none;
-    min-height: auto;
-    height: auto;
     padding: 0.65rem 0.65rem 2rem;
     overflow: visible;
   }

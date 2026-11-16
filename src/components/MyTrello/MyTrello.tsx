@@ -414,7 +414,7 @@ export const MyTrello: React.FC<MyTrelloProps> = ({
           <div>
             <h1 className="my-trello-heading">My Trello</h1>
             <p className="my-trello-subheading">
-              Manage your client cards, post updates, and automatically compile reports
+              Manage boards, cards, and updates
             </p>
           </div>
         </div>
@@ -452,7 +452,7 @@ export const MyTrello: React.FC<MyTrelloProps> = ({
               }}
               title="Connect with a different Trello account"
             >
-              🔄 Switch Account
+              🔄 Switch
             </button>
 
             <button
@@ -461,7 +461,7 @@ export const MyTrello: React.FC<MyTrelloProps> = ({
               onClick={handleOpenReportModal}
               title="Generate summary report for this account"
             >
-              📊 Generate Report
+              📊 Report
             </button>
 
             <button
