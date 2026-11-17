@@ -526,7 +526,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          <button
+          {/* <button
             type="button"
             className="sidebar-logout-btn"
             onClick={handleLogout}
@@ -546,7 +546,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
             {(!isCollapsed || isMobileOpen) && <span>Logout</span>}
-          </button>
+          </button> */}
         </div>
       </aside>
     </>
