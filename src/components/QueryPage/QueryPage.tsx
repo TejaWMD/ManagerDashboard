@@ -1454,19 +1454,30 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     ? item.linkedAppointmentId
                     : null);
 
+                const formatRemarkCellSummary = (title?: string | null, text?: string | null): string => {
+                  const t = (title || '').trim();
+                  const d = (text || '').trim();
+                  if (t && d && t.toLowerCase() !== d.toLowerCase()) {
+                    return `${t}: ${d}`;
+                  }
+                  return d || t || '';
+                };
+
                 const latestMgrRemarkObj = (item.remarks || [])
                   .filter((r) => r.type === 'manager')
                   .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0))
                   .slice(-1)[0];
-                const displayMgrRemarkText =
-                  latestMgrRemarkObj?.text || item.managerRemark || item.managerRemarkTitle || '';
+                const displayMgrRemarkText = latestMgrRemarkObj
+                  ? formatRemarkCellSummary(latestMgrRemarkObj.title, latestMgrRemarkObj.text)
+                  : formatRemarkCellSummary(item.managerRemarkTitle, item.managerRemark);
 
                 const latestSenderRemarkObj = (item.remarks || [])
                   .filter((r) => r.type === 'sender')
                   .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0))
                   .slice(-1)[0];
-                const displaySenderRemarkText =
-                  latestSenderRemarkObj?.text || item.accountManagerRemark || item.accountManagerRemarkTitle || '';
+                const displaySenderRemarkText = latestSenderRemarkObj
+                  ? formatRemarkCellSummary(latestSenderRemarkObj.title, latestSenderRemarkObj.text)
+                  : formatRemarkCellSummary(item.accountManagerRemarkTitle, item.accountManagerRemark);
 
                 return (
                   <tr
@@ -2476,20 +2487,39 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       <div>
                         <div className="remark-timeline">
                           {mgrRemarks.length > 0 ? (
-                            mgrRemarks.map((rmk, idx) => (
-                              <div key={rmk.id || idx} className="remark-timeline-item">
-                                <div className="remark-timeline-header">
-                                  <span className="remark-author-name">{rmk.authorName}</span>
-                                  <span className="remark-timestamp">{rmk.createdAt}</span>
+                            mgrRemarks.map((rmk, idx) => {
+                              const rTitle = (rmk.title || '').trim();
+                              const rText = (rmk.text || '').trim();
+                              const hasDistinctTitle =
+                                Boolean(rTitle && rText && rTitle.toLowerCase() !== rText.toLowerCase());
+                              return (
+                                <div key={rmk.id || idx} className="remark-timeline-item">
+                                  <div className="remark-timeline-header">
+                                    <span className="remark-author-name">{rmk.authorName}</span>
+                                    <span className="remark-timestamp">{rmk.createdAt}</span>
+                                  </div>
+                                  {hasDistinctTitle && (
+                                    <div className="remark-title" style={{ fontWeight: 700, marginBottom: '0.18rem', color: '#2b1d0e' }}>
+                                      {rTitle}
+                                    </div>
+                                  )}
+                                  <div className="remark-text">{rText || rTitle || '—'}</div>
                                 </div>
-                                <div className="remark-text">{(rmk.text || rmk.title || '—').trim()}</div>
-                              </div>
-                            ))
+                              );
+                            })
                           ) : activeViewingQuery.managerRemark || activeViewingQuery.managerRemarkTitle ? (
                             <div className="remark-timeline-item">
                               <div className="remark-timeline-header">
                                 <span className="remark-author-name">{activeViewingQuery.managerName}</span>
                               </div>
+                              {activeViewingQuery.managerRemarkTitle &&
+                                activeViewingQuery.managerRemark &&
+                                activeViewingQuery.managerRemarkTitle.trim().toLowerCase() !==
+                                  activeViewingQuery.managerRemark.trim().toLowerCase() && (
+                                  <div className="remark-title" style={{ fontWeight: 700, marginBottom: '0.18rem', color: '#2b1d0e' }}>
+                                    {activeViewingQuery.managerRemarkTitle.trim()}
+                                  </div>
+                                )}
                               <div className="remark-text">
                                 {activeViewingQuery.managerRemark || activeViewingQuery.managerRemarkTitle}
                               </div>
@@ -2563,21 +2593,40 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       <div>
                         <div className="remark-timeline">
                           {senderRemarks.length > 0 ? (
-                            senderRemarks.map((rmk, idx) => (
-                              <div key={rmk.id || idx} className="remark-timeline-item">
-                                <div className="remark-timeline-header">
-                                  <span className="remark-author-name">{rmk.authorName}</span>
-                                  <span className="remark-timestamp">{rmk.createdAt}</span>
+                            senderRemarks.map((rmk, idx) => {
+                              const rTitle = (rmk.title || '').trim();
+                              const rText = (rmk.text || '').trim();
+                              const hasDistinctTitle =
+                                Boolean(rTitle && rText && rTitle.toLowerCase() !== rText.toLowerCase());
+                              return (
+                                <div key={rmk.id || idx} className="remark-timeline-item">
+                                  <div className="remark-timeline-header">
+                                    <span className="remark-author-name">{rmk.authorName}</span>
+                                    <span className="remark-timestamp">{rmk.createdAt}</span>
+                                  </div>
+                                  {hasDistinctTitle && (
+                                    <div className="remark-title" style={{ fontWeight: 700, marginBottom: '0.18rem', color: '#2b1d0e' }}>
+                                      {rTitle}
+                                    </div>
+                                  )}
+                                  <div className="remark-text">{rText || rTitle || '—'}</div>
                                 </div>
-                                <div className="remark-text">{(rmk.text || rmk.title || '—').trim()}</div>
-                              </div>
-                            ))
+                              );
+                            })
                           ) : activeViewingQuery.accountManagerRemark ||
                             activeViewingQuery.accountManagerRemarkTitle ? (
                             <div className="remark-timeline-item">
                               <div className="remark-timeline-header">
                                 <span className="remark-author-name">{activeViewingQuery.accountManagerName}</span>
                               </div>
+                              {activeViewingQuery.accountManagerRemarkTitle &&
+                                activeViewingQuery.accountManagerRemark &&
+                                activeViewingQuery.accountManagerRemarkTitle.trim().toLowerCase() !==
+                                  activeViewingQuery.accountManagerRemark.trim().toLowerCase() && (
+                                  <div className="remark-title" style={{ fontWeight: 700, marginBottom: '0.18rem', color: '#2b1d0e' }}>
+                                    {activeViewingQuery.accountManagerRemarkTitle.trim()}
+                                  </div>
+                                )}
                               <div className="remark-text">
                                 {activeViewingQuery.accountManagerRemark ||
                                   activeViewingQuery.accountManagerRemarkTitle}

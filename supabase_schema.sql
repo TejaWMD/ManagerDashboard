@@ -460,6 +460,37 @@ CREATE POLICY "Allow full access to user_presence"
 ALTER TABLE public.user_activities REPLICA IDENTITY DEFAULT;
 ALTER TABLE public.user_presence REPLICA IDENTITY DEFAULT;
 
+-- Clean-up triggers: automatically remove activity logs and unlink references when a query or appointment is deleted
+CREATE OR REPLACE FUNCTION public.cleanup_deleted_query()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM public.user_activities WHERE UPPER(target_id) = UPPER(OLD.query_id);
+  UPDATE public.appointments SET query_id = NULL WHERE UPPER(query_id) = UPPER(OLD.query_id);
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_cleanup_deleted_query ON public.queries;
+CREATE TRIGGER trg_cleanup_deleted_query
+AFTER DELETE ON public.queries
+FOR EACH ROW
+EXECUTE FUNCTION public.cleanup_deleted_query();
+
+CREATE OR REPLACE FUNCTION public.cleanup_deleted_appointment()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM public.user_activities WHERE UPPER(target_id) = UPPER(OLD.id);
+  UPDATE public.queries SET linked_appointment_id = NULL WHERE UPPER(linked_appointment_id) = UPPER(OLD.id);
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_cleanup_deleted_appointment ON public.appointments;
+CREATE TRIGGER trg_cleanup_deleted_appointment
+AFTER DELETE ON public.appointments
+FOR EACH ROW
+EXECUTE FUNCTION public.cleanup_deleted_appointment();
+
 DO $$
 BEGIN
   IF NOT EXISTS (

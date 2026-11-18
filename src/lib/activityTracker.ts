@@ -543,21 +543,43 @@ export async function fetchRecentActivitiesFromDb(
     }
   }
 
-  const isStaleOrOrphanQueryActivity = (act: UserActivity): boolean => {
-    if (act.category !== 'query' && act.targetType !== 'query' && !act.targetId?.toUpperCase().startsWith('QRY-')) {
-      return false;
+  const aptMap = new Map<string, number>();
+  for (const a of existingAppointments) {
+    if (a.id) {
+      aptMap.set(a.id.trim().toUpperCase(), a.createdAtMs || parseDateToMs(a.createdAt) || 0);
     }
+  }
+
+  const isStaleOrOrphanQueryActivity = (act: UserActivity): boolean => {
     if (!act.targetId) return false;
     const normTarget = act.targetId.trim().toUpperCase();
-    if (queryMap.size > 0) {
-      const qCreatedMs = queryMap.get(normTarget);
-      if (qCreatedMs === undefined) {
-        return true; // Orphan activity for a deleted test query
+
+    if (act.category === 'query' || act.targetType === 'query' || normTarget.startsWith('QRY-')) {
+      if (queryMap.size > 0) {
+        const qCreatedMs = queryMap.get(normTarget);
+        if (qCreatedMs === undefined) {
+          return true; // Orphan activity for a deleted test query
+        }
+        if (qCreatedMs > 0 && act.createdAtMs > 0 && act.createdAtMs < qCreatedMs - 60000) {
+          return true; // Stale activity from an older deleted test query with the same ID
+        }
       }
-      if (qCreatedMs > 0 && act.createdAtMs > 0 && act.createdAtMs < qCreatedMs - 60000) {
-        return true; // Stale activity from an older deleted test query with the same ID
-      }
+      return false;
     }
+
+    if (act.category === 'appointment' || act.targetType === 'appointment' || normTarget.startsWith('APT-')) {
+      if (aptMap.size > 0) {
+        const aCreatedMs = aptMap.get(normTarget);
+        if (aCreatedMs === undefined) {
+          return true; // Orphan activity for a deleted appointment
+        }
+        if (aCreatedMs > 0 && act.createdAtMs > 0 && act.createdAtMs < aCreatedMs - 60000) {
+          return true; // Stale activity from an older deleted appointment with the same ID
+        }
+      }
+      return false;
+    }
+
     return false;
   };
 

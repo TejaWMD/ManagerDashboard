@@ -155,6 +155,25 @@ export function clearLocalCompletionMeta(queryId: string): void {
   }
 }
 
+export function pruneStaleLocalQueryCache(activeQueryIds: string[]): void {
+  try {
+    const activeSet = new Set(activeQueryIds.map((id) => (id || '').trim().toUpperCase()));
+    const current = readLocalCompletionMetaMap();
+    let changed = false;
+    for (const key of Object.keys(current)) {
+      if (!activeSet.has(key.trim().toUpperCase())) {
+        delete current[key];
+        changed = true;
+      }
+    }
+    if (changed) {
+      localStorage.setItem(COMPLETION_META_STORAGE_KEY, JSON.stringify(current));
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export interface QueryRow {
   query_id: string;
   account_manager_id: string;
@@ -285,8 +304,8 @@ export function unpackAttachments(rawText?: string | null): {
   return { cleanText: raw, attachments: [] };
 }
 
-// Tracks whether the Supabase table has the dedicated *_title columns
-let titleColumnsSupported: boolean | null = null;
+// Tracks whether the Supabase table has the dedicated *_title columns (true on live schema)
+let titleColumnsSupported: boolean | null = true;
 
 export function packTitleAndDescription(
   title?: string | null,
@@ -886,6 +905,13 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
   const status: QueryStatus =
     managerDone && accountManagerDone ? 'Completed' : 'Pending';
 
+  const qTitle = (query.queryTitle || '').trim();
+  const qDesc = (query.queryText || qTitle).trim();
+  const mTitle = (query.managerRemarkTitle || '').trim();
+  const mDesc = (query.managerRemark || mTitle).trim();
+  const amTitle = (query.accountManagerRemarkTitle || '').trim();
+  const amDesc = (query.accountManagerRemark || amTitle).trim();
+
   return {
     query_id: query.queryId,
     account_manager_id: query.accountManagerId,
@@ -894,16 +920,19 @@ export function mapQueryToBaseRow(query: Query): QueryRow {
     manager_id: query.managerId,
     manager_name: query.managerName,
     manager_email: query.managerEmail,
-    query_text: packTitleAndDescription(query.queryTitle, query.queryText),
-    manager_remark: packTitleAndDescription(
-      query.managerRemarkTitle,
-      query.managerRemark
-    ),
+    query_text:
+      titleColumnsSupported === false
+        ? packTitleAndDescription(qTitle, qDesc)
+        : qDesc,
+    manager_remark:
+      titleColumnsSupported === false
+        ? packTitleAndDescription(mTitle, mDesc)
+        : mDesc,
     manager_done: managerDone,
-    account_manager_remark: packTitleAndDescription(
-      query.accountManagerRemarkTitle,
-      query.accountManagerRemark
-    ),
+    account_manager_remark:
+      titleColumnsSupported === false
+        ? packTitleAndDescription(amTitle, amDesc)
+        : amDesc,
     account_manager_done: accountManagerDone,
     status,
     created_at: query.createdAt,
@@ -1290,11 +1319,15 @@ export async function fetchQueriesFromDb(options?: FetchQueriesOptions): Promise
   }
 
   const mapped = rows.map(mapRowToQuery);
+  const hasMore = shouldLimit && rows.length >= queryLimit;
+  if (!hasMore) {
+    pruneStaleLocalQueryCache(mapped.map((q) => q.queryId));
+  }
   return {
     data: mapped,
     tableMissing: false,
     error: null,
-    hasMore: shouldLimit && rows.length >= queryLimit,
+    hasMore,
   };
 }
 
@@ -1659,24 +1692,31 @@ export async function updateQueryInDb(
     (updates.queryTitle !== undefined || updates.queryText !== undefined) &&
     ((updates.queryTitle || '').trim() !== '' || (updates.queryText || '').trim() !== '')
   ) {
-    baseUpdates.query_text = packTitleAndDescription(
-      updates.queryTitle,
-      updates.queryText
-    );
+    const qTitle = (updates.queryTitle || '').trim();
+    const qDesc = (updates.queryText || qTitle).trim();
+    baseUpdates.query_text =
+      titleColumnsSupported === false
+        ? packTitleAndDescription(qTitle, qDesc)
+        : qDesc;
   }
   if (
     updates.managerRemarkTitle !== undefined ||
     updates.managerRemark !== undefined
   ) {
-    const mTitle =
+    const mTitle = (
       updates.managerRemarkTitle !== undefined
         ? updates.managerRemarkTitle
-        : updates.managerRemark;
-    const mDesc =
+        : updates.managerRemark || ''
+    ).trim();
+    const mDesc = (
       updates.managerRemark !== undefined
         ? updates.managerRemark
-        : updates.managerRemarkTitle;
-    baseUpdates.manager_remark = packTitleAndDescription(mTitle, mDesc);
+        : updates.managerRemarkTitle || ''
+    ).trim();
+    baseUpdates.manager_remark =
+      titleColumnsSupported === false
+        ? packTitleAndDescription(mTitle, mDesc)
+        : mDesc;
   }
   if (updates.managerDone !== undefined) {
     baseUpdates.manager_done = updates.managerDone;
@@ -1685,15 +1725,20 @@ export async function updateQueryInDb(
     updates.accountManagerRemarkTitle !== undefined ||
     updates.accountManagerRemark !== undefined
   ) {
-    const amTitle =
+    const amTitle = (
       updates.accountManagerRemarkTitle !== undefined
         ? updates.accountManagerRemarkTitle
-        : updates.accountManagerRemark;
-    const amDesc =
+        : updates.accountManagerRemark || ''
+    ).trim();
+    const amDesc = (
       updates.accountManagerRemark !== undefined
         ? updates.accountManagerRemark
-        : updates.accountManagerRemarkTitle;
-    baseUpdates.account_manager_remark = packTitleAndDescription(amTitle, amDesc);
+        : updates.accountManagerRemarkTitle || ''
+    ).trim();
+    baseUpdates.account_manager_remark =
+      titleColumnsSupported === false
+        ? packTitleAndDescription(amTitle, amDesc)
+        : amDesc;
   }
   if (updates.accountManagerDone !== undefined) {
     baseUpdates.account_manager_done = updates.accountManagerDone;
@@ -1983,17 +2028,18 @@ export async function updateQueryInDb(
     invalidateQueryAttachmentsCache(normalizedQueryId);
   }
 
-  // Embed lightweight metadata backup inside account_manager_remark so remarks & extensions
-  // sync across all devices even if extended columns have not been migrated yet
-  const latestMetaForQuery = readLocalCompletionMetaMap()[normalizedQueryId];
-  if (latestMetaForQuery && typeof baseUpdates.account_manager_remark === 'string') {
-    const packedAmWithMeta = packQueryMeta(
-      baseUpdates.account_manager_remark,
-      latestMetaForQuery
-    );
-    baseUpdates.account_manager_remark = packedAmWithMeta;
-    extendedUpdates.account_manager_remark = packedAmWithMeta;
-    updatesWithTitles.account_manager_remark = packedAmWithMeta;
+  // Only embed metadata inside account_manager_remark if the database lacks dedicated columns
+  if (titleColumnsSupported === false) {
+    const latestMetaForQuery = readLocalCompletionMetaMap()[normalizedQueryId];
+    if (latestMetaForQuery && typeof baseUpdates.account_manager_remark === 'string') {
+      const packedAmWithMeta = packQueryMeta(
+        baseUpdates.account_manager_remark,
+        latestMetaForQuery
+      );
+      baseUpdates.account_manager_remark = packedAmWithMeta;
+      extendedUpdates.account_manager_remark = packedAmWithMeta;
+      updatesWithTitles.account_manager_remark = packedAmWithMeta;
+    }
   }
 
   // Note: created_at and created_at_ms are intentionally NEVER included in updates
@@ -2338,17 +2384,12 @@ export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
       ? apt.attendees.map((a) => a.name).join(', ')
       : apt.receiverName || '';
 
-  const packedAgenda = packAppointmentAgenda(apt.agenda, {
-    attendees: apt.attendees || [],
-    cancellationRemark: apt.cancellationRemark || null,
-    cancelledAt: apt.cancelledAt || null,
-    queryId: apt.queryId || null,
-  });
+  const cleanAgenda = (apt.agenda ?? '').split(APT_META_SEPARATOR)[0].trim();
 
   return {
     id: apt.id,
     title: apt.title,
-    agenda: packedAgenda,
+    agenda: cleanAgenda,
     requester_id: apt.requesterId,
     requester_name: apt.requesterName,
     requester_email: apt.requesterEmail,
@@ -2357,6 +2398,10 @@ export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
     receiver_name: combinedNames,
     receiver_email: primaryAttendee?.email || apt.receiverEmail || '',
     receiver_role: primaryAttendee?.role || apt.receiverRole || 'manager',
+    attendees_json:
+      apt.attendees && apt.attendees.length > 0
+        ? JSON.stringify(apt.attendees)
+        : null,
     scheduled_at: apt.scheduledAt,
     scheduled_at_ms: apt.scheduledAtMs,
     duration_minutes: apt.durationMinutes || 30,
@@ -2367,6 +2412,8 @@ export function mapAppointmentToRow(apt: Appointment): AppointmentRow {
     proposed_scheduled_at: apt.proposedScheduledAt || null,
     proposed_scheduled_at_ms: apt.proposedScheduledAtMs || null,
     reschedule_reason: apt.rescheduleReason || null,
+    cancellation_remark: apt.cancellationRemark || null,
+    cancelled_at: apt.cancelledAt || null,
     query_id: apt.queryId || null,
     created_at: apt.createdAt,
     created_at_ms: apt.createdAtMs,
