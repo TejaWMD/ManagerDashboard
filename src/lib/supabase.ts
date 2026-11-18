@@ -31,19 +31,22 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 try {
   localStorage.removeItem('wm_portal_completion_meta_v1');
   localStorage.removeItem('wm_portal_completion_meta_v2');
+  localStorage.removeItem('wm_portal_completion_meta_v3');
   localStorage.removeItem('wm_portal_appointments_v1');
   localStorage.removeItem('wm_portal_appointments_v2');
   localStorage.removeItem('wm_portal_queries_v1');
   localStorage.removeItem('wm_portal_queries_v2');
   localStorage.removeItem('wm_portal_queries_v3');
+  localStorage.removeItem('wm_portal_queries_v4');
 } catch {
   // Ignore storage errors in non-browser/restricted environments
 }
 
-const OLD_COMPLETION_META_KEY = 'wm_portal_completion_meta_v1';
-const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v3';
+const OLD_COMPLETION_META_KEY = 'wm_portal_completion_meta_v3';
+const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v4';
 
 interface LocalCompletionMeta {
+  createdAtMs?: number | null;
   completedAt?: string | null;
   completedAtMs?: number | null;
   managerDoneAt?: string | null;
@@ -107,12 +110,46 @@ export function saveLocalCompletionMeta(
   meta: Partial<LocalCompletionMeta>
 ): void {
   try {
+    const norm = (queryId || '').trim().toUpperCase();
+    if (!norm) return;
     const current = readLocalCompletionMetaMap();
-    current[queryId] = {
-      ...(current[queryId] || {}),
+    const prev = current[norm] || current[queryId] || {};
+    // If saving for a newly created query with a different createdAtMs, discard stale meta from any deleted query
+    const isDifferentQueryInstance =
+      typeof meta.createdAtMs === 'number' &&
+      meta.createdAtMs > 0 &&
+      typeof prev.createdAtMs === 'number' &&
+      prev.createdAtMs > 0 &&
+      Math.abs(meta.createdAtMs - prev.createdAtMs) > 60000;
+    current[norm] = {
+      ...(isDifferentQueryInstance ? {} : prev),
       ...meta,
     };
+    if (queryId !== norm) {
+      delete current[queryId];
+    }
     localStorage.setItem(COMPLETION_META_STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function clearLocalCompletionMeta(queryId: string): void {
+  try {
+    const norm = (queryId || '').trim().toUpperCase();
+    const current = readLocalCompletionMetaMap();
+    let changed = false;
+    if (queryId in current) {
+      delete current[queryId];
+      changed = true;
+    }
+    if (norm && norm in current) {
+      delete current[norm];
+      changed = true;
+    }
+    if (changed) {
+      localStorage.setItem(COMPLETION_META_STORAGE_KEY, JSON.stringify(current));
+    }
   } catch {
     // Ignore storage errors
   }
@@ -331,8 +368,34 @@ export function mapRowToQuery(row: QueryRow): Query {
 
   const normalizedQueryId = (row.query_id || '').trim().toUpperCase();
   const metaMap = readLocalCompletionMetaMap();
-  const { meta: packedQueryMeta } = unpackQueryMeta(row.account_manager_remark);
-  const storedLocalMeta = metaMap[normalizedQueryId] || metaMap[row.query_id];
+  const { meta: rawPackedQueryMeta } = unpackQueryMeta(row.account_manager_remark);
+  const rawStoredLocalMeta = metaMap[normalizedQueryId] || metaMap[row.query_id];
+
+  // Validate that storedLocalMeta belongs to THIS query instance (matching createdAtMs)
+  // so a deleted test query's localStorage cache never pollutes a newly created query with the same ID.
+  let storedLocalMeta: LocalCompletionMeta | undefined = undefined;
+  if (rawStoredLocalMeta) {
+    if (
+      typeof rawStoredLocalMeta.createdAtMs === 'number' &&
+      rawStoredLocalMeta.createdAtMs > 0 &&
+      createdAtMs > 0 &&
+      Math.abs(rawStoredLocalMeta.createdAtMs - createdAtMs) <= 60000
+    ) {
+      storedLocalMeta = rawStoredLocalMeta;
+    } else if (createdAtMs > 0) {
+      clearLocalCompletionMeta(normalizedQueryId);
+    }
+  }
+
+  const packedQueryMeta: LocalCompletionMeta =
+    rawPackedQueryMeta &&
+    typeof rawPackedQueryMeta.createdAtMs === 'number' &&
+    rawPackedQueryMeta.createdAtMs > 0 &&
+    createdAtMs > 0 &&
+    Math.abs(rawPackedQueryMeta.createdAtMs - createdAtMs) > 60000
+      ? {}
+      : rawPackedQueryMeta;
+
   const localMeta: LocalCompletionMeta | undefined =
     storedLocalMeta || Object.keys(packedQueryMeta).length > 0
       ? {
@@ -371,49 +434,91 @@ export function mapRowToQuery(row: QueryRow): Query {
     ? row.completed_at || localMeta?.completedAt || null
     : null;
 
-  const rawTargetDueAtMs =
-    row.target_due_at_ms !== null && row.target_due_at_ms !== undefined
-      ? Number(row.target_due_at_ms)
-      : null;
-  const targetDueAtMs =
-    rawTargetDueAtMs && !Number.isNaN(rawTargetDueAtMs) && rawTargetDueAtMs > 0
-      ? rawTargetDueAtMs
-      : localMeta?.targetDueAtMs ?? null;
-
-  const targetDueAt =
-    row.target_due_at || localMeta?.targetDueAt || null;
-
+  const hasDbExtStatusCol =
+    'extension_status' in row &&
+    row.extension_status !== undefined &&
+    row.extension_status !== null;
   const rawExtStatus = (row.extension_status || '').trim().toUpperCase();
-  const extensionStatus: ExtensionStatus =
+  let extensionStatus: ExtensionStatus =
     rawExtStatus === 'PENDING' || rawExtStatus === 'APPROVED' || rawExtStatus === 'DECLINED'
       ? (rawExtStatus as ExtensionStatus)
+      : hasDbExtStatusCol && rawExtStatus === 'NONE'
+      ? 'NONE'
       : localMeta?.extensionStatus && localMeta.extensionStatus !== 'NONE'
       ? localMeta.extensionStatus
       : 'NONE';
 
+  const rawTargetDueAtMs =
+    row.target_due_at_ms !== null && row.target_due_at_ms !== undefined
+      ? Number(row.target_due_at_ms)
+      : null;
+  const candidateTargetDueAt =
+    row.target_due_at ||
+    (!('target_due_at' in row) ? localMeta?.targetDueAt : null) ||
+    null;
+  const candidateTargetDueAtMs =
+    rawTargetDueAtMs && !Number.isNaN(rawTargetDueAtMs) && rawTargetDueAtMs > 0
+      ? rawTargetDueAtMs
+      : !('target_due_at_ms' in row) && localMeta?.targetDueAtMs
+      ? localMeta.targetDueAtMs
+      : candidateTargetDueAt
+      ? parseDateToMs(candidateTargetDueAt)
+      : null;
+
+  // Target due date is only valid if > createdAtMs and associated with an approved extension (or legacy QRY-005)
+  const isTargetDueValid =
+    (extensionStatus === 'APPROVED' || normalizedQueryId === 'QRY-005') &&
+    typeof candidateTargetDueAtMs === 'number' &&
+    !Number.isNaN(candidateTargetDueAtMs) &&
+    candidateTargetDueAtMs > 0 &&
+    (createdAtMs <= 0 || candidateTargetDueAtMs > createdAtMs);
+
+  const targetDueAtMs = isTargetDueValid ? candidateTargetDueAtMs : null;
+  const targetDueAt = isTargetDueValid ? candidateTargetDueAt : null;
+
+  if (extensionStatus === 'APPROVED' && !isTargetDueValid) {
+    extensionStatus = 'NONE';
+  }
+
   const extensionRequestedAt =
-    row.extension_requested_at || localMeta?.extensionRequestedAt || null;
+    extensionStatus !== 'NONE'
+      ? row.extension_requested_at || localMeta?.extensionRequestedAt || null
+      : null;
 
   const rawProposedDueAtMs =
     row.extension_proposed_due_at_ms !== null && row.extension_proposed_due_at_ms !== undefined
       ? Number(row.extension_proposed_due_at_ms)
       : null;
-  const extensionProposedDueAtMs =
+  const candidateProposedDueAtMs =
     rawProposedDueAtMs && !Number.isNaN(rawProposedDueAtMs) && rawProposedDueAtMs > 0
       ? rawProposedDueAtMs
       : localMeta?.extensionProposedDueAtMs ?? null;
+  const extensionProposedDueAtMs =
+    extensionStatus !== 'NONE' &&
+    candidateProposedDueAtMs &&
+    (createdAtMs <= 0 || candidateProposedDueAtMs > createdAtMs)
+      ? candidateProposedDueAtMs
+      : null;
 
   const extensionProposedDueAt =
-    row.extension_proposed_due_at || localMeta?.extensionProposedDueAt || null;
+    extensionStatus !== 'NONE' && extensionProposedDueAtMs
+      ? row.extension_proposed_due_at || localMeta?.extensionProposedDueAt || null
+      : null;
 
   const extensionReason =
-    row.extension_reason || localMeta?.extensionReason || null;
+    extensionStatus !== 'NONE'
+      ? row.extension_reason || localMeta?.extensionReason || null
+      : null;
 
   const extensionReviewNote =
-    row.extension_review_note || localMeta?.extensionReviewNote || null;
+    extensionStatus !== 'NONE'
+      ? row.extension_review_note || localMeta?.extensionReviewNote || null
+      : null;
 
   const extensionReviewedAt =
-    row.extension_reviewed_at || localMeta?.extensionReviewedAt || null;
+    extensionStatus !== 'NONE'
+      ? row.extension_reviewed_at || localMeta?.extensionReviewedAt || null
+      : null;
 
   const effectiveDeadlineMs =
     targetDueAtMs && targetDueAtMs > 0
@@ -1331,6 +1436,9 @@ export async function insertQueryInDb(query: Query): Promise<{
         ? JSON.stringify(query.ccUsers)
         : null,
   };
+  // Always purge any stale local metadata from any previously deleted query with the same ID
+  clearLocalCompletionMeta(query.queryId);
+
   if (
     query.linkedAppointmentId ||
     query.isUrgent ||
@@ -1339,6 +1447,7 @@ export async function insertQueryInDb(query: Query): Promise<{
     (query.ccUsers && query.ccUsers.length > 0)
   ) {
     saveLocalCompletionMeta(query.queryId, {
+      createdAtMs: query.createdAtMs,
       completedAt: query.completedAt ?? null,
       completedAtMs: query.completedAtMs ?? null,
       isDelayed: Boolean(query.isDelayed),
@@ -1481,6 +1590,7 @@ export async function insertQueryInDb(query: Query): Promise<{
 export async function updateQueryInDb(
   queryId: string,
   updates: {
+    createdAtMs?: number;
     queryTitle?: string;
     queryText?: string;
     managerRemarkTitle?: string;
@@ -1812,6 +1922,7 @@ export async function updateQueryInDb(
     updates.receiverSenderRemark !== undefined
   ) {
     saveLocalCompletionMeta(normalizedQueryId, {
+      ...(updates.createdAtMs !== undefined ? { createdAtMs: updates.createdAtMs } : {}),
       ...(updates.completedAt !== undefined ? { completedAt: updates.completedAt } : {}),
       ...(updates.completedAtMs !== undefined ? { completedAtMs: updates.completedAtMs } : {}),
       ...(updates.managerDoneAt !== undefined ? { managerDoneAt: updates.managerDoneAt } : {}),

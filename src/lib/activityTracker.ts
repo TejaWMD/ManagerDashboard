@@ -1,6 +1,6 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-import { formatDate } from './dateUtils';
+import { formatDate, parseDateToMs } from './dateUtils';
 import {
   ActivityActionType,
   ActivityCategory,
@@ -13,8 +13,15 @@ import {
 } from '../types';
 import { AUTHORIZED_USERS } from '../data/users';
 
-export const ACTIVITIES_STORAGE_KEY = 'wm_portal_activities_v2';
+export const ACTIVITIES_STORAGE_KEY = 'wm_portal_activities_v3';
 export const PRESENCE_STORAGE_KEY = 'wm_portal_presence_v2';
+
+try {
+  localStorage.removeItem('wm_portal_activities_v1');
+  localStorage.removeItem('wm_portal_activities_v2');
+} catch {
+  // Ignore
+}
 
 const DB_ACTIVITIES_UNAVAILABLE_KEY = 'wm_portal_db_activities_missing';
 const DB_PRESENCE_UNAVAILABLE_KEY = 'wm_portal_db_presence_missing';
@@ -529,7 +536,32 @@ export async function fetchRecentActivitiesFromDb(
   existingQueries: Query[] = [],
   existingAppointments: Appointment[] = []
 ): Promise<UserActivity[]> {
-  const localLogged = readCachedActivities();
+  const queryMap = new Map<string, number>();
+  for (const q of existingQueries) {
+    if (q.queryId) {
+      queryMap.set(q.queryId.trim().toUpperCase(), q.createdAtMs || parseDateToMs(q.createdAt) || 0);
+    }
+  }
+
+  const isStaleOrOrphanQueryActivity = (act: UserActivity): boolean => {
+    if (act.category !== 'query' && act.targetType !== 'query' && !act.targetId?.toUpperCase().startsWith('QRY-')) {
+      return false;
+    }
+    if (!act.targetId) return false;
+    const normTarget = act.targetId.trim().toUpperCase();
+    if (queryMap.size > 0) {
+      const qCreatedMs = queryMap.get(normTarget);
+      if (qCreatedMs === undefined) {
+        return true; // Orphan activity for a deleted test query
+      }
+      if (qCreatedMs > 0 && act.createdAtMs > 0 && act.createdAtMs < qCreatedMs - 60000) {
+        return true; // Stale activity from an older deleted test query with the same ID
+      }
+    }
+    return false;
+  };
+
+  const localLogged = readCachedActivities().filter((a) => !isStaleOrOrphanQueryActivity(a));
   const synthesized = synthesizeHistoricalActivities(existingQueries, existingAppointments);
 
   // Attempt to check if DB table exists (optional)
@@ -546,7 +578,9 @@ export async function fetchRecentActivitiesFromDb(
           markActivitiesTableMissing();
         }
       } else if (Array.isArray(data) && data.length > 0) {
-        const dbActivities = data.map((row) => mapRowToActivity(row as ActivityRow));
+        const dbActivities = data
+          .map((row) => mapRowToActivity(row as ActivityRow))
+          .filter((a) => !isStaleOrOrphanQueryActivity(a));
         return mergeUniqueActivities(dbActivities, localLogged, synthesized);
       }
     } catch {
@@ -682,7 +716,7 @@ export function synthesizeHistoricalActivities(
         targetType: 'query',
         deviceType: 'desktop',
         createdAt: q.extensionRequestedAt,
-        createdAtMs: q.extensionProposedDueAtMs || q.createdAtMs + 3600000,
+        createdAtMs: parseDateToMs(q.extensionRequestedAt) || q.createdAtMs + 3600000,
       });
     }
   }

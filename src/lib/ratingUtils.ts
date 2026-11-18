@@ -1,5 +1,6 @@
 import { Query, UserAccount } from '../types';
 import { getFirstManagerRemarkTimestampMs } from '../types';
+import { parseDateToMs } from './dateUtils';
 
 export interface RatingBreakdown {
   adminRating: number;
@@ -146,15 +147,12 @@ export function calculateSenderSystemRating(
 
   // 1. Check extension request
   if (query.extensionRequestedAt) {
-    const extRequestedMs =
-      query.extensionProposedDueAtMs ||
-      new Date(query.extensionRequestedAt).getTime() ||
-      null;
+    const extRequestedMs = parseDateToMs(query.extensionRequestedAt) || null;
     if (extRequestedMs && (!requestMs || extRequestedMs < requestMs)) {
       requestMs = extRequestedMs;
       requestType = 'extension request';
       if (query.extensionReviewedAt) {
-        responseMs = new Date(query.extensionReviewedAt).getTime() || null;
+        responseMs = parseDateToMs(query.extensionReviewedAt) || null;
       }
     }
   }

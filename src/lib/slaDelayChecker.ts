@@ -20,10 +20,16 @@ const SYSTEM_ACTOR: UserAccount = {
   avatarInitials: 'SM',
 };
 
-const DELAY_NOTIFIED_CACHE_KEY = 'wm_delay_notified_cache_v1';
+const DELAY_NOTIFIED_CACHE_KEY = 'wm_delay_notified_cache_v2';
 const URGENT_REMINDER_CACHE_KEY = 'wm_urgent_reminder_cache_v1';
 const URGENT_COMPLETED_CACHE_KEY = 'wm_urgent_completed_cache_v1';
 export const URGENT_REMINDER_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes (600,000 ms)
+
+try {
+  localStorage.removeItem('wm_delay_notified_cache_v1');
+} catch {
+  // Ignore
+}
 
 export function markUrgentQueryFinished(queryId: string): void {
   try {

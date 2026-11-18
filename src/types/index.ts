@@ -422,25 +422,34 @@ export function getQueryTimestampMs(query: Query): number {
 
 /**
  * Returns the effective target completion deadline in epoch ms:
- * If an approved extension (or explicit targetDueAt) is set, returns targetDueAtMs.
- * Otherwise defaults to createdAt + 24 hours.
+ * If an approved extension is set (and its due date is after creation time), returns targetDueAtMs.
+ * Otherwise defaults to createdAt + 24 hours (86,400,000 ms).
  */
 export function getQueryDeadlineMs(query: Query): number {
-  if (
-    typeof query.targetDueAtMs === 'number' &&
-    !Number.isNaN(query.targetDueAtMs) &&
-    query.targetDueAtMs > 0
-  ) {
-    return query.targetDueAtMs;
-  }
-  if (query.targetDueAt) {
-    const parsed = parseDateToMs(query.targetDueAt);
-    if (!Number.isNaN(parsed) && parsed > 0) {
-      return parsed;
+  const createdMs = getQueryTimestampMs(query);
+  const defaultDeadlineMs = createdMs > 0 ? createdMs + DELAY_THRESHOLD_MS : 0;
+
+  const hasApprovedExtOrLegacy =
+    query.extensionStatus === 'APPROVED' ||
+    (query.queryId && query.queryId.trim().toUpperCase() === 'QRY-005');
+
+  if (hasApprovedExtOrLegacy) {
+    if (
+      typeof query.targetDueAtMs === 'number' &&
+      !Number.isNaN(query.targetDueAtMs) &&
+      query.targetDueAtMs > 0 &&
+      (createdMs <= 0 || query.targetDueAtMs > createdMs)
+    ) {
+      return query.targetDueAtMs;
+    }
+    if (query.targetDueAt) {
+      const parsed = parseDateToMs(query.targetDueAt);
+      if (!Number.isNaN(parsed) && parsed > 0 && (createdMs <= 0 || parsed > createdMs)) {
+        return parsed;
+      }
     }
   }
-  const createdMs = getQueryTimestampMs(query);
-  return createdMs > 0 ? createdMs + DELAY_THRESHOLD_MS : 0;
+  return defaultDeadlineMs;
 }
 
 export function sortQueriesByStatusAndTimestamp(

@@ -1534,16 +1534,12 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                       </div>
                       <div className={`timestamp-due ${item.extensionStatus === 'APPROVED' ? 'timestamp-due--extended' : ''}`}>
                         <span className="timestamp-label">Due:</span>{' '}
-                        {item.extensionStatus === 'APPROVED' && item.targetDueAt ? (
-                          <span className="due-date-val due-date-val--extended">
-                            {formatDateTime(item.targetDueAt)}
-                          </span>
-                        ) : item.extensionStatus === 'PENDING' && item.extensionProposedDueAt ? (
-                          <span className="due-date-val due-date-val--pending">
-                            {formatDateTime(item.extensionProposedDueAt)}
-                          </span>
-                        ) : item.isUrgent ? (
+                        {item.isUrgent ? (
                           <span className="due-date-val due-date-val--urgent">Immediate</span>
+                        ) : item.extensionStatus === 'APPROVED' && item.targetDueAt ? (
+                          <span className="due-date-val due-date-val--extended">
+                            {formatDateTime(getQueryDeadlineMs(item))}
+                          </span>
                         ) : (
                           <span className="due-date-val">{formatDateTime(getQueryDeadlineMs(item))}</span>
                         )}
@@ -2122,9 +2118,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                   <strong>
                     {activeViewingQuery.isUrgent
                       ? 'Immediate'
-                      : formatDateTime(
-                          activeViewingQuery.targetDueAt || getQueryDeadlineMs(activeViewingQuery)
-                        )}
+                      : formatDateTime(getQueryDeadlineMs(activeViewingQuery))}
                   </strong>
                 </span>
               </div>
