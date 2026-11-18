@@ -230,7 +230,7 @@ BEGIN
       NEW.manager_done_at := OLD.manager_done_at;
       NEW.manager_done_at_ms := OLD.manager_done_at_ms;
     ELSIF NEW.manager_done_at_ms IS NULL THEN
-      NEW.manager_done_at := TO_CHAR(NOW() AT TIME ZONE 'Asia/Kuala_Lumpur', 'YYYY-MM-DD HH24:MI:SS');
+      NEW.manager_done_at := TO_CHAR(NOW() AT TIME ZONE 'Asia/Kuala_Lumpur', 'DD-MM-YYYY HH24:MI:SS');
       NEW.manager_done_at_ms := now_ms;
     END IF;
   END IF;
@@ -242,7 +242,7 @@ BEGIN
       NEW.completed_at := OLD.completed_at;
       NEW.completed_at_ms := OLD.completed_at_ms;
     ELSIF NEW.completed_at_ms IS NULL THEN
-      NEW.completed_at := TO_CHAR(NOW() AT TIME ZONE 'Asia/Kuala_Lumpur', 'YYYY-MM-DD HH24:MI:SS');
+      NEW.completed_at := TO_CHAR(NOW() AT TIME ZONE 'Asia/Kuala_Lumpur', 'DD-MM-YYYY HH24:MI:SS');
       NEW.completed_at_ms := now_ms;
     END IF;
 
