@@ -1,14 +1,17 @@
 import React, { useState, useMemo } from 'react';
-import { Query, UserAccount, UserRole } from '../../types';
+import { Query, UserAccount, UserRole, PageView } from '../../types';
 import {
   calculateAllUsersRatingStats,
   calculateReceiverOverallRating,
   calculateSenderOverallRating,
   UserRatingStats,
 } from '../../lib/ratingUtils';
+import { redirectToMainApp } from '../../lib/sso';
+import wmdLogo from '../../assets/wmd-logo.jpg';
 import './RatingsPage.css';
 
 interface RatingsPageProps {
+  onNavigate?: (page: PageView) => void;
   currentUser: UserAccount;
   allUsers: UserAccount[];
   queries: Query[];
@@ -29,6 +32,7 @@ interface RatingsPageProps {
 }
 
 export const RatingsPage: React.FC<RatingsPageProps> = ({
+  onNavigate,
   currentUser,
   allUsers,
   queries,
@@ -213,6 +217,21 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
             <span>⭐</span> Team Ratings
           </h1>
         </div>
+
+        <button
+          type="button"
+          className="header-company-logo-badge"
+          onClick={() => redirectToMainApp()}
+          title="Back to WMD Hub"
+          aria-label="Back to WMD Hub"
+          style={{ cursor: 'pointer' }}
+        >
+          <img
+            src={wmdLogo}
+            alt="WMD Company Logo"
+            className="header-company-logo-img"
+          />
+        </button>
       </div>
 
       {/* Filter and Search Bar */}
