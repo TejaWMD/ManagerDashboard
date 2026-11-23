@@ -170,10 +170,10 @@ export const HomePage: React.FC<HomePageProps> = ({
     return filterQueriesByWindow(queries, reportTimeWindow, nowMs).length;
   }, [queries, reportTimeWindow, nowMs]);
 
-  const handleDownloadPdfReport = (selectedWindow: KpiTimeWindow = reportTimeWindow) => {
+  const handleDownloadPdfReport = async (selectedWindow: KpiTimeWindow = reportTimeWindow) => {
     try {
       setIsGeneratingPdf(true);
-      generateWeeklyManagerReportPdf({
+      await generateWeeklyManagerReportPdf({
         queries,
         managers,
         adminUser: currentUser,
@@ -182,7 +182,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       });
       setShowReportModal(false);
     } catch (err) {
-      console.error('Failed to generate weekly PDF report:', err);
+      console.error('Failed to generate manager KPI PDF report:', err);
     } finally {
       setTimeout(() => {
         setIsGeneratingPdf(false);
