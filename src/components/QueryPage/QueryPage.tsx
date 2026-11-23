@@ -1042,8 +1042,15 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const handleToggleManagerDone = async (item: Query) => {
     const isAssigned = belongsToManager(item, currentUser);
     if (!isAssigned && currentUser.role !== 'admin') return;
+    // Completed queries are permanently locked so they can never be accidentally unchecked
+    if (isQueryDone(item) || item.accountManagerDone) return;
 
     const nextManagerDone = !item.managerDone;
+    if (!nextManagerDone) {
+      if (!window.confirm(`Unmark Manager Done for ${item.queryId}?`)) {
+        return;
+      }
+    }
 
     const hasExistingMgrRemark = Boolean(
       (item.managerRemarkTitle && item.managerRemarkTitle.trim()) ||
@@ -1060,7 +1067,6 @@ export const QueryPage: React.FC<QueryPageProps> = ({
 
     await onUpdateQuery(item.queryId, {
       managerDone: nextManagerDone,
-      ...(!nextManagerDone && item.accountManagerDone ? { accountManagerDone: false } : {}),
     });
   };
 
@@ -1102,7 +1108,9 @@ export const QueryPage: React.FC<QueryPageProps> = ({
   const handleToggleSenderDone = async (item: Query) => {
     const isSender = belongsToAccountManager(item, currentUser);
     if (!isSender && currentUser.role !== 'admin') return;
-    if (!item.accountManagerDone && !item.managerDone) return;
+    // Completed queries are permanently locked so they can never be accidentally unchecked
+    if (isQueryDone(item) || item.accountManagerDone) return;
+    if (!item.managerDone) return;
 
     if (!item.accountManagerDone && (!item.rating || item.rating < 1)) {
       setRatingModalQuery(item);
@@ -1113,7 +1121,7 @@ export const QueryPage: React.FC<QueryPageProps> = ({
     }
 
     await onUpdateQuery(item.queryId, {
-      accountManagerDone: !item.accountManagerDone,
+      accountManagerDone: true,
     });
   };
 
@@ -1435,8 +1443,11 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                 const isAssignedManager = belongsToManager(item, currentUser);
                 const isAdmin = currentUser.role === 'admin';
 
+                const isManagerCheckboxDisabled =
+                  !isAssignedManager || isRowSaving || completed || item.accountManagerDone;
                 const senderCannotCheckYet = !item.managerDone && !item.accountManagerDone;
-                const isSenderCheckboxDisabled = !isSender || isRowSaving || senderCannotCheckYet;
+                const isSenderCheckboxDisabled =
+                  !isSender || isRowSaving || senderCannotCheckYet || completed || item.accountManagerDone;
                 const senderRoleBadge = getSenderRoleBadge(item.accountManagerId);
 
                 const rowStateClass = completed
@@ -1568,13 +1579,18 @@ export const QueryPage: React.FC<QueryPageProps> = ({
                     <td className="td-check-cell">
                       <label
                         className={`check-button-label ${item.managerDone ? 'check-button-label--checked' : ''} ${
-                          !(isAssignedManager && !isRowSaving) ? 'check-button-label--readonly' : ''
+                          isManagerCheckboxDisabled ? 'check-button-label--readonly' : ''
                         }`}
+                        title={
+                          completed || item.accountManagerDone
+                            ? 'Query is completed and locked'
+                            : undefined
+                        }
                       >
                         <input
                           type="checkbox"
                           checked={item.managerDone}
-                          disabled={!(isAssignedManager && !isRowSaving)}
+                          disabled={isManagerCheckboxDisabled}
                           onChange={() => handleToggleManagerDone(item)}
                         />
                         <span>Done</span>

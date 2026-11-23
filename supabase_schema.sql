@@ -25,10 +25,10 @@ VALUES
   ('am-1', 'Shakti', 'wmdklshakti@gmail.com', 'account_manager', 'Account Manager', 'SK', '+60194167570'),
   ('am-2', 'Kavita', 'wmdklkavita@gmail.com', 'account_manager', 'Account Manager', 'KV', NULL),
   ('am-3', 'Linda', 'wmdkllinda@gmail.com', 'account_manager', 'Account Manager', 'LD', NULL),
-  ('mgr-1', 'Muugaa', 'wmdklmuugaa@gmail.com', 'manager', 'Manager', 'MG', '+601940017570'),
-  ('mgr-2', 'Awi', 'wmdklawi@gmail.com', 'manager', 'Manager', 'AW', NULL),
-  ('mgr-3', 'Jay', 'wmdkljay@gmail.com', 'manager', 'Manager', 'JY', NULL),
-  ('mgr-4', 'Tamil', 'wmgtamil@gmail.com', 'manager', 'Manager', 'TM', NULL),
+  ('mgr-1', 'Muugaa', 'cs4@malayanfood.com', 'manager', 'Manager', 'MG', '+601940017570'),
+  ('mgr-2', 'Awi', 'cs3@malayanfood.com', 'manager', 'Manager', 'AW', NULL),
+  ('mgr-3', 'Jay', 'wmgjay09@gmail.com', 'manager', 'Manager', 'JY', NULL),
+  ('mgr-4', 'Tamil', 'info@malayanfood.com', 'manager', 'Manager', 'TM', NULL),
   ('mgr-5', 'Aizam', 'wmgaizam@gmail.com', 'manager', 'Manager', 'AZ', NULL),
   ('mgr-6', 'Usha', 'wmdusha@gmail.com', 'manager', 'Manager', 'US', NULL),
   ('mgr-7', 'Muttha', 'wmgmuttha@gmail.com', 'manager', 'Manager', 'MT', NULL),
@@ -212,6 +212,11 @@ BEGIN
   IF TG_OP = 'UPDATE' THEN
     NEW.created_at := OLD.created_at;
     NEW.created_at_ms := OLD.created_at_ms;
+    -- Once a query has been completed by both Manager and Sender, lock completion so stale tabs never revert it
+    IF OLD.manager_done = TRUE AND OLD.account_manager_done = TRUE THEN
+      NEW.manager_done := TRUE;
+      NEW.account_manager_done := TRUE;
+    END IF;
   END IF;
 
   -- Determine effective deadline (approved extension target due date or created_at + 24 hours)
@@ -249,9 +254,7 @@ BEGIN
     -- Urgent queries and exempted queries (QRY-009, QRY-005) are never marked delayed
     IF NEW.is_urgent = TRUE OR UPPER(NEW.query_id) IN ('QRY-009', 'QRY-005') THEN
       NEW.is_delayed := FALSE;
-    ELSIF (NEW.completed_at_ms > effective_deadline_ms)
-       OR (TG_OP = 'UPDATE' AND OLD.is_delayed = TRUE)
-       OR (NEW.is_delayed = TRUE) THEN
+    ELSIF (NEW.completed_at_ms > effective_deadline_ms) THEN
       NEW.is_delayed := TRUE;
     ELSE
       NEW.is_delayed := FALSE;

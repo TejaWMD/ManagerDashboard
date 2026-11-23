@@ -1,5 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Query, UserAccount, UserRole, PageView } from '../../types';
+import {
+  Query,
+  UserAccount,
+  UserRole,
+  PageView,
+  belongsToAccountManager,
+  belongsToManager,
+} from '../../types';
 import {
   calculateAllUsersRatingStats,
   calculateReceiverOverallRating,
@@ -172,23 +179,14 @@ export const RatingsPage: React.FC<RatingsPageProps> = ({
   // Queries related to selected user in modal
   const selectedUserQueries = useMemo(() => {
     if (!selectedUserStats) return [];
-    const userId = selectedUserStats.user.id;
-    const userEmail = selectedUserStats.user.email.toLowerCase().trim();
+    const targetUser = selectedUserStats.user;
 
     return queries
       .filter((q) => {
-        const isSender =
-          q.accountManagerId === userId ||
-          (q.accountManagerEmail || '').toLowerCase().trim() === userEmail;
-        const isReceiver =
-          q.managerId === userId ||
-          (q.managerEmail || '').toLowerCase().trim() === userEmail;
-        return isSender || isReceiver;
+        return belongsToAccountManager(q, targetUser) || belongsToManager(q, targetUser);
       })
       .map((q) => {
-        const isSender =
-          q.accountManagerId === userId ||
-          (q.accountManagerEmail || '').toLowerCase().trim() === userEmail;
+        const isSender = belongsToAccountManager(q, targetUser);
         const roleInQuery: 'Sender' | 'Receiving Manager' = isSender
           ? 'Sender'
           : 'Receiving Manager';

@@ -108,7 +108,7 @@ import sqlSchemaText from '../supabase_schema.sql?raw';
 import './App.css';
 
 const OLD_DUMMY_STORAGE_KEY = 'wm_portal_queries_v1';
-const STORAGE_KEY_QUERIES = 'wm_portal_queries_v5';
+const STORAGE_KEY_QUERIES = 'wm_portal_queries_v6';
 
 // One-time cleanup of legacy and corrupted mock/test keys
 try {
@@ -118,6 +118,8 @@ try {
   localStorage.removeItem('wm_portal_completion_meta_v1');
   localStorage.removeItem('wm_portal_completion_meta_v2');
   localStorage.removeItem('wm_portal_completion_meta_v3');
+  localStorage.removeItem('wm_portal_completion_meta_v4');
+  localStorage.removeItem('wm_portal_queries_v5');
   localStorage.removeItem('wm_portal_queries_v4');
   localStorage.removeItem('wm_portal_appointments_v1');
   localStorage.removeItem('wm_portal_appointments_v2');
@@ -281,6 +283,8 @@ export const App: React.FC = () => {
       localStorage.removeItem('wm_portal_completion_meta_v1');
       localStorage.removeItem('wm_portal_completion_meta_v2');
   localStorage.removeItem('wm_portal_completion_meta_v3');
+  localStorage.removeItem('wm_portal_completion_meta_v4');
+  localStorage.removeItem('wm_portal_queries_v5');
   localStorage.removeItem('wm_portal_queries_v4');
       localStorage.removeItem('wm_portal_appointments_v1');
       localStorage.removeItem('wm_portal_appointments_v2');
@@ -294,7 +298,7 @@ export const App: React.FC = () => {
       setDbError(result.error);
       try {
         const cached = localStorage.getItem(STORAGE_KEY_QUERIES);
-        if (cached) {
+        if (cached && queriesRef.current.length === 0) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed)) {
             setQueries(parsed as Query[]);
@@ -1027,7 +1031,12 @@ export const App: React.FC = () => {
       loadAppointments();
       loadPresences();
     };
+    const handleOnlineSync = () => {
+      lastFocusSyncMs = 0;
+      handleFocusSync();
+    };
     window.addEventListener('focus', handleFocusSync);
+    window.addEventListener('online', handleOnlineSync);
     const handleVisibilitySync = () => {
       if (document.visibilityState === 'visible') {
         if (currentUserRef.current) {
@@ -1041,6 +1050,7 @@ export const App: React.FC = () => {
     return () => {
       clearInterval(backgroundSyncTimer);
       window.removeEventListener('focus', handleFocusSync);
+      window.removeEventListener('online', handleOnlineSync);
       document.removeEventListener('visibilitychange', handleVisibilitySync);
       supabase.removeChannel(queryChannel);
       supabase.removeChannel(aptChannel);
@@ -1331,7 +1341,7 @@ export const App: React.FC = () => {
     const nowMs = now.getTime();
     const createdMs = getQueryTimestampMs(existing);
 
-    const nextManagerDone =
+    const nextManagerDone = isQueryDone(existing) ? true :
       updates.managerDone !== undefined
         ? updates.managerDone
         : existing.managerDone;
@@ -1345,7 +1355,7 @@ export const App: React.FC = () => {
       : null;
 
     // Account Manager cannot stay done if Manager Done is unchecked
-    const nextAccountManagerDone = !nextManagerDone
+    const nextAccountManagerDone = isQueryDone(existing) ? true : !nextManagerDone
       ? false
       : updates.accountManagerDone !== undefined
       ? updates.accountManagerDone
@@ -1609,31 +1619,79 @@ export const App: React.FC = () => {
     }
     broadcastQueryUpdate(optimisticItem);
 
+    const isCompletionStatusChanged =
+      updates.managerDone !== undefined ||
+      updates.accountManagerDone !== undefined ||
+      updates.completedAt !== undefined ||
+      updates.completedAtMs !== undefined ||
+      updates.adminCompletedAt !== undefined ||
+      updates.autoCompletedAt !== undefined;
+
+    const isExtensionChanged =
+      updates.extensionStatus !== undefined ||
+      updates.targetDueAt !== undefined ||
+      updates.targetDueAtMs !== undefined ||
+      updates.extensionRequestedAt !== undefined ||
+      updates.extensionProposedDueAt !== undefined ||
+      updates.extensionProposedDueAtMs !== undefined ||
+      updates.extensionReason !== undefined ||
+      updates.extensionReviewNote !== undefined ||
+      updates.extensionReviewedAt !== undefined;
+
+    const isMgrRemarkChanged =
+      updates.managerRemark !== undefined || updates.managerRemarkTitle !== undefined;
+    const isAmRemarkChanged =
+      updates.accountManagerRemark !== undefined ||
+      updates.accountManagerRemarkTitle !== undefined;
+    const isRemarksChanged =
+      updates.remarks !== undefined || isMgrRemarkChanged || isAmRemarkChanged;
+
     const dbPayload: Parameters<typeof updateQueryInDb>[1] = {
       ...updates,
       createdAtMs: existing.createdAtMs,
-      remarks: nextRemarks,
-      managerRemark: nextManagerRemark,
-      managerRemarkTitle: nextManagerRemarkTitle,
-      accountManagerRemark: nextAccountManagerRemark,
-      accountManagerRemarkTitle: nextAccountManagerRemarkTitle,
-      managerDone: nextManagerDone,
-      managerDoneAt: nextManagerDoneAt,
-      managerDoneAtMs: nextManagerDoneAtMs,
-      accountManagerDone: nextAccountManagerDone,
-      status: nextStatus,
-      completedAt: nextCompletedAt,
-      completedAtMs: nextCompletedAtMs,
-      isDelayed: nextIsDelayed,
-      targetDueAt: optimisticItem.targetDueAt,
-      targetDueAtMs: optimisticItem.targetDueAtMs,
-      extensionStatus: optimisticItem.extensionStatus,
-      extensionRequestedAt: optimisticItem.extensionRequestedAt,
-      extensionProposedDueAt: optimisticItem.extensionProposedDueAt,
-      extensionProposedDueAtMs: optimisticItem.extensionProposedDueAtMs,
-      extensionReason: optimisticItem.extensionReason,
-      extensionReviewNote: optimisticItem.extensionReviewNote,
-      extensionReviewedAt: optimisticItem.extensionReviewedAt,
+      ...(isRemarksChanged ? { remarks: nextRemarks } : {}),
+      ...(isMgrRemarkChanged
+        ? {
+            managerRemark: nextManagerRemark,
+            managerRemarkTitle: nextManagerRemarkTitle,
+          }
+        : {}),
+      ...(isAmRemarkChanged
+        ? {
+            accountManagerRemark: nextAccountManagerRemark,
+            accountManagerRemarkTitle: nextAccountManagerRemarkTitle,
+          }
+        : {}),
+      ...(isCompletionStatusChanged
+        ? {
+            managerDone: nextManagerDone,
+            managerDoneAt: nextManagerDoneAt,
+            managerDoneAtMs: nextManagerDoneAtMs,
+            accountManagerDone: nextAccountManagerDone,
+            status: nextStatus,
+            completedAt: nextCompletedAt,
+            completedAtMs: nextCompletedAtMs,
+          }
+        : {}),
+      ...(isCompletionStatusChanged ||
+      isExtensionChanged ||
+      updates.isDelayed !== undefined ||
+      isMgrRemarkChanged
+        ? { isDelayed: nextIsDelayed }
+        : {}),
+      ...(isExtensionChanged
+        ? {
+            targetDueAt: optimisticItem.targetDueAt,
+            targetDueAtMs: optimisticItem.targetDueAtMs,
+            extensionStatus: optimisticItem.extensionStatus,
+            extensionRequestedAt: optimisticItem.extensionRequestedAt,
+            extensionProposedDueAt: optimisticItem.extensionProposedDueAt,
+            extensionProposedDueAtMs: optimisticItem.extensionProposedDueAtMs,
+            extensionReason: optimisticItem.extensionReason,
+            extensionReviewNote: optimisticItem.extensionReviewNote,
+            extensionReviewedAt: optimisticItem.extensionReviewedAt,
+          }
+        : {}),
       ...(nextFirstManagerRemarkAtMs !== null &&
       nextFirstManagerRemarkAtMs !== existing.firstManagerRemarkAtMs
         ? { firstManagerRemarkAtMs: nextFirstManagerRemarkAtMs }
@@ -1756,9 +1814,12 @@ export const App: React.FC = () => {
           actor: currentUser,
         });
       } else if (
-        updates.managerDone !== undefined &&
-        updates.managerDone !== existing.managerDone &&
-        updates.managerDone
+        updates.managerDone &&
+        true &&
+        updates.managerDone &&
+        !existing.managerDone &&
+        updates.managerDone &&
+        !(data.accountManagerDone && !existing.accountManagerDone && !updates.accountManagerDone)
       ) {
         dispatchQueryPushNotification({
           event: 'MANAGER_DONE',
@@ -1820,7 +1881,13 @@ export const App: React.FC = () => {
       }
 
       // Log granular real-time activities for tracking
-      if (!existing.managerDone && updates.managerDone) {
+      const wasAlreadyCompletedInDb = Boolean(
+        data.accountManagerDone && !existing.accountManagerDone && !updates.accountManagerDone
+      );
+      if (wasAlreadyCompletedInDb) {
+        loadQueries();
+      }
+      if (!existing.managerDone && updates.managerDone && !wasAlreadyCompletedInDb) {
         logUserActivity({
           userId: currentUser.id,
           userName: currentUser.name,

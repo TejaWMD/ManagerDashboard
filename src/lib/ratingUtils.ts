@@ -1,5 +1,10 @@
-import { Query, UserAccount } from '../types';
-import { getFirstManagerRemarkTimestampMs } from '../types';
+import {
+  Query,
+  UserAccount,
+  belongsToAccountManager,
+  belongsToManager,
+  getFirstManagerRemarkTimestampMs,
+} from '../types';
 import { parseDateToMs } from './dateUtils';
 
 export interface RatingBreakdown {
@@ -342,14 +347,8 @@ export function calculateAllUsersRatingStats(
   nowMs: number = Date.now()
 ): UserRatingStats[] {
   return users.map((user) => {
-    const userEmailLower = (user.email || '').toLowerCase().trim();
-    const userId = user.id;
-
     // Queries where this user is SENDER
-    const senderQueries = queries.filter((q) => {
-      const qEmail = (q.accountManagerEmail || '').toLowerCase().trim();
-      return q.accountManagerId === userId || (qEmail && qEmail === userEmailLower);
-    });
+    const senderQueries = queries.filter((q) => belongsToAccountManager(q, user));
 
     let avgSenderRating: number | null = null;
     if (senderQueries.length > 0) {
@@ -360,10 +359,7 @@ export function calculateAllUsersRatingStats(
     }
 
     // Queries where this user is RECEIVER
-    const receiverQueries = queries.filter((q) => {
-      const qEmail = (q.managerEmail || '').toLowerCase().trim();
-      return q.managerId === userId || (qEmail && qEmail === userEmailLower);
-    });
+    const receiverQueries = queries.filter((q) => belongsToManager(q, user));
 
     let avgReceiverRating: number | null = null;
     if (receiverQueries.length > 0) {

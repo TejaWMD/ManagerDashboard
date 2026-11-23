@@ -32,18 +32,23 @@ try {
   localStorage.removeItem('wm_portal_completion_meta_v1');
   localStorage.removeItem('wm_portal_completion_meta_v2');
   localStorage.removeItem('wm_portal_completion_meta_v3');
+  localStorage.removeItem('wm_portal_completion_meta_v4');
   localStorage.removeItem('wm_portal_appointments_v1');
   localStorage.removeItem('wm_portal_appointments_v2');
   localStorage.removeItem('wm_portal_queries_v1');
   localStorage.removeItem('wm_portal_queries_v2');
   localStorage.removeItem('wm_portal_queries_v3');
   localStorage.removeItem('wm_portal_queries_v4');
+  localStorage.removeItem('wm_portal_queries_v5');
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem('wmd_unsupported_query_cols_v2');
+  }
 } catch {
   // Ignore storage errors in non-browser/restricted environments
 }
 
-const OLD_COMPLETION_META_KEY = 'wm_portal_completion_meta_v3';
-const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v4';
+const OLD_COMPLETION_META_KEY = 'wm_portal_completion_meta_v4';
+const COMPLETION_META_STORAGE_KEY = 'wm_portal_completion_meta_v5';
 
 interface LocalCompletionMeta {
   createdAtMs?: number | null;
@@ -552,22 +557,35 @@ export function mapRowToQuery(row: QueryRow): Query {
     Date.now() <= effectiveDeadlineMs;
 
   const isUrgent = Boolean(row.is_urgent);
-  const isExemptFromDelay =
-    isUrgent ||
-    Boolean(
-      row.query_id &&
-        (row.query_id.trim().toUpperCase() === 'QRY-009' ||
-          row.query_id.trim().toUpperCase() === 'QRY-005')
-    );
+  const isExemptFromDelay = Boolean(
+    row.query_id &&
+      (row.query_id.trim().toUpperCase() === 'QRY-009' ||
+        row.query_id.trim().toUpperCase() === 'QRY-005')
+  );
+
+  const firstMgrRemarkMs =
+    row.first_manager_remark_at_ms !== null && row.first_manager_remark_at_ms !== undefined
+      ? Number(row.first_manager_remark_at_ms)
+      : localMeta?.firstManagerRemarkAtMs ?? null;
 
   const computedDelayed = isApprovedExtensionActive
     ? false
     : isExemptFromDelay
     ? false
+    : isUrgent
+    ? createdAtMs > 0
+      ? firstMgrRemarkMs !== null && firstMgrRemarkMs > 0
+        ? firstMgrRemarkMs > createdAtMs + 3600000
+        : isDone
+        ? Boolean(row.is_delayed === true)
+        : Date.now() > createdAtMs + 3600000
+      : false
     : isDone
     ? completedAtMs && effectiveDeadlineMs > 0
       ? completedAtMs > effectiveDeadlineMs
-      : Boolean(row.is_delayed === true || localMeta?.isDelayed === true)
+      : row.is_delayed !== null && row.is_delayed !== undefined
+      ? Boolean(row.is_delayed)
+      : Boolean(localMeta?.isDelayed === true)
     : Boolean(effectiveDeadlineMs > 0 && Date.now() > effectiveDeadlineMs);
 
   const { cleanText: strippedQueryText, attachments: unpackedAttachments } =
@@ -1132,7 +1150,7 @@ const BASE_SAFE_QUERY_COLUMNS = [
   'is_urgent',
 ].join(',');
 
-const UNSUPPORTED_COLS_STORAGE_KEY = 'wmd_unsupported_query_cols_v2';
+const UNSUPPORTED_COLS_STORAGE_KEY = 'wmd_unsupported_query_cols_v3';
 
 // Cache of columns discovered to be missing from the live public.queries table
 const unsupportedQueryColumns: Set<string> = (() => {
@@ -1620,6 +1638,27 @@ export async function insertQueryInDb(query: Query): Promise<{
   };
 }
 
+export async function fetchSingleQueryRowFromDb(queryId: string): Promise<QueryRow | null> {
+  const normId = (queryId || '').trim().toUpperCase();
+  if (!normId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('queries')
+      .select(getActiveQuerySelectColumns())
+      .eq('query_id', normId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data as unknown as QueryRow;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchSingleQueryFromDb(queryId: string): Promise<Query | null> {
+  const row = await fetchSingleQueryRowFromDb(queryId);
+  return row ? mapRowToQuery(row) : null;
+}
+
 export async function updateQueryInDb(
   queryId: string,
   updates: {
@@ -1683,6 +1722,81 @@ export async function updateQueryInDb(
   data: Query | null;
   error: string | null;
 }> {
+  const normalizedQueryId = (queryId || '').trim().toUpperCase();
+
+  // Fetch the latest live database row first so a stale background tab can NEVER overwrite
+  // a query that was already completed or updated on another device/tab.
+  const liveRow = await fetchSingleQueryRowFromDb(normalizedQueryId);
+  if (liveRow) {
+    const liveIsAlreadyCompleted =
+      (Boolean(liveRow.manager_done) && Boolean(liveRow.account_manager_done)) ||
+      liveRow.status === 'Completed' ||
+      Boolean(liveRow.completed_at_ms) ||
+      Boolean(liveRow.completed_at) ||
+      Boolean(liveRow.admin_completed_at) ||
+      Boolean(liveRow.auto_completed_at);
+
+    if (liveIsAlreadyCompleted) {
+      // Lock completed queries: never allow any update to downgrade completion back to Pending/uncompleted
+      updates = {
+        ...updates,
+        managerDone: true,
+        managerDoneAt: liveRow.manager_done_at || updates.managerDoneAt || null,
+        managerDoneAtMs:
+          liveRow.manager_done_at_ms !== null && liveRow.manager_done_at_ms !== undefined
+            ? Number(liveRow.manager_done_at_ms)
+            : updates.managerDoneAtMs ?? null,
+        accountManagerDone: true,
+        status: 'Completed',
+        completedAt: liveRow.completed_at || updates.completedAt || null,
+        completedAtMs:
+          liveRow.completed_at_ms !== null && liveRow.completed_at_ms !== undefined
+            ? Number(liveRow.completed_at_ms)
+            : updates.completedAtMs ?? null,
+        isDelayed:
+          liveRow.is_delayed !== null && liveRow.is_delayed !== undefined
+            ? Boolean(liveRow.is_delayed)
+            : updates.isDelayed,
+      };
+    } else if (Boolean(liveRow.manager_done) && updates.managerDone === true) {
+      // Preserve original manager resolution timestamp if manager_done was already true in DB
+      if (liveRow.manager_done_at) {
+        updates = {
+          ...updates,
+          managerDoneAt: liveRow.manager_done_at,
+          managerDoneAtMs:
+            liveRow.manager_done_at_ms !== null && liveRow.manager_done_at_ms !== undefined
+              ? Number(liveRow.manager_done_at_ms)
+              : updates.managerDoneAtMs,
+        };
+      }
+    }
+
+    // Merge remarks with liveRow.remarks_log so remarks posted on another device are never lost
+    if (updates.remarks !== undefined && Array.isArray(updates.remarks) && liveRow.remarks_log) {
+      try {
+        const liveRemarks = JSON.parse(liveRow.remarks_log);
+        if (Array.isArray(liveRemarks) && liveRemarks.length > 0) {
+          const mergedMap = new Map<string, QueryRemark>();
+          for (const r of liveRemarks as QueryRemark[]) {
+            if (r && r.id) mergedMap.set(r.id, r);
+          }
+          for (const r of updates.remarks) {
+            if (r && r.id) mergedMap.set(r.id, r);
+          }
+          updates = {
+            ...updates,
+            remarks: Array.from(mergedMap.values()).sort(
+              (a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0)
+            ),
+          };
+        }
+      } catch {
+        // Ignore parse error
+      }
+    }
+  }
+
   const baseUpdates: Record<string, unknown> = {};
   if (updates.status !== undefined) {
     baseUpdates.status = updates.status;
@@ -1929,8 +2043,6 @@ export async function updateQueryInDb(
             : {}),
         }
       : extendedUpdates;
-
-  const normalizedQueryId = (queryId || '').trim().toUpperCase();
 
   // Persist locally as well so delayed-on-completion, manager-done, and extension tracking work even before SQL migration is run
   if (
