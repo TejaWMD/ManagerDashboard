@@ -1023,18 +1023,57 @@ export async function fetchUsersFromDb(): Promise<UserAccount[]> {
     const { data, error } = await supabase.from('users').select('*');
     if (error || !data) return AUTHORIZED_USERS;
 
-    return AUTHORIZED_USERS.map((localUser) => {
-      const dbMatch = (data as { id: string; phone?: string }[]).find(
-        (d) => d.id === localUser.id
-      );
+    const dbRows = data as Array<{
+      id: string;
+      name?: string;
+      email?: string;
+      password?: string | null;
+      role?: string;
+      role_label?: string;
+      avatar_initials?: string;
+      phone?: string | null;
+      status?: string | null;
+    }>;
+
+    const validRoles = new Set<UserRole>(['account_manager', 'manager', 'admin']);
+    const merged: UserAccount[] = AUTHORIZED_USERS.map((localUser) => {
+      const dbMatch = dbRows.find((d) => d.id === localUser.id);
       if (dbMatch) {
         return {
           ...localUser,
+          name: dbMatch.name || localUser.name,
+          email: dbMatch.email || localUser.email,
           phone: dbMatch.phone || localUser.phone || '',
         };
       }
       return localUser;
     });
+
+    const knownIds = new Set(merged.map((u) => u.id.toLowerCase()));
+    for (const row of dbRows) {
+      if (!row.id || !row.email || !row.role) continue;
+      if (row.status === 'Inactive') continue;
+      if (!validRoles.has(row.role as UserRole)) continue;
+      if (knownIds.has(row.id.toLowerCase())) continue;
+
+      const role = row.role as UserRole;
+      const name = (row.name || row.email.split('@')[0] || 'User').trim();
+      merged.push({
+        id: row.id,
+        name,
+        email: row.email.trim().toLowerCase(),
+        password: row.password || '',
+        role,
+        roleLabel:
+          row.role_label ||
+          (role === 'admin' ? 'Admin' : role === 'manager' ? 'Manager' : 'Account Manager'),
+        avatarInitials: row.avatar_initials || name.slice(0, 2).toUpperCase(),
+        phone: row.phone || '',
+      });
+      knownIds.add(row.id.toLowerCase());
+    }
+
+    return merged;
   } catch {
     return AUTHORIZED_USERS;
   }
